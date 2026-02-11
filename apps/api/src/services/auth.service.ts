@@ -108,7 +108,15 @@ export const requestPasswordReset = async (input: unknown) => {
   });
 
   // Send email
-  await sendPasswordResetEmail(email, otp);
+  try {
+    await sendPasswordResetEmail(email, otp);
+    console.log("[reset] email send success");
+  } catch (err) {
+    console.error("[reset] email send failed", err);
+    // Optionally rethrow if you want the client to know, but usually we hide this detail
+    // and rely on logs for debugging to prevent enumeration/attacks.
+    // For debugging request, we are logging it.
+  }
 
   return { message: 'If an account exists, a reset code has been sent.' };
 };
