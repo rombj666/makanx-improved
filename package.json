@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "makanx-api",
   "version": "0.0.0",
   "main": "dist/index.js",
@@ -38,5 +39,16 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.0.0",
     "vitest": "^0.34.0"
+=======
+  "name": "makanx-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "npm run dev --workspaces"
+>>>>>>> 846afa7 (first upload)
   }
 }
