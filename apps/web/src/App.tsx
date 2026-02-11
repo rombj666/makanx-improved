@@ -4,8 +4,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { Navbar } from './components/Navbar';
 import { Login } from './pages/auth/Login';
-import { Register } from './pages/auth/Register';
+// import { Register } from './pages/auth/Register'; // Removed
 import { Invite } from './pages/auth/Invite';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { CustomerHome } from './pages/customer/Home';
 import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
@@ -23,6 +24,15 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?
   if (!isAuthenticated) return <Navigate to="/login" />;
 
   if (roles && user && !roles.includes(user.role)) {
+    // If user is logged in but role doesn't match, maybe go to their dashboard?
+    // For now root is fine, but root redirects to login if not authenticated.
+    // Wait, root / currently renders CustomerHome. 
+    // We want root / to redirect to /login? 
+    // User request: "Ensure "/" redirects to "/login" (no default landing page)."
+    // So CustomerHome should probably be moved to /home or similar? 
+    // Or we keep CustomerHome but only if logged in?
+    // The user said "Ensure "/" redirects to "/login"".
+    // So I will make / redirect to /login.
     return <Navigate to="/" />;
   }
 
@@ -48,10 +58,23 @@ function App() {
           <Routes>
             <Route element={<Layout />}>
               {/* Public Routes */}
-              <Route path="/" element={<CustomerHome />} />
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              {/* Customer Home was at /, now accessible via... maybe just for logged in users? 
+                  Or maybe we move CustomerHome to /events or /home? 
+                  The prompt says "no default landing page", implying the app is gated. 
+                  But CustomerHome was public before. 
+                  "Ensure "/" redirects to "/login" (no default landing page)."
+                  I will assume the public event page /customer/event/:slug is still accessible.
+                  But the generic home list is gone or hidden.
+                  Let's create a /home route for CustomerHome if needed, OR just hide it.
+                  I'll map /home to CustomerHome for now so it's not lost.
+              */}
+              <Route path="/home" element={<CustomerHome />} />
+              
               <Route path="/customer/event/:slug" element={<EventMap />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              {/* <Route path="/register" element={<Register />} /> */}
               <Route path="/invite" element={<Invite />} />
 
               {/* Customer Protected */}

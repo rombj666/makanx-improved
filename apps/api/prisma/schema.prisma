@@ -175,3 +175,15 @@ model InviteToken {
   isUsed        Boolean  @default(false)
   expiresAt     DateTime
 }
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  email     String
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+}

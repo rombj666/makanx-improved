@@ -3,6 +3,8 @@ import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { Role } from '@makanx/shared';
 import { z } from 'zod';
+import { randomInt } from 'crypto';
+import { sendPasswordResetEmail } from './email.service';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -14,6 +16,16 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
+});
+
+const requestResetSchema = z.object({
+  email: z.string().email(),
+});
+
+const confirmResetSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().length(6),
+  newPassword: z.string().min(6),
 });
 
 export const register = async (input: unknown) => {
@@ -61,4 +73,79 @@ export const getMe = async (userId: string) => {
     throw new Error('User not found');
   }
   return { id: user.id, email: user.email, name: user.name, role: user.role };
+};
+
+export const requestPasswordReset = async (input: unknown) => {
+  const { email } = requestResetSchema.parse(input);
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    // Return success to avoid email enumeration
+    return { message: 'If an account exists, a reset code has been sent.' };
+  }
+
+  // Generate 6 digit OTP
+  const otp = randomInt(100000, 999999).toString();
+  const otpHash = await hashPassword(otp); // Reuse bcrypt wrapper
+
+  // Create token
+  await prisma.passwordResetToken.create({
+    data: {
+      email,
+      otpHash,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    },
+  });
+
+  // Send email
+  await sendPasswordResetEmail(email, otp);
+
+  return { message: 'If an account exists, a reset code has been sent.' };
+};
+
+export const confirmPasswordReset = async (input: unknown) => {
+  const { email, otp, newPassword } = confirmResetSchema.parse(input);
+
+  // Find latest valid token
+  const token = await prisma.passwordResetToken.findFirst({
+    where: {
+      email,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!token) {
+    throw new Error('Invalid or expired reset code');
+  }
+
+  if (token.attempts >= 5) {
+    throw new Error('Too many failed attempts. Please request a new code.');
+  }
+
+  const isValid = await comparePassword(otp, token.otpHash);
+  if (!isValid) {
+    await prisma.passwordResetToken.update({
+      where: { id: token.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new Error('Invalid reset code');
+  }
+
+  // Update password and mark token used
+  const hashedPassword = await hashPassword(newPassword);
+  
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { email },
+      data: { password: hashedPassword },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: token.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+
+  return { message: 'Password reset successfully' };
 };
