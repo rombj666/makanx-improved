@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { randomInt } from 'crypto';
 import { sendPasswordResetEmail } from './email.service';
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -29,8 +31,9 @@ const confirmResetSchema = z.object({
 });
 
 export const register = async (input: unknown) => {
-  const { email, password, name, role } = registerSchema.parse(input);
-
+  const parsed = registerSchema.parse(input);
+  const email = normalizeEmail(parsed.email);
+  const { password, name, role } = parsed;
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new Error('User already exists');
@@ -51,7 +54,9 @@ export const register = async (input: unknown) => {
 };
 
 export const login = async (input: unknown) => {
-  const { email, password } = loginSchema.parse(input);
+  const parsed = loginSchema.parse(input);
+  const email = normalizeEmail(parsed.email);
+  const { password } = parsed;
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
@@ -81,7 +86,8 @@ export const getMe = async (userId: string) => {
 };
 
 export const requestPasswordReset = async (input: unknown) => {
-  const { email } = requestResetSchema.parse(input);
+  const parsed = requestResetSchema.parse(input);
+  const email = normalizeEmail(parsed.email);
 
   console.log("[reset] Request received for:", email);
   console.log("[reset] Resend ENV check:", {
@@ -124,7 +130,9 @@ export const requestPasswordReset = async (input: unknown) => {
 };
 
 export const confirmPasswordReset = async (input: unknown) => {
-  const { email, otp, newPassword } = confirmResetSchema.parse(input);
+  const parsed = confirmResetSchema.parse(input);
+  const email = normalizeEmail(parsed.email);
+  const { otp, newPassword } = parsed;
 
   // Find latest valid token
   const token = await prisma.passwordResetToken.findFirst({

@@ -14,9 +14,9 @@ describe('Auth Routes', () => {
     await prisma.$disconnect();
   });
 
-  it('should register a new user', async () => {
+  it('should register a new user with normalized email', async () => {
     const res = await request(app).post('/auth/register').send({
-      email: 'test@example.com',
+      email: 'Test@Example.com',
       password: 'password123',
       name: 'Test User',
       role: 'CUSTOMER',
@@ -28,9 +28,9 @@ describe('Auth Routes', () => {
     expect(res.body.data.token).toBeDefined();
   });
 
-  it('should login the user', async () => {
+  it('should login the user with normalized email', async () => {
     const res = await request(app).post('/auth/login').send({
-      email: 'test@example.com',
+      email: 'Test@Example.com',
       password: 'password123',
     });
 
@@ -41,7 +41,7 @@ describe('Auth Routes', () => {
 
   it('should not login with wrong password', async () => {
     const res = await request(app).post('/auth/login').send({
-      email: 'test@example.com',
+      email: 'Test@Example.com',
       password: 'wrongpassword',
     });
 
