@@ -6,7 +6,6 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w apps/web",
     "dev": "npm run dev -w apps/web"
   }
 }
