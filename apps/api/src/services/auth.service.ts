@@ -105,10 +105,11 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
+    console.log("[reset] Attempting to send OTP via Resend to:", email);
     const result = await sendPasswordResetEmail(email, otp);
     console.log("[reset] email send result:", result);
   } catch (err) {
-    console.error("[reset] email send failed", err);
+    console.error("[reset] Email send failed:", err);
     // Optionally rethrow if you want the client to know, but usually we hide this detail
     // and rely on logs for debugging to prevent enumeration/attacks.
     // For debugging request, we are logging it.
