@@ -6,7 +6,8 @@
     "build": "npx prisma generate && npx prisma db push && tsc",
     "start": "node dist/index.js",
     "dev": "ts-node-dev src/index.ts",
-    "test": "vitest"
+    "test": "vitest",
+    "set:organizer-password": "ts-node-dev prisma/setOrganizerPassword.ts"
   },
   "prisma": {
     "seed": "ts-node-dev prisma/seed.ts"

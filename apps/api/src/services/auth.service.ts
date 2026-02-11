@@ -59,11 +59,24 @@ export const login = async (input: unknown) => {
   const { password } = parsed;
 
   const user = await prisma.user.findUnique({ where: { email } });
+
+  console.log('[Auth Debug] Login attempt:', {
+    email,
+    userFound: !!user,
+    role: user?.role,
+    isActive: user?.isActive,
+  });
+
   if (!user) {
     throw new Error('Invalid credentials');
   }
 
   const isPasswordValid = await comparePassword(password, user.password);
+  
+  console.log('[Auth Debug] Password check:', {
+    isPasswordValid,
+  });
+
   if (!isPasswordValid) {
     throw new Error('Invalid credentials');
   }
