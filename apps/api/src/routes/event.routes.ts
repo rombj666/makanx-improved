@@ -13,5 +13,7 @@ router.get('/:slug', eventController.getEventBySlug);
 router.post('/', requireAuth, requireRole([Role.ORGANIZER]), eventController.createEvent);
 router.put('/:id', requireAuth, requireRole([Role.ORGANIZER]), eventController.updateEvent);
 router.delete('/:id', requireAuth, requireRole([Role.ORGANIZER]), eventController.deleteEvent);
+router.patch('/:id/archive', requireAuth, requireRole([Role.ORGANIZER]), eventController.archiveEvent);
+router.patch('/:id/unarchive', requireAuth, requireRole([Role.ORGANIZER]), eventController.unarchiveEvent);
 
 export default router;

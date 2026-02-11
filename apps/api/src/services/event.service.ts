@@ -8,6 +8,7 @@ const eventSchema = z.object({
   endDate: z.string().transform((str) => new Date(str)),
   location: z.string().optional(),
   mapImageUrl: z.string().optional(),
+  status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
 });
 
 const createSlug = (name: string) => {
@@ -51,9 +52,32 @@ export const deleteEvent = async (id: string, organizerId: string) => {
   return prisma.event.delete({ where: { id } });
 };
 
-export const getEvents = async () => {
+export const getEvents = async (status: 'ACTIVE' | 'ARCHIVED' = 'ACTIVE') => {
   return prisma.event.findMany({
+    where: { status },
     orderBy: { startDate: 'asc' },
+  });
+};
+
+export const archiveEvent = async (id: string, organizerId: string) => {
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) throw new Error('Event not found');
+  if (event.organizerId !== organizerId) throw new Error('Unauthorized');
+
+  return prisma.event.update({
+    where: { id },
+    data: { status: 'ARCHIVED' },
+  });
+};
+
+export const unarchiveEvent = async (id: string, organizerId: string) => {
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) throw new Error('Event not found');
+  if (event.organizerId !== organizerId) throw new Error('Unauthorized');
+
+  return prisma.event.update({
+    where: { id },
+    data: { status: 'ACTIVE' },
   });
 };
 

@@ -8,6 +8,7 @@ import eventRoutes from './routes/event.routes';
 import boothRoutes from './routes/booth.routes';
 import applicationRoutes from './routes/application.routes';
 import orderRoutes from './routes/order.routes';
+import organizerRoutes from './routes/organizer.routes';
 
 import { configureSecurity } from './middleware/security';
 
@@ -34,6 +35,7 @@ apiRouter.use('/events', eventRoutes);
 apiRouter.use('/booths', boothRoutes);
 apiRouter.use('/applications', applicationRoutes);
 apiRouter.use('/orders', orderRoutes);
+apiRouter.use('/organizer', organizerRoutes);
 
 app.use('/api', apiRouter);
 

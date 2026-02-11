@@ -63,6 +63,11 @@ export const login = async (input: unknown) => {
     throw new Error('Invalid credentials');
   }
 
+  // Check if account is active (for vendors)
+  if (user.role === Role.VENDOR && !user.isActive) {
+    throw new Error('Vendor account disabled. Contact organizer.');
+  }
+
   const token = generateToken({ userId: user.id, role: user.role as Role });
   return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
 };

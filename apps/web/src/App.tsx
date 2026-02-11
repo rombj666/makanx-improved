@@ -10,10 +10,12 @@ import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { CustomerHome } from './pages/customer/Home';
 import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
+import { VendorDashboard } from './pages/vendor/Dashboard';
 import { OrganizerDashboard } from './pages/organizer/Dashboard';
 import { MapEditor } from './pages/organizer/MapEditor';
-import { VendorApplications } from './pages/organizer/VendorApplications';
-import { VendorDashboard } from './pages/vendor/Dashboard';
+import { OrganizerApplicationsPage } from './pages/organizer/OrganizerApplicationsPage';
+import { OrganizerVendorsPage } from './pages/organizer/OrganizerVendorsPage';
+import { OrganizerSalesPlaceholder } from './pages/organizer/OrganizerSalesPlaceholder';
 import { Role } from '@makanx/shared';
 import { Toaster } from 'react-hot-toast';
 
@@ -98,7 +100,9 @@ function App() {
               >
                 <Route index element={<OrganizerDashboard />} />
                 <Route path="map/:eventId" element={<MapEditor />} />
-                <Route path="applications" element={<VendorApplications />} />
+                <Route path="applications" element={<OrganizerApplicationsPage />} />
+                <Route path="vendors" element={<OrganizerVendorsPage />} />
+                <Route path="sales" element={<OrganizerSalesPlaceholder />} />
               </Route>
 
               {/* Vendor Routes */}

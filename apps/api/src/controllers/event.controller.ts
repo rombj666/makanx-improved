@@ -37,10 +37,31 @@ export const deleteEvent = async (req: Request, res: Response) => {
 
 export const getEvents = async (req: Request, res: Response) => {
   try {
-    const result = await eventService.getEvents();
+    const status = req.query.status as 'ACTIVE' | 'ARCHIVED' | undefined;
+    const result = await eventService.getEvents(status);
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const archiveEvent = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    const result = await eventService.archiveEvent(req.params.id, req.user.userId);
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+export const unarchiveEvent = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    const result = await eventService.unarchiveEvent(req.params.id, req.user.userId);
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 

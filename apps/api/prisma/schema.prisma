@@ -61,12 +61,18 @@ model User {
   password  String
   name      String
   role      Role     @default(CUSTOMER)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   vendorProfile VendorProfile?
   orders        Order[]
   managedEvents Event[]        @relation("OrganizerEvents")
+}
+
+enum EventStatus {
+  ACTIVE
+  ARCHIVED
 }
 
 model Event {
@@ -79,6 +85,7 @@ model Event {
   location      String?
   mapImageUrl   String?
   layoutVersion Int      @default(0)
+  status        EventStatus @default(ACTIVE)
   organizerId   String
   organizer   User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
   
