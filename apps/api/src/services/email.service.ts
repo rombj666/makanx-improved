@@ -24,7 +24,7 @@ export const sendPasswordResetEmail = async (email: string, otp: string) => {
 
   try {
     const data = await resend.emails.send({
-      from: process.env.MAIL_FROM || 'MakanX <noreply@makanx.com>',
+      from: process.env.MAIL_FROM || 'MakanX <onboarding@resend.dev>',
       to: email,
       subject: 'MakanX Password Reset Code',
       html,
