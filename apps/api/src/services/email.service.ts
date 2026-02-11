@@ -1,13 +1,19 @@
 import { Resend } from 'resend';
 
-// Initialize Resend with API Key from environment variables
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendPasswordResetEmail = async (email: string, otp: string) => {
+  console.log("[mail] Preparing to send email via Resend...");
+  console.log("[mail] ENV check:", {
+    RESEND_API_KEY_EXISTS: !!process.env.RESEND_API_KEY,
+    MAIL_FROM: process.env.MAIL_FROM,
+  });
+
   if (!process.env.RESEND_API_KEY) {
-    console.warn('RESEND_API_KEY not set. OTP not sent via email. OTP is:', otp);
+    console.warn("[mail] RESEND_API_KEY not set. OTP not sent. OTP:", otp);
     return;
   }
+
 
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
