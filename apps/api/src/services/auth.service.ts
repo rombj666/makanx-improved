@@ -80,8 +80,8 @@ export const requestPasswordReset = async (input: unknown) => {
 
   console.log("[reset] Request received for:", email);
   console.log("[reset] Resend ENV check:", {
-  RESEND_API_KEY_EXISTS: !!process.env.RESEND_API_KEY,
-  MAIL_FROM: process.env.MAIL_FROM,
+    RESEND_API_KEY_EXISTS: !!process.env.RESEND_API_KEY,
+    MAIL_FROM: process.env.MAIL_FROM,
   });
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -105,8 +105,8 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
-    await sendPasswordResetEmail(email, otp);
-    console.log("[reset] email send success");
+    const result = await sendPasswordResetEmail(email, otp);
+    console.log("[reset] email send result:", result);
   } catch (err) {
     console.error("[reset] email send failed", err);
     // Optionally rethrow if you want the client to know, but usually we hide this detail
