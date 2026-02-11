@@ -6,6 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w apps/web"
+    "dev": "npm run dev -w apps/web",
+    "build:shared": "npm run build -w packages/shared",
+    "build:api": "npm run build:shared && npm run build -w apps/api",
+    "start:api": "npm run start -w apps/api"
   }
 }

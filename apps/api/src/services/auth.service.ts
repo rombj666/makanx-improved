@@ -16,7 +16,7 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-export const register = async (input: z.infer<typeof registerSchema>) => {
+export const register = async (input: unknown) => {
   const { email, password, name, role } = registerSchema.parse(input);
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -38,7 +38,7 @@ export const register = async (input: z.infer<typeof registerSchema>) => {
   return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
 };
 
-export const login = async (input: z.infer<typeof loginSchema>) => {
+export const login = async (input: unknown) => {
   const { email, password } = loginSchema.parse(input);
 
   const user = await prisma.user.findUnique({ where: { email } });
