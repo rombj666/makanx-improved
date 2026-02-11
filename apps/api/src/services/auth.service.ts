@@ -78,6 +78,16 @@ export const getMe = async (userId: string) => {
 export const requestPasswordReset = async (input: unknown) => {
   const { email } = requestResetSchema.parse(input);
 
+  console.log("[reset] Request received for:", email);
+  console.log("[reset] Mail ENV check:", {
+    MAIL_HOST: process.env.MAIL_HOST,
+    MAIL_PORT: process.env.MAIL_PORT,
+    MAIL_SECURE: process.env.MAIL_SECURE,
+    MAIL_USER: process.env.MAIL_USER,
+    MAIL_PASS_EXISTS: !!process.env.MAIL_PASS,
+    MAIL_FROM: process.env.MAIL_FROM,
+  });
+
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     // Return success to avoid email enumeration

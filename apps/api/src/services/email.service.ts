@@ -10,6 +10,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+transporter.verify()
+  .then(() => console.log("[mail] SMTP verified successfully"))
+  .catch(err => console.error("[mail] SMTP verification failed:", err));
+
 export const sendPasswordResetEmail = async (email: string, otp: string) => {
   if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
     console.warn('Mail credentials not set. OTP not sent via email. OTP is:', otp);
@@ -29,10 +33,17 @@ export const sendPasswordResetEmail = async (email: string, otp: string) => {
     </div>
   `;
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM || '"MakanX" <noreply@makanx.com>',
-    to: email,
-    subject: 'MakanX Password Reset Code',
-    html,
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.MAIL_FROM || '"MakanX" <noreply@makanx.com>',
+      to: email,
+      subject: 'MakanX Password Reset Code',
+      html,
+    });
+    console.log("[mail] Email sent:", info.messageId);
+    return info;
+  } catch (err) {
+    console.error("[mail] Email send failed:", err);
+    throw err;
+  }
 };
