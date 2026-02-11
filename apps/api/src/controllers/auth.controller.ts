@@ -46,6 +46,8 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     }
     // For security, generic error or success message is preferred, but 
     // service already handles hiding user existence.
+    // For debugging request, we are logging it.
+    console.error("[reset] Email send failed:", error);
     res.status(400).json({ success: false, error: error.message });
   }
 };
