@@ -1,22 +1,11 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.MAIL_PORT || '587'),
-  secure: process.env.MAIL_SECURE === 'true',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
-
-transporter.verify()
-  .then(() => console.log("[mail] SMTP verified successfully"))
-  .catch(err => console.error("[mail] SMTP verification failed:", err));
+// Initialize Resend with API Key from environment variables
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendPasswordResetEmail = async (email: string, otp: string) => {
-  if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
-    console.warn('Mail credentials not set. OTP not sent via email. OTP is:', otp);
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('RESEND_API_KEY not set. OTP not sent via email. OTP is:', otp);
     return;
   }
 
@@ -34,14 +23,20 @@ export const sendPasswordResetEmail = async (email: string, otp: string) => {
   `;
 
   try {
-    const info = await transporter.sendMail({
-      from: process.env.MAIL_FROM || '"MakanX" <noreply@makanx.com>',
+    const data = await resend.emails.send({
+      from: process.env.MAIL_FROM || 'MakanX <noreply@makanx.com>',
       to: email,
       subject: 'MakanX Password Reset Code',
       html,
     });
-    console.log("[mail] Email sent:", info.messageId);
-    return info;
+
+    if (data.error) {
+      console.error("[mail] Resend API error:", data.error);
+      throw new Error(data.error.message);
+    }
+
+    console.log("[mail] Email sent via Resend:", data.data?.id);
+    return data;
   } catch (err) {
     console.error("[mail] Email send failed:", err);
     throw err;
