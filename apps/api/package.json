@@ -8,7 +8,7 @@
     "dev": "ts-node-dev src/index.ts",
     "test": "vitest"
   },
-  "prisma": {  
+  "prisma": {
     "seed": "ts-node-dev prisma/seed.ts"
   },
   "dependencies": {
@@ -22,6 +22,7 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.0",
+    "nodemailer": "^8.0.1",
     "socket.io": "^4.7.2",
     "zod": "^3.22.4"
   },
