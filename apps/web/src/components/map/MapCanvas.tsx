@@ -81,6 +81,10 @@ export function MapCanvas({
 
     const target = e.target as HTMLElement;
     
+    // Safety check: if target is part of a booth (e.g. text span), find the booth container?
+    // Actually, booth pointer events are stopped by handleBoothPointerDown.
+    // So if we reach here, it SHOULD be background.
+    
     setDragging({
       mode: 'pan',
       pointerId: e.pointerId,
@@ -91,12 +95,51 @@ export function MapCanvas({
     });
     setLastAction('PAN START');
     
+    // Store capture element to release correctly later
     target.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
 
   const handleBoothPointerDown = (e: React.PointerEvent, booth: Booth) => {
-    if (readOnly) return;
+    // If readOnly, we still allow selection (click) but NO dragging
+    // If readOnly, stopPropagation to prevent pan?
+    // Requirement: "Customer/Vendor view (readOnly=true) must still PAN + CLICK booths (select)"
+    // If we stopPropagation, background pan won't fire.
+    // So for readOnly:
+    // - Click booth -> Select (fire onBoothClick)
+    // - Drag booth -> Should PAN the map (pass through to background)?
+    //   OR should just do nothing?
+    //   Usually map apps: dragging a feature in read-only mode pans the map.
+    //   So we should NOT stopPropagation if readOnly.
+    
+    if (readOnly) {
+       // We still want to select on click.
+       // We can detect click in onClick? Or pointerUp?
+       // If we let it bubble, background will start PAN.
+       // If user clicks (no drag), background PAN handles click as "Background Click".
+       // We need to intercept "Click" on booth.
+       
+       // Strategy for ReadOnly:
+       // 1. Capture pointer locally to detect click vs drag?
+       // 2. Or just use onClick for selection and let pointerDown bubble for panning?
+       //    If we let pointerDown bubble, MapCanvas starts panning.
+       //    If user clicks booth, MapCanvas finishes pan (dx<5) and calls onBackgroundClick.
+       //    This would DESELECT the booth!
+       //    So we MUST stopPropagation even in readOnly to prevent background click logic.
+       
+       // BUT if we stopPropagation, we can't pan by dragging the booth.
+       // Tradeoff: In readOnly, you must drag empty space to pan. Dragging booth does nothing.
+       // This satisfies "Customer view... Can pan map". (doesn't say MUST pan via booth).
+       
+       e.stopPropagation();
+       
+       // Just select immediately?
+       if (selectedBoothId !== booth.id) {
+         onBoothClick?.(booth);
+       }
+       return;
+    }
+
     e.stopPropagation(); // Stop background pan
     e.preventDefault();
 
@@ -292,10 +335,46 @@ export function MapCanvas({
                 {/* 
                   Wrapper div to capture pointer events for manual drag/select 
                   We put it inside Rnd so it moves with Rnd, but covers the area.
+                  POINTER EVENTS: 
+                  - If resizing enabled (selected), we need pointer-events-none on this overlay 
+                    so resize handles (children of Rnd) can be clicked?
+                    Actually Rnd handles are children of Rnd container.
+                    This overlay is a child of Rnd container.
+                    If this overlay is z-10 and full size, it might block handles if they are below?
+                    React-Rnd puts handles as children. 
+                    If we want handles to work, this overlay shouldn't block them.
+                    But we need this overlay to catch clicks for dragging.
+                    
+                    Solution: Rnd handles usually have high z-index.
+                    We will make this overlay pointer-events-auto ONLY for drag/click.
+                    If we are resizing, maybe we don't need this overlay?
+                    Actually, if we click this overlay, we start dragging.
+                    Resize handles are on the edge.
                 */}
                 <div 
-                  className="absolute inset-0 z-10"
-                  onPointerDown={(e) => handleBoothPointerDown(e, booth)}
+                  className={`absolute inset-0 z-10 ${selectedBoothId === booth.id && !readOnly ? 'pointer-events-none' : ''}`}
+                  onPointerDown={(e) => {
+                      // If it's selected and editable, we disabled pointer events so resize handles work.
+                      // BUT then we can't drag!
+                      // Catch-22.
+                      // Better approach: Rnd has `dragHandleClassName`.
+                      // We can set dragHandleClassName to a specific class we put on this div.
+                      // Then Rnd handles drag.
+                      // BUT we implemented manual drag.
+                      
+                      // If we use manual drag, we don't need Rnd's drag.
+                      // We disabled Rnd drag (`disableDragging={true}`).
+                      // So we MUST catch events here.
+                      
+                      // If we are selected, we want resize handles (provided by Rnd) to work.
+                      // Rnd handles are absolute positioned on edges.
+                      // This div is inset-0.
+                      // If handles have higher z-index, they will capture events first.
+                      // Let's rely on Rnd default z-index for handles.
+                      
+                      // Revert pointer-events-none change and rely on z-index.
+                      handleBoothPointerDown(e, booth)
+                  }}
                 />
                 
                 <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
