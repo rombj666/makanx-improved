@@ -66,15 +66,8 @@ export function MapEditor() {
   // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadTab, setUploadTab] = useState<'upload' | 'static' | 'url'>('upload');
+  const [uploadTab, setUploadTab] = useState<'upload' | 'url'>('upload');
   
-  // Sample static maps
-  const STATIC_MAPS = [
-    { name: 'Singapore Food Fest 2026', url: '/maps/sg-food-fest-2026.jpg' },
-    { name: 'Expo Hall 1 Layout', url: '/maps/expo-hall-1.jpg' },
-    { name: 'Outdoor Market', url: '/maps/outdoor-market.jpg' },
-  ];
-
   const [urlInput, setUrlInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -317,21 +310,7 @@ export function MapEditor() {
   };
 
   const handleStaticMapSelect = async (url: string) => {
-    setIsUploading(true);
-    try {
-      const { data } = await api.patch(`/events/${eventId}/map-url`, {
-        mapImageUrl: url
-      });
-      if (data.success) {
-        setMapUrl(url); // Local path works directly
-        toast.success('Map updated');
-        setIsUploadModalOpen(false);
-      }
-    } catch (error) {
-      toast.error('Update failed');
-    } finally {
-      setIsUploading(false);
-    }
+    // Deprecated
   };
 
   const handleUrlUpload = async () => {
@@ -444,11 +423,11 @@ export function MapEditor() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 overflow-hidden relative w-full h-[calc(100vh-120px)] bg-gray-100">
         {/* Canvas Container */}
         <div 
           ref={mapContainerRef}
-          className={`flex-1 bg-gray-100 overflow-hidden relative ${isPanning ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+          className={`flex-1 overflow-hidden relative h-full ${isPanning ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
           onPointerDown={handleMapPointerDown}
           onPointerMove={handleMapPointerMove}
           onPointerUp={handleMapPointerUp}
@@ -570,11 +549,11 @@ export function MapEditor() {
       >
         <div className="flex gap-2 mb-4 border-b">
           <button 
-            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'static' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
-            onClick={() => setUploadTab('static')}
+            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'upload' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
+            onClick={() => setUploadTab('upload')}
           >
             <div className="flex items-center gap-2">
-              <ImageIcon size={16} /> Static Maps
+              <Upload size={16} /> Upload from Local
             </div>
           </button>
           <button 
@@ -607,24 +586,7 @@ export function MapEditor() {
               <p className="text-xs text-gray-500">JPG, PNG, WebP up to 10MB</p>
               {isUploading && <p className="text-xs text-orange-600 font-bold mt-2 animate-pulse">Uploading...</p>}
             </div>
-          ) : uploadTab === 'static' ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {STATIC_MAPS.map((map) => (
-                <div 
-                  key={map.url}
-                  className="border rounded-lg p-2 cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-all"
-                  onClick={() => handleStaticMapSelect(map.url)}
-                >
-                  <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden">
-                    <img src={map.url} alt={map.name} className="w-full h-full object-cover" />
-                  </div>
-                  <p className="text-sm font-medium text-center">{map.name}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
+          ) : (
           <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Image URL</label>

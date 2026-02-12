@@ -48,9 +48,41 @@ export function MapCanvas({
   onFixMap
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [imageError, setImageError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [lastAction, setLastAction] = useState('');
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+
+  // Auto-fit when image loads
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    setNaturalSize({ width: naturalWidth, height: naturalHeight });
+    setImageError(false);
+
+    // Only auto-fit if not already zoomed/panned? 
+    // Or always on first load?
+    // User requirement: "Only auto-center on: first image load, when mapImageUrl changes"
+    
+    // We can detect if it's "first load" by checking if viewport is default
+    // Or just rely on naturalSize change effect?
+    // Let's do it right here.
+    
+    if (wrapperRef.current) {
+        const { clientWidth, clientHeight } = wrapperRef.current;
+        const scaleX = clientWidth / naturalWidth;
+        const scaleY = clientHeight / naturalHeight;
+        const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100% initially? Or allow it? 
+        // Usually fitting means fit to screen.
+        const fitScale = Math.min(scaleX, scaleY);
+        
+        // Center it
+        const x = (clientWidth - naturalWidth * fitScale) / 2;
+        const y = (clientHeight - naturalHeight * fitScale) / 2;
+        
+        onViewportChange?.({ scale: fitScale, x, y });
+    }
+  };
 
   // Interaction State
   const [dragging, setDragging] = useState<{
@@ -224,6 +256,7 @@ export function MapCanvas({
 
   return (
     <div 
+      ref={wrapperRef}
       className="relative bg-gray-100 overflow-hidden w-full h-full select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -245,8 +278,10 @@ export function MapCanvas({
         <div 
           className="relative bg-white shadow-lg border border-slate-200"
           style={{ 
-            width: '1000px', 
-            height: '800px', 
+            width: naturalSize.width > 0 ? naturalSize.width : '100%', 
+            height: naturalSize.height > 0 ? naturalSize.height : '100%',
+            minWidth: '100px',
+            minHeight: '100px'
           }}
         >
           {/* Debug Overlay */}
@@ -260,13 +295,13 @@ export function MapCanvas({
               key={`${mapSrc}-${retryKey}`}
               src={mapSrc}
               alt="Event Map"
-              className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-0"
+              className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none z-0"
               onError={(e) => {
                 console.error('Map image failed to load:', mapSrc, e);
                 setImageError(true);
                 toast.error('Map image failed to load');
               }}
-              onLoad={() => setImageError(false)}
+              onLoad={handleImageLoad}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
