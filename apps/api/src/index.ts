@@ -9,6 +9,8 @@ import boothRoutes from './routes/booth.routes';
 import applicationRoutes from './routes/application.routes';
 import orderRoutes from './routes/order.routes';
 import organizerRoutes from './routes/organizer.routes';
+import organizerUploadRoutes from './routes/organizerUploadRoutes';
+import uploadRoutes from './routes/upload.routes';
 
 import { configureSecurity } from './middleware/security';
 
@@ -40,6 +42,8 @@ apiRouter.use('/booths', boothRoutes);
 apiRouter.use('/applications', applicationRoutes);
 apiRouter.use('/orders', orderRoutes);
 apiRouter.use('/organizer', organizerRoutes);
+apiRouter.use('/organizer', organizerUploadRoutes);
+apiRouter.use('/uploads', uploadRoutes);
 
 app.use('/api', apiRouter);
 

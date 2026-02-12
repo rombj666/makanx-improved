@@ -66,7 +66,7 @@ export function MapEditor() {
   // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadTab, setUploadTab] = useState<'static' | 'url'>('static');
+  const [uploadTab, setUploadTab] = useState<'upload' | 'static' | 'url'>('upload');
   
   // Sample static maps
   const STATIC_MAPS = [
@@ -280,7 +280,42 @@ export function MapEditor() {
     }
   };
 
-  // Map Upload
+  // File Upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size too large (max 10MB)');
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // Use the new Cloudinary upload route
+      const { data } = await api.post(`/organizer/events/${eventId}/map`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (data.success) {
+        setMapUrl(data.data.mapImageUrl);
+        toast.success('Map uploaded successfully');
+        setIsUploadModalOpen(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleStaticMapSelect = async (url: string) => {
     setIsUploading(true);
     try {
@@ -351,11 +386,11 @@ export function MapEditor() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* Warning Banner */}
-      {mapUrl.includes('/uploads/') && (
+      {(mapUrl.includes('/uploads/') || !mapUrl) && (
         <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-amber-800 text-sm">
           <div className="flex items-center gap-2">
             <span className="font-bold">Warning:</span>
-            This map uses legacy backend storage which may be unreliable. Please update to a static map.
+            {!mapUrl ? 'No map image set.' : 'This map uses legacy backend storage which may be unreliable.'} Please update to a new map.
           </div>
           <Button size="sm" variant="outline" onClick={() => setIsUploadModalOpen(true)} className="h-7 text-amber-800 border-amber-300 hover:bg-amber-200">
             Fix Now
@@ -553,11 +588,26 @@ export function MapEditor() {
         </div>
 
         <div className="mb-4 p-3 bg-blue-50 text-blue-800 text-xs rounded border border-blue-100">
-          <strong>Note:</strong> We are using temporary static map hosting (`/public/maps`). 
-          Backend uploads are disabled for this version. Later we will migrate to Cloudinary/S3.
+          <strong>Note:</strong> Uploaded images will be stored securely in Cloudinary.
         </div>
 
-        {uploadTab === 'static' ? (
+          {uploadTab === 'upload' ? (
+            <div className="space-y-4 py-8 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer relative">
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+              />
+              <div className="bg-white p-3 rounded-full shadow-sm mb-2">
+                <Upload size={24} className="text-orange-500" />
+              </div>
+              <p className="text-sm font-medium text-gray-700">Click to upload image</p>
+              <p className="text-xs text-gray-500">JPG, PNG, WebP up to 10MB</p>
+              {isUploading && <p className="text-xs text-orange-600 font-bold mt-2 animate-pulse">Uploading...</p>}
+            </div>
+          ) : uploadTab === 'static' ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               {STATIC_MAPS.map((map) => (
