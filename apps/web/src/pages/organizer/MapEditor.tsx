@@ -323,8 +323,40 @@ export function MapEditor() {
 
   const selectedBooth = booths.find(b => b.id === selectedBoothId);
 
+  const handleFixMap = async () => {
+    setIsUploading(true);
+    try {
+      const fixedUrl = '/maps/sg-food-fest-2026.jpg';
+      const { data } = await api.patch(`/events/${eventId}/map-url`, {
+        mapImageUrl: fixedUrl
+      });
+      if (data.success) {
+        setMapUrl(fixedUrl);
+        setUrlInput(fixedUrl);
+        toast.success('Map fixed to default');
+      }
+    } catch (error) {
+      toast.error('Failed to fix map');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+      {/* Warning Banner */}
+      {mapUrl.includes('/uploads/') && (
+        <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-amber-800 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Warning:</span>
+            This map uses legacy backend storage which may be unreliable. Please update to a static map.
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setIsUploadModalOpen(true)} className="h-7 text-amber-800 border-amber-300 hover:bg-amber-200">
+            Fix Now
+          </Button>
+        </div>
+      )}
+
       {/* Top Bar */}
       <div className="bg-white border-b px-4 py-2 flex items-center justify-between shadow-sm z-20 shrink-0">
         <div className="flex items-center gap-4">
@@ -400,6 +432,7 @@ export function MapEditor() {
                onBoothClick={(b) => setSelectedBoothId(b.id)}
                onBoothUpdate={updateBoothLocally}
                onBackgroundClick={() => setSelectedBoothId(null)}
+               onFixMap={handleFixMap}
              />
           </div>
         </div>

@@ -26,6 +26,7 @@ interface MapCanvasProps {
   onBackgroundClick?: () => void;
   scale?: number;
   offset?: { x: number, y: number };
+  onFixMap?: () => void;
 }
 
 export function MapCanvas({ 
@@ -37,26 +38,23 @@ export function MapCanvas({
   selectedBoothId,
   onBackgroundClick,
   scale = 1,
-  offset = { x: 0, y: 0 }
+  offset = { x: 0, y: 0 },
+  onFixMap
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number, y: number } | null>(null);
   const [imageError, setImageError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
+  // Booth interaction state
+  const isDraggingBoothRef = useRef(false);
+  const isPointerDownOnBoothRef = useRef(false);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (readOnly) return;
     
-    // Check if user is holding Space key or middle mouse button for panning
-    // OR if we clicked on background (handled here implicitly if it bubbled up)
-    // But actually, we want to allow dragging background to pan.
-    // If Space is held, we want to pan even if over a booth? No, Rnd handles booth.
-    
-    // We pass the event up if needed, but for background panning logic:
-    // If user clicks background, we start pan/drag check.
+    // Background pointer down - start pan tracking
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    
-    // Capture pointer for background dragging
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -66,13 +64,14 @@ export function MapCanvas({
     const dx = Math.abs(e.clientX - dragStartRef.current.x);
     const dy = Math.abs(e.clientY - dragStartRef.current.y);
     
-    // Only treat as click if moved less than 4px (drag threshold)
-    if (dx < 4 && dy < 4) {
-      // If we clicked background and didn't drag, clear selection
+    // Only treat as background click if moved less than 4px (drag threshold)
+    // AND we didn't just finish dragging a booth
+    if (dx < 4 && dy < 4 && !isDraggingBoothRef.current) {
       onBackgroundClick?.();
     }
     
     dragStartRef.current = null;
+    isDraggingBoothRef.current = false;
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
@@ -83,7 +82,7 @@ export function MapCanvas({
       className="relative bg-gray-100 overflow-hidden w-full h-full select-none"
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
-      style={{ touchAction: 'none' }} // Important for pointer events
+      style={{ touchAction: 'none' }} 
     >
       <div
         ref={mapContainerRef}
@@ -99,8 +98,8 @@ export function MapCanvas({
         <div 
           className="relative bg-white shadow-lg border border-slate-200"
           style={{ 
-            width: '1000px', // Base width
-            height: '800px', // Base height
+            width: '1000px', 
+            height: '800px', 
           }}
           onPointerDown={(e) => e.stopPropagation()} 
         >
@@ -121,25 +120,33 @@ export function MapCanvas({
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
               {imageError ? (
-                 <>
-                   <span className="text-red-500 mb-2">Failed to load map image</span>
-                   <span className="text-xs text-gray-400 mb-4 max-w-md truncate px-4">{mapSrc}</span>
-                   <button 
-                     onClick={() => {
-                        // We need pointer events enabled for this button, but parent has pointer-events-none?
-                        // Actually parent is just a div. The fallback div has pointer-events-none.
-                        // We need to enable pointer events for the button.
-                     }}
-                     className="pointer-events-auto flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
-                     onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setImageError(false);
-                        setRetryKey(k => k + 1);
-                     }}
-                   >
-                     <RefreshCw size={14} /> Retry
-                   </button>
-                 </>
+                 <div className="flex flex-col items-center gap-2 pointer-events-auto">
+                   <span className="text-red-500 mb-1">Failed to load map image</span>
+                   <span className="text-xs text-gray-400 mb-3 max-w-md truncate px-4">{mapSrc}</span>
+                   <div className="flex gap-2">
+                     <button 
+                       className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+                       onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setImageError(false);
+                          setRetryKey(k => k + 1);
+                       }}
+                     >
+                       <RefreshCw size={14} /> Retry
+                     </button>
+                     {onFixMap && (
+                       <button 
+                         className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
+                         onPointerDown={(e) => {
+                            e.stopPropagation();
+                            onFixMap();
+                         }}
+                       >
+                         Set Default Map
+                       </button>
+                     )}
+                   </div>
+                 </div>
               ) : (
                 <span>No Map Image Set</span>
               )}
@@ -153,9 +160,16 @@ export function MapCanvas({
                 key={booth.id}
                 size={{ width: booth.width, height: booth.height }}
                 position={{ x: booth.x, y: booth.y }}
-                disableDragging={readOnly}
-                enableResizing={!readOnly}
-                onDragStop={(_, d) => onBoothUpdate?.(booth.id, { x: d.x, y: d.y })}
+                disableDragging={readOnly || (selectedBoothId !== booth.id)}
+                enableResizing={!readOnly && (selectedBoothId === booth.id)}
+                onDragStart={() => {
+                  isDraggingBoothRef.current = true;
+                }}
+                onDragStop={(_, d) => {
+                  // Small delay to prevent click firing immediately after drag
+                  setTimeout(() => { isDraggingBoothRef.current = false; }, 50);
+                  onBoothUpdate?.(booth.id, { x: d.x, y: d.y });
+                }}
                 onResizeStop={(_, __, ref, ___, position) => {
                   onBoothUpdate?.(booth.id, { 
                     width: parseInt(ref.style.width), 
@@ -165,22 +179,22 @@ export function MapCanvas({
                 }}
                 onPointerDown={(e: React.PointerEvent) => {
                    e.stopPropagation(); // Stop background pan start
-                   e.currentTarget.setPointerCapture(e.pointerId); // Ensure we keep dragging this booth
-                }}
-                onPointerUp={(e: React.PointerEvent) => {
-                   e.currentTarget.releasePointerCapture(e.pointerId);
+                   isPointerDownOnBoothRef.current = true;
+                   // Select immediately on down so drag works
+                   if (selectedBoothId !== booth.id) {
+                     onBoothClick?.(booth);
+                   }
                 }}
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
-                  // We need to ensure we don't trigger if it was a drag
-                  // Rnd handles drag vs click internally usually, but since we are wrapping:
-                  // If Rnd consumed the drag, onClick might still fire?
-                  // Let's rely on Rnd's internal handling or just fire select.
-                  // Selecting on click is fine even after drag.
-                  onBoothClick?.(booth);
+                  // If we were dragging, don't re-trigger select logic (though harmless here)
+                  // Main goal is to stop propagation so background doesn't deselect
+                  if (!isDraggingBoothRef.current) {
+                    onBoothClick?.(booth);
+                  }
                 }}
                 bounds="parent"
-                scale={scale} // Important for Rnd to calculate drag correctly when scaled
+                scale={scale}
                 className={`
                   border-2 flex flex-col items-center justify-center cursor-pointer transition-colors
                   ${readOnly ? 'cursor-default' : 'cursor-move hover:z-50'}
