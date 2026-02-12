@@ -17,7 +17,6 @@ import {
   Trash2,
   Check,
   Link as LinkIcon,
-  Image as ImageIcon
 } from 'lucide-react';
 import debounce from 'lodash.debounce';
 
@@ -309,9 +308,6 @@ export function MapEditor() {
     }
   };
 
-  const handleStaticMapSelect = async (url: string) => {
-    // Deprecated
-  };
 
   const handleUrlUpload = async () => {
     if (!urlInput.startsWith('http')) {
