@@ -23,6 +23,10 @@ interface Event {
   mapImageUrl?: string;
 }
 
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
+import { Plus, MapPin, Calendar } from 'lucide-react';
+
 export function OrganizerDashboard() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [events, setEvents] = useState<Event[]>([]);
@@ -30,6 +34,13 @@ export function OrganizerDashboard() {
   const [booths, setBooths] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Form state
+  const [newEventName, setNewEventName] = useState('');
+  const [newEventLocation, setNewEventLocation] = useState('');
+  const [newEventStartDate, setNewEventStartDate] = useState('');
 
   useEffect(() => {
     fetchEvents();
@@ -50,7 +61,10 @@ export function OrganizerDashboard() {
       if (data.success) {
         setEvents(data.data);
         if (data.data.length > 0 && !selectedEventId) {
-          setSelectedEventId(data.data[0].id);
+          // Only auto-select if we don't have one (or if refreshed list doesn't have it)
+          if (!selectedEventId || !data.data.find((e: any) => e.id === selectedEventId)) {
+             setSelectedEventId(data.data[0].id);
+          }
         }
       }
     } catch (error) {
@@ -59,6 +73,39 @@ export function OrganizerDashboard() {
       setIsLoading(false);
     }
   };
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventName) return;
+
+    setIsCreating(true);
+    try {
+      const { data } = await api.post('/events', {
+        name: newEventName,
+        location: newEventLocation || undefined,
+        startDate: newEventStartDate || undefined,
+        status: 'ACTIVE'
+      });
+      
+      if (data.success) {
+        toast.success('Event created successfully');
+        setIsCreateModalOpen(false);
+        setNewEventName('');
+        setNewEventLocation('');
+        setNewEventStartDate('');
+        
+        // Refresh events and select the new one
+        await fetchEvents();
+        setSelectedEventId(data.data.id);
+        setActiveTab('ACTIVE'); // Ensure we are on active tab
+      }
+    } catch (error) {
+      toast.error('Failed to create event');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
 
   const fetchEventBooths = async (id: string) => {
     try {
@@ -140,9 +187,17 @@ export function OrganizerDashboard() {
               Sales
             </Button>
           </Link>
+          <Button 
+            size="sm" 
+            className="whitespace-nowrap bg-orange-600 hover:bg-orange-700"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            <Plus size={16} className="mr-2" />
+            Create Event
+          </Button>
           {selectedEvent && (
             <Link to={`/organizer/map/${selectedEvent.id}`}>
-              <Button size="sm" className="whitespace-nowrap bg-orange-600 hover:bg-orange-700">
+              <Button size="sm" variant="outline" className="whitespace-nowrap">
                 <Settings size={16} className="mr-2" />
                 Manage Booths
               </Button>
@@ -150,6 +205,59 @@ export function OrganizerDashboard() {
           )}
         </div>
       </div>
+
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create New Event"
+      >
+        <form onSubmit={handleCreateEvent} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Event Name *</label>
+            <Input
+              placeholder="e.g. Summer Food Fest 2026"
+              value={newEventName}
+              onChange={(e) => setNewEventName(e.target.value)}
+              required
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Location (Optional)</label>
+            <div className="relative">
+              <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="e.g. Expo Hall 1"
+                className="pl-9"
+                value={newEventLocation}
+                onChange={(e) => setNewEventLocation(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Start Date (Optional)</label>
+            <div className="relative">
+              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                type="date"
+                className="pl-9"
+                value={newEventStartDate}
+                onChange={(e) => setNewEventStartDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={isCreating} disabled={!newEventName}>
+              Create Event
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}

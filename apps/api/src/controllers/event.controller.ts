@@ -73,3 +73,17 @@ export const getEventBySlug = async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: error.message });
   }
 };
+
+export const uploadMap = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    if (!req.file) throw new Error('No file uploaded');
+
+    const mapImageUrl = `/uploads/${req.file.filename}`;
+    const result = await eventService.updateEvent(req.params.id, req.user.userId, { mapImageUrl });
+    
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};

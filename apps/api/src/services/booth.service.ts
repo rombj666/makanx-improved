@@ -9,6 +9,7 @@ const boothSchema = z.object({
   y: z.number().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
+  vendorId: z.string().uuid().optional().nullable(),
 });
 
 const bulkUpdateSchema = z.object({

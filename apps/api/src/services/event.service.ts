@@ -4,8 +4,8 @@ import { z } from 'zod';
 const eventSchema = z.object({
   name: z.string().min(3),
   description: z.string().optional(),
-  startDate: z.string().transform((str) => new Date(str)),
-  endDate: z.string().transform((str) => new Date(str)),
+  startDate: z.string().optional().transform((str) => str ? new Date(str) : new Date()),
+  endDate: z.string().optional().transform((str) => str ? new Date(str) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
   location: z.string().optional(),
   mapImageUrl: z.string().optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),

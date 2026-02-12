@@ -28,6 +28,10 @@ configureSecurity(app);
 app.use(cors());
 app.use(express.json());
 
+import path from 'path';
+
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Routes
 const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);

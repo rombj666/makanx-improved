@@ -55,6 +55,9 @@ model VendorProfile {
   userId       String     @unique
   businessName String
   description  String?
+  phoneNumber  String?
+  category     String?
+  priceRange   String?
   booths       Booth[]
   menuItems    MenuItem[]
   orders       Order[]    @relation("VendorOrders")

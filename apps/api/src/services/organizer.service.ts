@@ -21,6 +21,10 @@ export const getVendors = async (active?: boolean) => {
       vendorProfile: {
         select: {
           businessName: true,
+          description: true,
+          phoneNumber: true,
+          category: true,
+          priceRange: true,
         },
       },
     },
