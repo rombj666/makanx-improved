@@ -1,11 +1,12 @@
 
-import { useState, useEffect, useRef } from 'react';
-import { Rnd } from 'react-rnd';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { MapCanvas } from '../../components/map/MapCanvas';
 import { 
   ArrowLeft, 
   ZoomIn, 
@@ -13,9 +14,12 @@ import {
   Maximize, 
   Upload, 
   Plus, 
-  Save, 
-  Trash2 
+  Trash2,
+  Check,
+  Link as LinkIcon,
+  Image as ImageIcon
 } from 'lucide-react';
+import debounce from 'lodash.debounce';
 
 interface Booth {
   id: string;
@@ -26,6 +30,9 @@ interface Booth {
   height: number;
   status: string;
   vendorId?: string | null;
+  vendor?: {
+    businessName: string;
+  };
 }
 
 interface Event {
@@ -45,39 +52,63 @@ interface Vendor {
 
 export function MapEditor() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  
+  // Map State
   const [mapUrl, setMapUrl] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDraggingMap, setIsDraggingMap] = useState(false);
+  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+  
+  // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadTab, setUploadTab] = useState<'file' | 'url'>('file');
+  const [urlInput, setUrlInput] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchEventData();
     fetchVendors();
+    
+    // Auto-fit logic on load would go here, but we need image dimensions first.
+    // For now, center it.
+    centerMap();
   }, [eventId]);
+
+  // Debounced Save for auto-save
+  const debouncedSaveBooth = useCallback(
+    debounce(async (id: string, data: Partial<Booth>) => {
+      try {
+        await api.put(`/booths/${id}`, data);
+        setHasUnsavedChanges(false);
+      } catch (error) {
+        console.error('Auto-save failed', error);
+        toast.error('Auto-save failed');
+      }
+    }, 500),
+    []
+  );
 
   const fetchEventData = async () => {
     try {
-      // Fetch booths
       const boothsRes = await api.get(`/booths/event/${eventId}`);
       if (boothsRes.data.success) {
         setBooths(boothsRes.data.data);
       }
 
-      // Fetch event details (using list endpoint as workaround if specific get not avail)
-      // Or use public slug endpoint if needed, but we need ID.
-      // Let's assume we can use GET /events endpoint and filter, or just use GET /events/:slug if we had slug.
-      // Since we implemented GET /events/:id (public) via slug, we might not have ID endpoint.
-      // But wait, user said "Existing endpoints include: GET /api/events?status=ACTIVE|ARCHIVED".
-      // We can use that.
       const eventsRes = await api.get('/events?status=ACTIVE');
       let found = eventsRes.data.data.find((e: any) => e.id === eventId);
       
       if (!found) {
-         // Try archived
          const archivedRes = await api.get('/events?status=ARCHIVED');
          found = archivedRes.data.data.find((e: any) => e.id === eventId);
       }
@@ -85,6 +116,7 @@ export function MapEditor() {
       if (found) {
         setEvent(found);
         setMapUrl(found.mapImageUrl || '');
+        setUrlInput(found.mapImageUrl || '');
       }
     } catch (error) {
       toast.error('Failed to load map data');
@@ -102,41 +134,41 @@ export function MapEditor() {
     }
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await api.post('/booths/layout', {
-        eventId,
-        mapImageUrl: mapUrl,
-        booths: booths.map(b => ({
-          id: b.id,
-          x: b.x,
-          y: b.y,
-          width: b.width,
-          height: b.height
-        }))
-      });
-      
-      // Also update vendor assignments individually if changed?
-      // The bulk update only does layout. We need to save vendor assignments too.
-      // Or we can update vendor assignment immediately when changed in inspector.
-      // Let's do immediate update for vendor assignment for simplicity/safety.
-      
-      toast.success('Layout saved successfully');
-    } catch (error) {
-      toast.error('Failed to save layout');
-    } finally {
-      setIsSaving(false);
-    }
+  const centerMap = () => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 }); // In real implementation, calculate center based on container size
   };
 
+  const handleZoom = (delta: number) => {
+    setZoom(prev => Math.min(3, Math.max(0.4, prev + delta)));
+  };
+
+  const handleMapMouseDown = (e: React.MouseEvent) => {
+    if (selectedBoothId) return; // Don't pan if clicking booth (handled by Rnd stopPropagation, but double check)
+    setIsDraggingMap(true);
+    setLastMousePos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMapMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingMap) return;
+    const dx = e.clientX - lastMousePos.x;
+    const dy = e.clientY - lastMousePos.y;
+    setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+    setLastMousePos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMapMouseUp = () => {
+    setIsDraggingMap(false);
+  };
+
+  // Booth Operations
   const handleAddBooth = async () => {
     try {
       const { data } = await api.post('/booths', {
         eventId,
         name: `B${booths.length + 1}`,
-        x: 50,
-        y: 50,
+        x: 100, // Default positions
+        y: 100,
         width: 60,
         height: 60
       });
@@ -148,6 +180,12 @@ export function MapEditor() {
     } catch (error) {
       toast.error('Failed to create booth');
     }
+  };
+
+  const updateBoothLocally = (id: string, data: Partial<Booth>) => {
+    setBooths(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
+    setHasUnsavedChanges(true);
+    debouncedSaveBooth(id, data);
   };
 
   const handleDeleteBooth = async () => {
@@ -167,212 +205,176 @@ export function MapEditor() {
   const handleVendorAssign = async (vendorId: string | null) => {
     if (!selectedBoothId) return;
     
+    // Find vendor details for UI update
+    const vendor = vendors.find(v => v.id === vendorId);
+    const vendorName = vendor?.vendorProfile?.businessName || vendor?.name;
+
+    // Optimistic Update
+    setBooths(prev => prev.map(b => 
+      b.id === selectedBoothId ? { 
+        ...b, 
+        vendorId, 
+        vendor: vendorId ? { businessName: vendorName || '' } : undefined 
+      } : b
+    ));
+
     try {
-      // Optimistic update
-      setBooths(booths.map(b => b.id === selectedBoothId ? { ...b, vendorId } : b));
-      
       await api.put(`/booths/${selectedBoothId}`, { vendorId });
-      toast.success('Booth updated');
+      toast.success('Vendor assigned');
     } catch (error) {
-      toast.error('Failed to update booth');
+      toast.error('Failed to assign vendor');
       fetchEventData(); // Revert
     }
   };
-  
-  const handleUpdateBoothName = async (name: string) => {
-      if (!selectedBoothId) return;
-      // Optimistic
-      setBooths(booths.map(b => b.id === selectedBoothId ? { ...b, name } : b));
-      // Debounce saving in real app, but here we just set state and user hits save layout? 
-      // Or save immediately? 
-      // Layout save handles position/size. Properties like name/vendor should be saved.
-      // Let's save name immediately on blur or enter? 
-      // For now, let's just update state and rely on separate save or individual update?
-      // The updateLayout endpoint DOES NOT update name/vendorId.
-      // So we MUST call PUT /booths/:id for name/vendor updates.
-      try {
-          await api.put(`/booths/${selectedBoothId}`, { name });
-      } catch (e) { console.error(e); }
-  };
 
-  const handleUploadMap = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Map Upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const toastId = toast.loading('Uploading map...');
+    setIsUploading(true);
     try {
       const { data } = await api.post(`/events/${eventId}/map`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (data.success) {
         setMapUrl(data.data.mapImageUrl);
-        toast.success('Map uploaded', { id: toastId });
+        toast.success('Map uploaded');
+        setIsUploadModalOpen(false);
       }
     } catch (error) {
-      toast.error('Upload failed', { id: toastId });
+      toast.error('Upload failed');
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const updateBoothPosition = (id: string, d: any) => {
-    setBooths(prev => prev.map(b => 
-      b.id === id ? { ...b, x: d.x, y: d.y } : b
-    ));
+  const handleUrlUpload = async () => {
+    if (!urlInput.startsWith('http')) {
+      toast.error('Invalid URL');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const { data } = await api.patch(`/events/${eventId}/map-url`, {
+        mapImageUrl: urlInput
+      });
+      if (data.success) {
+        setMapUrl(urlInput);
+        toast.success('Map URL updated');
+        setIsUploadModalOpen(false);
+      }
+    } catch (error) {
+      toast.error('Update failed');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const updateBoothSize = (id: string, ref: any, position: any) => {
-    setBooths(prev => prev.map(b => 
-      b.id === id ? { 
-        ...b, 
-        width: parseInt(ref.style.width), 
-        height: parseInt(ref.style.height),
-        ...position 
-      } : b
-    ));
+  const handleBack = () => {
+    toast.success('Layout saved');
+    navigate('/organizer');
   };
 
   const selectedBooth = booths.find(b => b.id === selectedBoothId);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* Top Bar */}
-      <div className="bg-white border-b p-4 flex items-center justify-between gap-4 shadow-sm z-10">
+      <div className="bg-white border-b px-4 py-2 flex items-center justify-between shadow-sm z-20 shrink-0">
         <div className="flex items-center gap-4">
-          <Link to="/organizer">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft size={16} className="mr-2" />
-              Back
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" onClick={handleBack}>
+            <ArrowLeft size={16} className="mr-2" />
+            Back
+          </Button>
           <div className="h-6 w-px bg-gray-200" />
-          <h1 className="font-bold text-lg">{event?.name} Map</h1>
+          <h1 className="font-bold text-lg truncate max-w-[200px]">{event?.name} Map</h1>
+          <div className="flex items-center gap-2 ml-4">
+             {hasUnsavedChanges ? (
+               <span className="text-xs text-orange-500 animate-pulse">Saving...</span>
+             ) : (
+               <span className="text-xs text-green-600 flex items-center">
+                 <Check size={12} className="mr-1" /> All changes saved
+               </span>
+             )}
+          </div>
         </div>
         
         <div className="flex items-center gap-2">
             <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2">
-                <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 hover:bg-white rounded-md text-gray-600">
+                <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomOut size={16} />
                 </button>
                 <span className="text-xs font-medium w-12 text-center">{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 hover:bg-white rounded-md text-gray-600">
+                <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomIn size={16} />
                 </button>
-                <button onClick={() => setZoom(1)} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Reset Zoom">
+                <button onClick={centerMap} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Reset View">
                     <Maximize size={14} />
                 </button>
             </div>
 
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*"
-                onChange={handleUploadMap}
-            />
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="outline" size="sm" onClick={() => setIsUploadModalOpen(true)}>
                 <Upload size={16} className="mr-2" />
-                Upload Map
+                Map Image
             </Button>
             
-            <Button variant="outline" size="sm" onClick={handleAddBooth}>
+            <Button size="sm" onClick={handleAddBooth} className="bg-orange-600 hover:bg-orange-700">
                 <Plus size={16} className="mr-2" />
                 Add Booth
-            </Button>
-            
-            <Button size="sm" onClick={handleSave} isLoading={isSaving} className="bg-orange-600 hover:bg-orange-700">
-                <Save size={16} className="mr-2" />
-                Save Layout
             </Button>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Map Canvas Area */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-8 relative">
-          <div 
-            className="origin-top-left transition-transform duration-200 ease-out"
-            style={{ transform: `scale(${zoom})` }}
-          >
-             <div 
-                className="relative bg-white shadow-lg mx-auto transition-all"
-                style={{ 
-                    width: '1000px', 
-                    height: '800px',
-                    backgroundImage: `url(${mapUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center'
-                }}
-                onClick={() => setSelectedBoothId(null)}
-            >
-                {!mapUrl && (
-                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
-                    Upload a map image to get started
-                    </div>
-                )}
-
-                {booths.map(booth => (
-                    <Rnd
-                    key={booth.id}
-                    size={{ width: booth.width, height: booth.height }}
-                    position={{ x: booth.x, y: booth.y }}
-                    onDragStop={(_, d) => updateBoothPosition(booth.id, d)}
-                    onResizeStop={(_, __, ref, ___, position) => {
-                        updateBoothSize(booth.id, ref, position);
-                    }}
-                    bounds="parent"
-                    onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setSelectedBoothId(booth.id);
-                    }}
-                    className={`
-                        border-2 flex items-center justify-center cursor-move hover:z-50 transition-colors
-                        ${selectedBoothId === booth.id 
-                            ? 'border-orange-500 bg-orange-100/50 z-50' 
-                            : booth.vendorId 
-                                ? 'border-green-500 bg-green-100/50' 
-                                : 'border-blue-500 bg-blue-100/50'
-                        }
-                    `}
-                    scale={1} // Rnd handles scale itself if passed, but we scale parent. 
-                    // Warning: Rnd inside scaled parent might behave oddly with drag.
-                    // If Rnd bugs out, we might need to pass scale={zoom} prop to Rnd instead of parent transform.
-                    // Let's try parent transform first, if fails, switch.
-                    // Update: Rnd usually needs scale prop to correct drag deltas.
-                    // But if we scale parent, the mouse events are scaled too by browser? 
-                    // Actually react-rnd has a `scale` prop for this exact reason.
-                    // So we should NOT scale parent, but scale the Rnd content? No, we want to zoom the image too.
-                    // Best approach: Scale parent div, pass `scale={zoom}` to Rnd so it calculates drag correctly.
-                    >
-                        <div className="flex flex-col items-center justify-center w-full h-full overflow-hidden p-1">
-                            <span className="font-bold text-xs select-none pointer-events-none truncate w-full text-center">
-                                {booth.name}
-                            </span>
-                            {booth.vendorId && (
-                                <span className="text-[10px] bg-white/80 px-1 rounded truncate max-w-full">
-                                    Assigned
-                                </span>
-                            )}
-                        </div>
-                    </Rnd>
-                ))}
-            </div>
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Canvas Container */}
+        <div 
+          ref={mapContainerRef}
+          className="flex-1 bg-gray-100 overflow-hidden relative cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMapMouseDown}
+          onMouseMove={handleMapMouseMove}
+          onMouseUp={handleMapMouseUp}
+          onMouseLeave={handleMapMouseUp}
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
+            }
+          }}
+        >
+          <div className="absolute inset-0 pointer-events-none">
+             <MapCanvas 
+               mapImageUrl={mapUrl}
+               booths={booths}
+               scale={zoom}
+               offset={offset}
+               selectedBoothId={selectedBoothId}
+               onBoothClick={(b) => setSelectedBoothId(b.id)}
+               onBoothUpdate={updateBoothLocally}
+               onBackgroundClick={() => setSelectedBoothId(null)}
+             />
           </div>
         </div>
 
         {/* Booth Inspector Sidebar */}
         {selectedBooth && (
-            <div className="w-80 bg-white border-l shadow-xl flex flex-col animate-in slide-in-from-right-10">
-                <div className="p-4 border-b bg-gray-50">
+            <div className="w-80 bg-white border-l shadow-xl flex flex-col z-30 shrink-0 h-full">
+                <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-900">Booth Details</h3>
+                    <button onClick={() => setSelectedBoothId(null)} className="text-gray-400 hover:text-gray-600">
+                      &times;
+                    </button>
                 </div>
-                <div className="p-4 space-y-6 flex-1 overflow-auto">
+                <div className="p-4 space-y-6 flex-1 overflow-y-auto">
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase">Label / Name</label>
+                        <label className="text-xs font-bold text-gray-500 uppercase">Label</label>
                         <Input 
                             value={selectedBooth.name}
-                            onChange={(e) => handleUpdateBoothName(e.target.value)}
+                            onChange={(e) => updateBoothLocally(selectedBooth.id, { name: e.target.value })}
                         />
                     </div>
 
@@ -395,24 +397,40 @@ export function MapEditor() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">Width</label>
-                            <div className="p-2 bg-gray-100 rounded text-sm">{selectedBooth.width}px</div>
+                            <Input 
+                              type="number" 
+                              value={selectedBooth.width} 
+                              onChange={(e) => updateBoothLocally(selectedBooth.id, { width: parseInt(e.target.value) || 0 })}
+                            />
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">Height</label>
-                            <div className="p-2 bg-gray-100 rounded text-sm">{selectedBooth.height}px</div>
+                            <Input 
+                              type="number" 
+                              value={selectedBooth.height} 
+                              onChange={(e) => updateBoothLocally(selectedBooth.id, { height: parseInt(e.target.value) || 0 })}
+                            />
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">X</label>
-                            <div className="p-2 bg-gray-100 rounded text-sm">{selectedBooth.x}px</div>
+                            <Input 
+                              type="number" 
+                              value={selectedBooth.x} 
+                              onChange={(e) => updateBoothLocally(selectedBooth.id, { x: parseInt(e.target.value) || 0 })}
+                            />
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">Y</label>
-                            <div className="p-2 bg-gray-100 rounded text-sm">{selectedBooth.y}px</div>
+                            <Input 
+                              type="number" 
+                              value={selectedBooth.y} 
+                              onChange={(e) => updateBoothLocally(selectedBooth.id, { y: parseInt(e.target.value) || 0 })}
+                            />
                         </div>
                     </div>
                 </div>
                 
-                <div className="p-4 border-t bg-gray-50">
+                <div className="p-4 border-t bg-gray-50 mt-auto">
                     <Button 
                         variant="ghost" 
                         className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -425,6 +443,67 @@ export function MapEditor() {
             </div>
         )}
       </div>
+
+      {/* Upload Modal */}
+      <Modal 
+        isOpen={isUploadModalOpen} 
+        onClose={() => setIsUploadModalOpen(false)}
+        title="Update Map Image"
+      >
+        <div className="flex gap-2 mb-4 border-b">
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'file' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
+            onClick={() => setUploadTab('file')}
+          >
+            <div className="flex items-center gap-2">
+              <ImageIcon size={16} /> Upload File
+            </div>
+          </button>
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'url' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
+            onClick={() => setUploadTab('url')}
+          >
+            <div className="flex items-center gap-2">
+              <LinkIcon size={16} /> Image URL
+            </div>
+          </button>
+        </div>
+
+        {uploadTab === 'file' ? (
+          <div className="space-y-4">
+            <div 
+              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 cursor-pointer transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="mx-auto h-12 w-12 text-gray-400" />
+              <p className="mt-2 text-sm text-gray-600">Click to select map image</p>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*"
+                onChange={handleFileUpload}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Image URL</label>
+              <Input 
+                placeholder="https://example.com/map.jpg" 
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleUrlUpload} isLoading={isUploading} disabled={!urlInput}>
+                Update Map
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -12,9 +12,11 @@
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@makanx/shared": "*",
+    "@types/lodash.debounce": "^4.0.9",
     "axios": "^1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
