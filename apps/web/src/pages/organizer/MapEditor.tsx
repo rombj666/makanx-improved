@@ -144,7 +144,6 @@ export function MapEditor() {
   };
 
   const handleMapMouseDown = (e: React.MouseEvent) => {
-    if (selectedBoothId) return; // Don't pan if clicking booth (handled by Rnd stopPropagation, but double check)
     setIsDraggingMap(true);
     setLastMousePos({ x: e.clientX, y: e.clientY });
   };

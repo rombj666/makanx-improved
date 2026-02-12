@@ -30,3 +30,16 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const toAbsoluteUrl = (path: string | undefined | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  
+  // Base URL without /api suffix
+  const baseUrl = API_URL.replace(/\/api$/, '');
+  
+  // Ensure path starts with /
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  return `${baseUrl}${cleanPath}`;
+};
