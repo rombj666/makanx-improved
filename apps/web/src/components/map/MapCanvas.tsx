@@ -16,6 +16,12 @@ interface Booth {
   };
 }
 
+interface Viewport {
+  scale: number;
+  x: number;
+  y: number;
+}
+
 interface MapCanvasProps {
   mapImageUrl?: string;
   booths: Booth[];
@@ -24,8 +30,8 @@ interface MapCanvasProps {
   onBoothClick?: (booth: Booth) => void;
   selectedBoothId?: string | null;
   onBackgroundClick?: () => void;
-  scale?: number;
-  offset?: { x: number, y: number };
+  viewport?: Viewport;
+  onViewportChange?: (v: Viewport) => void;
   onFixMap?: () => void;
 }
 
@@ -37,42 +43,138 @@ export function MapCanvas({
   onBoothClick,
   selectedBoothId,
   onBackgroundClick,
-  scale = 1,
-  offset = { x: 0, y: 0 },
+  viewport = { scale: 1, x: 0, y: 0 },
+  onViewportChange,
   onFixMap
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const dragStartRef = useRef<{ x: number, y: number } | null>(null);
   const [imageError, setImageError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [lastAction, setLastAction] = useState('');
 
-  // Booth interaction state
-  const isDraggingBoothRef = useRef(false);
-  const isPointerDownOnBoothRef = useRef(false);
+  // Interaction State
+  const [dragging, setDragging] = useState<{
+    mode: 'pan' | 'booth' | null;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    startTx: number; // Viewport X
+    startTy: number; // Viewport Y
+    boothId?: string;
+    boothStartX?: number;
+    boothStartY?: number;
+  }>({
+    mode: null,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startTx: 0,
+    startTy: 0
+  });
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (readOnly) return;
     
-    // Background pointer down - start pan tracking
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    // Background Pan Start
+    // Only if left click (button 0) or middle click (button 1)
+    if (e.button !== 0 && e.button !== 1) return;
+
+    const target = e.target as HTMLElement;
+    
+    setDragging({
+      mode: 'pan',
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startTx: viewport.x,
+      startTy: viewport.y
+    });
+    setLastAction('PAN START');
+    
+    target.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const handleBoothPointerDown = (e: React.PointerEvent, booth: Booth) => {
+    if (readOnly) return;
+    e.stopPropagation(); // Stop background pan
+    e.preventDefault();
+
+    setLastAction(`BOOTH DOWN: ${booth.name}`);
+
+    // Select booth immediately
+    if (selectedBoothId !== booth.id) {
+      onBoothClick?.(booth);
+    }
+
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+
+    setDragging({
+      mode: 'booth',
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startTx: 0, 
+      startTy: 0,
+      boothId: booth.id,
+      boothStartX: booth.x,
+      boothStartY: booth.y
+    });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragging.mode || dragging.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - dragging.startX;
+    const dy = e.clientY - dragging.startY;
+
+    if (dragging.mode === 'pan') {
+      onViewportChange?.({
+        ...viewport,
+        x: dragging.startTx + dx,
+        y: dragging.startTy + dy
+      });
+      setLastAction('PANNING');
+    } else if (dragging.mode === 'booth' && dragging.boothId && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
+      // Apply scale to delta
+      const scale = viewport.scale;
+      const scaledDx = dx / scale;
+      const scaledDy = dy / scale;
+
+      // Update booth position
+      onBoothUpdate?.(dragging.boothId, {
+        x: dragging.boothStartX + scaledDx,
+        y: dragging.boothStartY + scaledDy
+      });
+      setLastAction('DRAGGING BOOTH');
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (readOnly || !dragStartRef.current) return;
-    
-    const dx = Math.abs(e.clientX - dragStartRef.current.x);
-    const dy = Math.abs(e.clientY - dragStartRef.current.y);
-    
-    // Only treat as background click if moved less than 4px (drag threshold)
-    // AND we didn't just finish dragging a booth
-    if (dx < 4 && dy < 4 && !isDraggingBoothRef.current) {
-      onBackgroundClick?.();
+    if (!dragging.mode || dragging.pointerId !== e.pointerId) return;
+
+    const dx = Math.abs(e.clientX - dragging.startX);
+    const dy = Math.abs(e.clientY - dragging.startY);
+    const isClick = dx < 5 && dy < 5; // 5px threshold
+
+    if (dragging.mode === 'pan') {
+      if (isClick) {
+        onBackgroundClick?.();
+        setLastAction('BACKGROUND CLICK');
+      } else {
+        setLastAction('PAN END');
+      }
+    } else {
+        setLastAction('BOOTH DROP');
     }
     
-    dragStartRef.current = null;
-    isDraggingBoothRef.current = false;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    const target = e.target as HTMLElement;
+    if (target.hasPointerCapture && target.hasPointerCapture(e.pointerId)) {
+        target.releasePointerCapture(e.pointerId);
+    }
+
+    setDragging({ mode: null, pointerId: null, startX: 0, startY: 0, startTx: 0, startTy: 0 });
   };
 
   const mapSrc = mapImageUrl || '';
@@ -81,18 +183,20 @@ export function MapCanvas({
     <div 
       className="relative bg-gray-100 overflow-hidden w-full h-full select-none"
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      // Also handle leave/cancel to clear state
+      onPointerLeave={handlePointerUp} 
+      onPointerCancel={handlePointerUp}
       style={{ touchAction: 'none' }} 
     >
       <div
         ref={mapContainerRef}
-        className="origin-top-left transition-transform duration-75 ease-out"
+        className="origin-top-left will-change-transform"
         style={{ 
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
           width: 'fit-content',
           height: 'fit-content',
-          minWidth: '100%',
-          minHeight: '100%'
         }}
       >
         <div 
@@ -101,9 +205,13 @@ export function MapCanvas({
             width: '1000px', 
             height: '800px', 
           }}
-          onPointerDown={(e) => e.stopPropagation()} 
         >
-          {/* Map Image Layer (Z-Index 0) */}
+          {/* Debug Overlay */}
+          <div className="absolute top-2 left-2 z-50 bg-black/50 text-white text-xs px-2 py-1 rounded pointer-events-none">
+            {lastAction || 'Ready'}
+          </div>
+
+          {/* Map Image Layer */}
           {mapSrc && !imageError ? (
             <img 
               key={`${mapSrc}-${retryKey}`}
@@ -153,23 +261,15 @@ export function MapCanvas({
             </div>
           )}
 
-          {/* Booths Layer (Z-Index 10) */}
+          {/* Booths Layer */}
           <div className="absolute inset-0 z-10">
             {booths.map(booth => (
               <Rnd
                 key={booth.id}
                 size={{ width: booth.width, height: booth.height }}
                 position={{ x: booth.x, y: booth.y }}
-                disableDragging={readOnly || (selectedBoothId !== booth.id)}
+                disableDragging={true} // We handle dragging manually!
                 enableResizing={!readOnly && (selectedBoothId === booth.id)}
-                onDragStart={() => {
-                  isDraggingBoothRef.current = true;
-                }}
-                onDragStop={(_, d) => {
-                  // Small delay to prevent click firing immediately after drag
-                  setTimeout(() => { isDraggingBoothRef.current = false; }, 50);
-                  onBoothUpdate?.(booth.id, { x: d.x, y: d.y });
-                }}
                 onResizeStop={(_, __, ref, ___, position) => {
                   onBoothUpdate?.(booth.id, { 
                     width: parseInt(ref.style.width), 
@@ -177,24 +277,8 @@ export function MapCanvas({
                     ...position 
                   });
                 }}
-                onPointerDown={(e: React.PointerEvent) => {
-                   e.stopPropagation(); // Stop background pan start
-                   isPointerDownOnBoothRef.current = true;
-                   // Select immediately on down so drag works
-                   if (selectedBoothId !== booth.id) {
-                     onBoothClick?.(booth);
-                   }
-                }}
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  // If we were dragging, don't re-trigger select logic (though harmless here)
-                  // Main goal is to stop propagation so background doesn't deselect
-                  if (!isDraggingBoothRef.current) {
-                    onBoothClick?.(booth);
-                  }
-                }}
                 bounds="parent"
-                scale={scale}
+                scale={viewport.scale}
                 className={`
                   border-2 flex flex-col items-center justify-center cursor-pointer transition-colors
                   ${readOnly ? 'cursor-default' : 'cursor-move hover:z-50'}
@@ -205,14 +289,25 @@ export function MapCanvas({
                       : 'border-blue-500 bg-blue-100/80 text-blue-900'}
                 `}
               >
-                <span className="font-bold text-xs select-none pointer-events-none truncate px-1 max-w-full">
-                  {booth.name}
-                </span>
-                {booth.vendor && (
-                  <span className="text-[10px] select-none pointer-events-none truncate px-1 opacity-75 max-w-full">
-                    {booth.vendor.businessName}
-                  </span>
-                )}
+                {/* 
+                  Wrapper div to capture pointer events for manual drag/select 
+                  We put it inside Rnd so it moves with Rnd, but covers the area.
+                */}
+                <div 
+                  className="absolute inset-0 z-10"
+                  onPointerDown={(e) => handleBoothPointerDown(e, booth)}
+                />
+                
+                <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
+                    <span className="font-bold text-xs select-none truncate w-full text-center">
+                    {booth.name}
+                    </span>
+                    {booth.vendor && (
+                    <span className="text-[10px] bg-white/80 px-1 rounded truncate max-w-full">
+                        {booth.vendor.businessName}
+                    </span>
+                    )}
+                </div>
               </Rnd>
             ))}
           </div>

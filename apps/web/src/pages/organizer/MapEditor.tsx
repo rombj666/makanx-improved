@@ -59,8 +59,7 @@ export function MapEditor() {
   
   // Map State
   const [mapUrl, setMapUrl] = useState('');
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
   const [isDraggingMap, setIsDraggingMap] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   
@@ -153,12 +152,14 @@ export function MapEditor() {
   };
 
   const centerMap = () => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 }); // In real implementation, calculate center based on container size
+    setViewport({ scale: 1, x: 0, y: 0 });
   };
 
   const handleZoom = (delta: number) => {
-    setZoom(prev => Math.min(3, Math.max(0.4, prev + delta)));
+    setViewport(prev => ({
+        ...prev,
+        scale: Math.min(3, Math.max(0.25, prev.scale + delta))
+    }));
   };
 
   const [isPanning, setIsPanning] = useState(false);
@@ -192,7 +193,15 @@ export function MapEditor() {
     if (!isDraggingMap) return;
     const dx = e.clientX - lastMousePos.x;
     const dy = e.clientY - lastMousePos.y;
-    setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+    // MapCanvas handles its own viewport now, but we are managing state here?
+    // Wait, MapCanvas props: viewport, onViewportChange.
+    // If we want parent-controlled panning via background drag (which MapCanvas handles now),
+    // we don't need this separate logic unless we want to keep space-bar panning on the CONTAINER.
+    // But MapCanvas handles background drag too.
+    
+    // Let's remove this legacy panning logic and rely on MapCanvas internal panning.
+    // Or if we keep it, we must update `viewport`.
+    setViewport(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
     setLastMousePos({ x: e.clientX, y: e.clientY });
   };
 
@@ -202,10 +211,7 @@ export function MapEditor() {
   };
   
   const handleFitMap = () => {
-    // Simple fit logic: reset to 100% and center
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-    // In future: calculate bounds of booths or image size to fit perfectly
+    setViewport({ scale: 1, x: 0, y: 0 });
   };
 
   // Booth Operations
@@ -382,7 +388,7 @@ export function MapEditor() {
                 <button onClick={() => handleZoom(-0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomOut size={16} />
                 </button>
-                <span className="text-xs font-medium w-12 text-center">{Math.round(zoom * 100)}%</span>
+                <span className="text-xs font-medium w-12 text-center">{Math.round(viewport.scale * 100)}%</span>
                 <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomIn size={16} />
                 </button>
@@ -426,8 +432,8 @@ export function MapEditor() {
              <MapCanvas 
                mapImageUrl={mapUrl}
                booths={booths}
-               scale={zoom}
-               offset={offset}
+               viewport={viewport}
+               onViewportChange={setViewport}
                selectedBoothId={selectedBoothId}
                onBoothClick={(b) => setSelectedBoothId(b.id)}
                onBoothUpdate={updateBoothLocally}
