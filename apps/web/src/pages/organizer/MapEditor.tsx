@@ -161,12 +161,34 @@ export function MapEditor() {
     setZoom(prev => Math.min(3, Math.max(0.4, prev + delta)));
   };
 
-  const handleMapMouseDown = (e: React.MouseEvent) => {
-    setIsDraggingMap(true);
-    setLastMousePos({ x: e.clientX, y: e.clientY });
+  const [isPanning, setIsPanning] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsPanning(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsPanning(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  const handleMapPointerDown = (e: React.PointerEvent) => {
+    // Start panning if Space is held OR middle mouse button (button 1)
+    if (isPanning || e.button === 1) {
+       setIsDraggingMap(true);
+       setLastMousePos({ x: e.clientX, y: e.clientY });
+       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+       e.preventDefault(); // Prevent default scroll/selection
+    }
   };
 
-  const handleMapMouseMove = (e: React.MouseEvent) => {
+  const handleMapPointerMove = (e: React.PointerEvent) => {
     if (!isDraggingMap) return;
     const dx = e.clientX - lastMousePos.x;
     const dy = e.clientY - lastMousePos.y;
@@ -174,8 +196,16 @@ export function MapEditor() {
     setLastMousePos({ x: e.clientX, y: e.clientY });
   };
 
-  const handleMapMouseUp = () => {
+  const handleMapPointerUp = (e: React.PointerEvent) => {
     setIsDraggingMap(false);
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+  
+  const handleFitMap = () => {
+    // Simple fit logic: reset to 100% and center
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+    // In future: calculate bounds of booths or image size to fit perfectly
   };
 
   // Booth Operations
@@ -324,7 +354,7 @@ export function MapEditor() {
                 <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomIn size={16} />
                 </button>
-                <button onClick={centerMap} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Reset View">
+                <button onClick={handleFitMap} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Fit Map">
                     <Maximize size={14} />
                 </button>
             </div>
@@ -345,16 +375,19 @@ export function MapEditor() {
         {/* Canvas Container */}
         <div 
           ref={mapContainerRef}
-          className="flex-1 bg-gray-100 overflow-hidden relative cursor-grab active:cursor-grabbing"
-          onMouseDown={handleMapMouseDown}
-          onMouseMove={handleMapMouseMove}
-          onMouseUp={handleMapMouseUp}
-          onMouseLeave={handleMapMouseUp}
+          className={`flex-1 bg-gray-100 overflow-hidden relative ${isPanning ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+          onPointerDown={handleMapPointerDown}
+          onPointerMove={handleMapPointerMove}
+          onPointerUp={handleMapPointerUp}
+          onPointerLeave={handleMapPointerUp}
+          style={{ touchAction: 'none' }}
           onWheel={(e) => {
-            if (e.ctrlKey || e.metaKey) {
-              e.preventDefault();
-              handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
-            }
+             // Always zoom on wheel, no modifier needed for better UX? 
+             // Or keep ctrl requirement? User asked for "Zoom: mouse wheel zoom in/out". 
+             // Usually mapping apps zoom on scroll.
+             // Let's enable direct zoom.
+             e.preventDefault();
+             handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
           }}
         >
           <div className="absolute inset-0 pointer-events-none">

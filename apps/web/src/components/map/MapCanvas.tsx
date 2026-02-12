@@ -46,7 +46,18 @@ export function MapCanvas({
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (readOnly) return;
+    
+    // Check if user is holding Space key or middle mouse button for panning
+    // OR if we clicked on background (handled here implicitly if it bubbled up)
+    // But actually, we want to allow dragging background to pan.
+    // If Space is held, we want to pan even if over a booth? No, Rnd handles booth.
+    
+    // We pass the event up if needed, but for background panning logic:
+    // If user clicks background, we start pan/drag check.
     dragStartRef.current = { x: e.clientX, y: e.clientY };
+    
+    // Capture pointer for background dragging
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -57,10 +68,12 @@ export function MapCanvas({
     
     // Only treat as click if moved less than 4px (drag threshold)
     if (dx < 4 && dy < 4) {
+      // If we clicked background and didn't drag, clear selection
       onBackgroundClick?.();
     }
     
     dragStartRef.current = null;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
   const mapSrc = mapImageUrl || '';
@@ -150,9 +163,20 @@ export function MapCanvas({
                     ...position 
                   });
                 }}
-                onPointerDown={(e: React.PointerEvent) => e.stopPropagation()} // Stop bubbling to prevent background click/pan
+                onPointerDown={(e: React.PointerEvent) => {
+                   e.stopPropagation(); // Stop background pan start
+                   e.currentTarget.setPointerCapture(e.pointerId); // Ensure we keep dragging this booth
+                }}
+                onPointerUp={(e: React.PointerEvent) => {
+                   e.currentTarget.releasePointerCapture(e.pointerId);
+                }}
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
+                  // We need to ensure we don't trigger if it was a drag
+                  // Rnd handles drag vs click internally usually, but since we are wrapping:
+                  // If Rnd consumed the drag, onClick might still fire?
+                  // Let's rely on Rnd's internal handling or just fire select.
+                  // Selecting on click is fine even after drag.
                   onBoothClick?.(booth);
                 }}
                 bounds="parent"
