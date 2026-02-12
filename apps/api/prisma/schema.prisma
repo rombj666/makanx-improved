@@ -1,10 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+model AuditLog {
+  id         String      @id @default(uuid())
+  action     AuditAction
+  entityId   String
+  entityType String
+  actorId    String
+  details    Json?
+  createdAt  DateTime    @default(now())
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role           @default(CUSTOMER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  isActive      Boolean        @default(true)
+  managedEvents Event[]        @relation("OrganizerEvents")
+  orders        Order[]
+  vendorProfile VendorProfile?
+}
+
+model Event {
+  id            String              @id @default(uuid())
+  name          String
+  slug          String              @unique
+  description   String?
+  startDate     DateTime
+  endDate       DateTime
+  location      String?
+  mapImageUrl   String?
+  layoutVersion Int                 @default(0)
+  organizerId   String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  status        EventStatus         @default(ACTIVE)
+  booths        Booth[]
+  organizer     User                @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  applications  VendorApplication[]
+}
+
+model VendorProfile {
+  id           String     @id @default(uuid())
+  userId       String     @unique
+  businessName String
+  description  String?
+  booths       Booth[]
+  menuItems    MenuItem[]
+  orders       Order[]    @relation("VendorOrders")
+  user         User       @relation(fields: [userId], references: [id])
+}
+
+model VendorApplication {
+  id             String            @id @default(uuid())
+  eventId        String
+  applicantName  String
+  applicantEmail String
+  businessName   String
+  googleFormData Json?
+  status         ApplicationStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  inviteToken    InviteToken?
+  event          Event             @relation(fields: [eventId], references: [id])
+}
+
+model Booth {
+  id       String         @id @default(uuid())
+  eventId  String
+  vendorId String?
+  name     String
+  status   String
+  x        Float          @default(0)
+  y        Float          @default(0)
+  width    Float          @default(10)
+  height   Float          @default(10)
+  event    Event          @relation(fields: [eventId], references: [id])
+  vendor   VendorProfile? @relation(fields: [vendorId], references: [id])
+}
+
+model MenuItem {
+  id          String        @id @default(uuid())
+  vendorId    String
+  name        String
+  description String?
+  price       Decimal
+  imageUrl    String?
+  isAvailable Boolean       @default(true)
+  vendor      VendorProfile @relation(fields: [vendorId], references: [id])
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  customerId    String
+  vendorId      String
+  status        OrderStatus   @default(PENDING)
+  paymentMode   PaymentMode   @default(PAY_AT_BOOTH)
+  paymentStatus PaymentStatus @default(PENDING)
+  totalAmount   Decimal
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  customer      User          @relation(fields: [customerId], references: [id])
+  vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  menuItemId String
+  quantity   Int
+  price      Decimal
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id])
+}
+
+model InviteToken {
+  id            String             @id @default(uuid())
+  token         String             @unique
+  role          Role
+  eventId       String?
+  applicationId String?            @unique
+  isUsed        Boolean            @default(false)
+  expiresAt     DateTime
+  application   VendorApplication? @relation(fields: [applicationId], references: [id])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  email     String
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
 }
 
 enum Role {
@@ -39,158 +180,13 @@ enum AuditAction {
   VENDOR_APPROVAL
 }
 
-model AuditLog {
-  id        String      @id @default(uuid())
-  action    AuditAction
-  entityId  String
-  entityType String     // "Order", "VendorApplication", "Booth"
-  actorId   String
-  details   Json?
-  createdAt DateTime    @default(now())
-}
-
 enum ApplicationStatus {
   PENDING
   APPROVED
   REJECTED
 }
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      Role     @default(CUSTOMER)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  vendorProfile VendorProfile?
-  orders        Order[]
-  managedEvents Event[]        @relation("OrganizerEvents")
-}
-
 enum EventStatus {
   ACTIVE
   ARCHIVED
-}
-
-model Event {
-  id            String   @id @default(uuid())
-  name          String
-  slug          String   @unique
-  description   String?
-  startDate     DateTime
-  endDate       DateTime
-  location      String?
-  mapImageUrl   String?
-  layoutVersion Int      @default(0)
-  status        EventStatus @default(ACTIVE)
-  organizerId   String
-  organizer   User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
-  
-  booths      Booth[]
-  applications VendorApplication[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model VendorProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  businessName String
-  description  String?
-  
-  menuItems    MenuItem[]
-  booths       Booth[]
-  orders       Order[]  @relation("VendorOrders")
-}
-
-model VendorApplication {
-  id             String            @id @default(uuid())
-  eventId        String
-  event          Event             @relation(fields: [eventId], references: [id])
-  applicantName  String
-  applicantEmail String
-  businessName   String
-  googleFormData Json?
-  status         ApplicationStatus @default(PENDING)
-  createdAt      DateTime          @default(now())
-  inviteToken    InviteToken?
-}
-
-model Booth {
-  id        String   @id @default(uuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id])
-  vendorId  String?
-  vendor    VendorProfile? @relation(fields: [vendorId], references: [id])
-  name      String
-  status    String
-  x         Float    @default(0)
-  y         Float    @default(0)
-  width     Float    @default(10)
-  height    Float    @default(10)
-}
-
-model MenuItem {
-  id             String        @id @default(uuid())
-  vendorId       String
-  vendor         VendorProfile @relation(fields: [vendorId], references: [id])
-  name           String
-  description    String?
-  price          Decimal
-  imageUrl       String?
-  isAvailable    Boolean       @default(true)
-  orderItems     OrderItem[]
-}
-
-model Order {
-  id          String      @id @default(uuid())
-  customerId  String
-  customer    User        @relation(fields: [customerId], references: [id])
-  vendorId    String
-  vendor      VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
-  status      OrderStatus @default(PENDING)
-  paymentMode PaymentMode @default(PAY_AT_BOOTH)
-  paymentStatus PaymentStatus @default(PENDING)
-  totalAmount Decimal
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  items       OrderItem[]
-}
-
-model OrderItem {
-  id         String   @id @default(uuid())
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id])
-  menuItemId String
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
-  quantity   Int
-  price      Decimal
-}
-
-model InviteToken {
-  id            String   @id @default(uuid())
-  token         String   @unique
-  role          Role
-  eventId       String?
-  applicationId String?  @unique
-  application   VendorApplication? @relation(fields: [applicationId], references: [id])
-  isUsed        Boolean  @default(false)
-  expiresAt     DateTime
-}
-
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  email     String
-  otpHash   String
-  expiresAt DateTime
-  attempts  Int       @default(0)
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([email])
 }

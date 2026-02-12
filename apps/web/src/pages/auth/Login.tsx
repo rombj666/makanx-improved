@@ -39,9 +39,9 @@ export function Login() {
       toast.success('Welcome back!');
       
       // Redirect based on role
-      if (user.role === 'ORGANIZER') navigate('/organizer');
-      else if (user.role === 'VENDOR') navigate('/vendor');
-      else navigate('/');
+      if (user.role === 'ORGANIZER') navigate('/organizer', { replace: true });
+      else if (user.role === 'VENDOR') navigate('/vendor', { replace: true });
+      else navigate('/home', { replace: true });
     } catch (error: any) {
       const msg = error.response?.data?.error || 'Login failed. Please try again.';
       setErrorMessage(msg);

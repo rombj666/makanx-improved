@@ -11,7 +11,8 @@ import { CustomerHome } from './pages/customer/Home';
 import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
 import { VendorDashboard } from './pages/vendor/Dashboard';
-import { OrganizerDashboard } from './pages/organizer/Dashboard';
+import { OrganizerDashboard as OrganizerLegacyDashboard } from './pages/organizer/Dashboard';
+import { OrganizerDashboard } from './pages/organizer/OrganizerDashboard';
 import { MapEditor } from './pages/organizer/MapEditor';
 import { OrganizerApplicationsPage } from './pages/organizer/OrganizerApplicationsPage';
 import { OrganizerVendorsPage } from './pages/organizer/OrganizerVendorsPage';
@@ -99,6 +100,7 @@ function App() {
                 }
               >
                 <Route index element={<OrganizerDashboard />} />
+                <Route path="legacy" element={<OrganizerLegacyDashboard />} />
                 <Route path="map/:eventId" element={<MapEditor />} />
                 <Route path="applications" element={<OrganizerApplicationsPage />} />
                 <Route path="vendors" element={<OrganizerVendorsPage />} />
