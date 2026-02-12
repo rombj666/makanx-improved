@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { uploadMemory } from '../middleware/uploadCloudinary';
 import { uploadToCloudinary } from '../utils/cloudinary';
-import { authenticate } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ const router = Router();
 // Generic upload route for authenticated users
 router.post(
   '/image',
-  authenticate,
+  requireAuth,
   uploadMemory.single('file'),
   async (req: any, res: any) => {
     try {

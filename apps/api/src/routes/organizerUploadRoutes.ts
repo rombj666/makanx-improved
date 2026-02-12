@@ -2,7 +2,8 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { uploadToCloudinary } from '../utils/cloudinary';
-import { authenticate, authorize } from '../middleware/auth';
+import { requireAuth, requireRole } from '../middleware/auth';
+import { Role } from '@makanx/shared';
 import { uploadMemory } from '../middleware/uploadCloudinary';
 
 const router = Router();
@@ -10,8 +11,8 @@ const router = Router();
 // POST /organizer/events/:eventId/map
 router.post(
   '/events/:eventId/map',
-  authenticate,
-  authorize(['ORGANIZER']),
+  requireAuth,
+  requireRole([Role.ORGANIZER]),
   uploadMemory.single('file'),
   async (req: any, res: any) => {
     try {
