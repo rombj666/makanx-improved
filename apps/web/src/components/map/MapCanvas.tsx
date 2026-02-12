@@ -72,7 +72,6 @@ export function MapCanvas({
         const { clientWidth, clientHeight } = wrapperRef.current;
         const scaleX = clientWidth / naturalWidth;
         const scaleY = clientHeight / naturalHeight;
-        const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100% initially? Or allow it? 
         // Usually fitting means fit to screen.
         const fitScale = Math.min(scaleX, scaleY);
         
