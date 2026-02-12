@@ -292,7 +292,6 @@ export function MapEditor() {
       // Use the new Cloudinary upload route
       const { data } = await api.post(`/organizer/events/${eventId}/map`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
         },
       });

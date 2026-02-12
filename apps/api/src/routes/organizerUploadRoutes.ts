@@ -16,6 +16,10 @@ router.post(
   uploadMemory.single('file'),
   async (req: any, res: any) => {
     try {
+      // Debug Auth
+      console.log(`[Upload] User: ${req.user?.userId}, Role: ${req.user?.role}`);
+      console.log(`[Upload] Auth Header Present: ${!!req.headers.authorization}`);
+
       const { eventId } = req.params;
       const file = req.file;
 
@@ -32,8 +36,9 @@ router.post(
         return res.status(404).json({ success: false, message: 'Event not found' });
       }
 
-      if (event.organizerId !== req.user.id) {
-        return res.status(403).json({ success: false, message: 'Not authorized' });
+      if (event.organizerId !== req.user?.userId) {
+        console.log(`[Upload] Forbidden: Event owner ${event.organizerId} !== User ${req.user?.userId}`);
+        return res.status(403).json({ success: false, message: 'Not authorized to edit this event' });
       }
 
       // Upload to Cloudinary
