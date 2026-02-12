@@ -4,6 +4,8 @@ const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 // Ensure API_URL always ends with /api
 const API_URL = envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
 
+export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || API_URL.replace(/\/api$/, '');
+
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -35,8 +37,8 @@ export const toAbsoluteUrl = (path: string | undefined | null) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   
-  // Base URL without /api suffix
-  const baseUrl = API_URL.replace(/\/api$/, '');
+  // Use API_ORIGIN which is either explicitly set or derived
+  const baseUrl = API_ORIGIN;
   
   // Ensure path starts with /
   const cleanPath = path.startsWith('/') ? path : `/${path}`;

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { api } from '../../lib/api';
+import { api, API_ORIGIN } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -115,8 +115,17 @@ export function MapEditor() {
 
       if (found) {
         setEvent(found);
-        setMapUrl(found.mapImageUrl || '');
-        setUrlInput(found.mapImageUrl || '');
+        
+        // Resolve URL immediately for state
+        const rawUrl = found.mapImageUrl || '';
+        const resolvedUrl = rawUrl.startsWith('http') 
+          ? rawUrl 
+          : rawUrl.startsWith('/') 
+            ? `${API_ORIGIN}${rawUrl}`
+            : rawUrl;
+            
+        setMapUrl(resolvedUrl);
+        setUrlInput(rawUrl); // Input keeps the raw value (relative or absolute)
       }
     } catch (error) {
       toast.error('Failed to load map data');
@@ -240,7 +249,15 @@ export function MapEditor() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (data.success) {
-        setMapUrl(data.data.mapImageUrl);
+        // Resolve URL for display
+        const rawUrl = data.data.mapImageUrl;
+        const resolvedUrl = rawUrl.startsWith('http') 
+          ? rawUrl 
+          : rawUrl.startsWith('/') 
+            ? `${API_ORIGIN}${rawUrl}`
+            : rawUrl;
+
+        setMapUrl(resolvedUrl);
         toast.success('Map uploaded');
         setIsUploadModalOpen(false);
       }

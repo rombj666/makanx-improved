@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import { Rnd } from 'react-rnd';
-import { toAbsoluteUrl } from '../../lib/api';
 import { toast } from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
 
@@ -64,7 +63,7 @@ export function MapCanvas({
     dragStartRef.current = null;
   };
 
-  const mapSrc = mapImageUrl ? toAbsoluteUrl(mapImageUrl) : '';
+  const mapSrc = mapImageUrl || '';
 
   return (
     <div 
@@ -104,6 +103,7 @@ export function MapCanvas({
                 setImageError(true);
                 toast.error('Map image failed to load');
               }}
+              onLoad={() => setImageError(false)}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
