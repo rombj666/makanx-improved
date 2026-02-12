@@ -67,12 +67,19 @@ export function MapEditor() {
   // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadTab, setUploadTab] = useState<'file' | 'url'>('file');
+  const [uploadTab, setUploadTab] = useState<'static' | 'url'>('static');
+  
+  // Sample static maps
+  const STATIC_MAPS = [
+    { name: 'Singapore Food Fest 2026', url: '/maps/sg-food-fest-2026.jpg' },
+    { name: 'Expo Hall 1 Layout', url: '/maps/expo-hall-1.jpg' },
+    { name: 'Outdoor Market', url: '/maps/outdoor-market.jpg' },
+  ];
+
   const [urlInput, setUrlInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,9 +127,11 @@ export function MapEditor() {
         const rawUrl = found.mapImageUrl || '';
         const resolvedUrl = rawUrl.startsWith('http') 
           ? rawUrl 
-          : rawUrl.startsWith('/') 
-            ? `${API_ORIGIN}${rawUrl}`
-            : rawUrl;
+          : rawUrl.startsWith('/maps/') 
+            ? rawUrl 
+            : rawUrl.startsWith('/') 
+              ? `${API_ORIGIN}${rawUrl}`
+              : rawUrl;
             
         setMapUrl(resolvedUrl);
         setUrlInput(rawUrl); // Input keeps the raw value (relative or absolute)
@@ -236,33 +245,19 @@ export function MapEditor() {
   };
 
   // Map Upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+  const handleStaticMapSelect = async (url: string) => {
     setIsUploading(true);
     try {
-      const { data } = await api.post(`/events/${eventId}/map`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const { data } = await api.patch(`/events/${eventId}/map-url`, {
+        mapImageUrl: url
       });
       if (data.success) {
-        // Resolve URL for display
-        const rawUrl = data.data.mapImageUrl;
-        const resolvedUrl = rawUrl.startsWith('http') 
-          ? rawUrl 
-          : rawUrl.startsWith('/') 
-            ? `${API_ORIGIN}${rawUrl}`
-            : rawUrl;
-
-        setMapUrl(resolvedUrl);
-        toast.success('Map uploaded');
+        setMapUrl(url); // Local path works directly
+        toast.success('Map updated');
         setIsUploadModalOpen(false);
       }
     } catch (error) {
-      toast.error('Upload failed');
+      toast.error('Update failed');
     } finally {
       setIsUploading(false);
     }
@@ -468,11 +463,11 @@ export function MapEditor() {
       >
         <div className="flex gap-2 mb-4 border-b">
           <button 
-            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'file' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
-            onClick={() => setUploadTab('file')}
+            className={`px-4 py-2 text-sm font-medium ${uploadTab === 'static' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500'}`}
+            onClick={() => setUploadTab('static')}
           >
             <div className="flex items-center gap-2">
-              <ImageIcon size={16} /> Upload File
+              <ImageIcon size={16} /> Static Maps
             </div>
           </button>
           <button 
@@ -480,26 +475,31 @@ export function MapEditor() {
             onClick={() => setUploadTab('url')}
           >
             <div className="flex items-center gap-2">
-              <LinkIcon size={16} /> Image URL
+              <LinkIcon size={16} /> External URL
             </div>
           </button>
         </div>
 
-        {uploadTab === 'file' ? (
+        <div className="mb-4 p-3 bg-blue-50 text-blue-800 text-xs rounded border border-blue-100">
+          <strong>Note:</strong> We are using temporary static map hosting (`/public/maps`). 
+          Backend uploads are disabled for this version. Later we will migrate to Cloudinary/S3.
+        </div>
+
+        {uploadTab === 'static' ? (
           <div className="space-y-4">
-            <div 
-              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 cursor-pointer transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2 text-sm text-gray-600">Click to select map image</p>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*"
-                onChange={handleFileUpload}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              {STATIC_MAPS.map((map) => (
+                <div 
+                  key={map.url}
+                  className="border rounded-lg p-2 cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-all"
+                  onClick={() => handleStaticMapSelect(map.url)}
+                >
+                  <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden">
+                    <img src={map.url} alt={map.name} className="w-full h-full object-cover" />
+                  </div>
+                  <p className="text-sm font-medium text-center">{map.name}</p>
+                </div>
+              ))}
             </div>
           </div>
         ) : (

@@ -37,6 +37,9 @@ export const toAbsoluteUrl = (path: string | undefined | null) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   
+  // Static maps from /public/maps
+  if (path.startsWith('/maps/')) return path;
+  
   // Use API_ORIGIN which is either explicitly set or derived
   const baseUrl = API_ORIGIN;
   
