@@ -20,6 +20,8 @@ import { OrganizerSalesPlaceholder } from './pages/organizer/OrganizerSalesPlace
 import { Role } from '@makanx/shared';
 import { Toaster } from 'react-hot-toast';
 
+import { DebugStatic } from './pages/DebugStatic';
+
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
   const { user, isLoading, isAuthenticated } = useAuth();
 
@@ -79,6 +81,7 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               {/* <Route path="/register" element={<Register />} /> */}
               <Route path="/invite" element={<Invite />} />
+              <Route path="/debug/static" element={<DebugStatic />} />
 
               {/* Customer Protected */}
               <Route 
