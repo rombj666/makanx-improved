@@ -289,11 +289,12 @@ export function MapEditor() {
     formData.append('file', file);
 
     try {
-      const token = localStorage.getItem('token');
       // Use the new Cloudinary upload route
+      // No manual header setting needed - api.ts interceptor handles Auth
+      // Axios handles Content-Type for FormData
       const { data } = await api.post(`/organizer/events/${eventId}/map`, formData, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': undefined, // Force axios to let browser set multipart/form-data with boundary
         },
       });
 

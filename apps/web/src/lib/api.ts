@@ -8,8 +8,10 @@ export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || API_URL.replace(/\/
 
 export const api = axios.create({
   baseURL: API_URL,
+  // DO NOT set default Content-Type to 'application/json' here.
+  // Axios sets it automatically for JSON, and handles multipart for FormData.
   headers: {
-    'Content-Type': 'application/json',
+    // 'Content-Type': 'application/json', // REMOVED
   },
 });
 
@@ -18,6 +20,17 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Only set application/json if data is NOT FormData and not already set
+  if (!(config.data instanceof FormData) && !config.headers['Content-Type']) {
+    config.headers['Content-Type'] = 'application/json';
+  }
+  
+  // If FormData, explicitly UNSET Content-Type if it was set to application/json default
+  if (config.data instanceof FormData && config.headers['Content-Type'] === 'application/json') {
+    delete config.headers['Content-Type'];
+  }
+  
   return config;
 });
 
