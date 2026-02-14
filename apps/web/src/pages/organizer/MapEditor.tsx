@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api, API_ORIGIN } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -17,6 +17,10 @@ import {
   Trash2,
   Check,
   Link as LinkIcon,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Map as MapIcon
 } from 'lucide-react';
 import debounce from 'lodash.debounce';
 
@@ -59,13 +63,17 @@ export function MapEditor() {
   // Map State
   const [mapUrl, setMapUrl] = useState('');
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
-  const [isDraggingMap, setIsDraggingMap] = useState(false);
-  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
+  const [centerRequestKey, setCenterRequestKey] = useState(0);
   
   // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadTab, setUploadTab] = useState<'upload' | 'url'>('upload');
+  
+  // Sidebar State
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [boothSearch, setBoothSearch] = useState('');
+  const [boothFilter, setBoothFilter] = useState<'ALL' | 'AVAILABLE' | 'OCCUPIED'>('ALL');
   
   const [urlInput, setUrlInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -76,10 +84,6 @@ export function MapEditor() {
   useEffect(() => {
     fetchEventData();
     fetchVendors();
-    
-    // Auto-fit logic on load would go here, but we need image dimensions first.
-    // For now, center it.
-    centerMap();
   }, [eventId]);
 
   // Debounced Save for auto-save
@@ -143,8 +147,8 @@ export function MapEditor() {
     }
   };
 
-  const centerMap = () => {
-    setViewport({ scale: 1, x: 0, y: 0 });
+  const handleCenterMap = () => {
+    setCenterRequestKey(k => k + 1);
   };
 
   const handleZoom = (delta: number) => {
@@ -152,58 +156,6 @@ export function MapEditor() {
         ...prev,
         scale: Math.min(3, Math.max(0.25, prev.scale + delta))
     }));
-  };
-
-  const [isPanning, setIsPanning] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') setIsPanning(true);
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') setIsPanning(false);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  const handleMapPointerDown = (e: React.PointerEvent) => {
-    // Start panning if Space is held OR middle mouse button (button 1)
-    if (isPanning || e.button === 1) {
-       setIsDraggingMap(true);
-       setLastMousePos({ x: e.clientX, y: e.clientY });
-       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-       e.preventDefault(); // Prevent default scroll/selection
-    }
-  };
-
-  const handleMapPointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingMap) return;
-    const dx = e.clientX - lastMousePos.x;
-    const dy = e.clientY - lastMousePos.y;
-    // MapCanvas handles its own viewport now, but we are managing state here?
-    // Wait, MapCanvas props: viewport, onViewportChange.
-    // If we want parent-controlled panning via background drag (which MapCanvas handles now),
-    // we don't need this separate logic unless we want to keep space-bar panning on the CONTAINER.
-    // But MapCanvas handles background drag too.
-    
-    // Let's remove this legacy panning logic and rely on MapCanvas internal panning.
-    // Or if we keep it, we must update `viewport`.
-    setViewport(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-    setLastMousePos({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleMapPointerUp = (e: React.PointerEvent) => {
-    setIsDraggingMap(false);
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-  };
-  
-  const handleFitMap = () => {
-    setViewport({ scale: 1, x: 0, y: 0 });
   };
 
   // Booth Operations
@@ -289,9 +241,6 @@ export function MapEditor() {
     formData.append('file', file);
 
     try {
-      // Use the new Cloudinary upload route
-      // No manual header setting needed - api.ts interceptor handles Auth
-      // Axios handles Content-Type for FormData
       const { data } = await api.post(`/organizer/events/${eventId}/map`, formData, {
         headers: {
           'Content-Type': undefined, // Force axios to let browser set multipart/form-data with boundary
@@ -363,23 +312,25 @@ export function MapEditor() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-      {/* Warning Banner */}
-      {(mapUrl.includes('/uploads/') || !mapUrl) && (
-        <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-amber-800 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-bold">Warning:</span>
-            {!mapUrl ? 'No map image set.' : 'This map uses legacy backend storage which may be unreliable.'} Please update to a new map.
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setIsUploadModalOpen(true)} className="h-7 text-amber-800 border-amber-300 hover:bg-amber-200">
-            Fix Now
-          </Button>
-        </div>
-      )}
+  // Filtered Booths
+  const filteredBooths = useMemo(() => {
+    return booths.filter(b => {
+      const matchesSearch = b.name.toLowerCase().includes(boothSearch.toLowerCase()) || 
+                           (b.vendor?.businessName?.toLowerCase() || '').includes(boothSearch.toLowerCase());
+      
+      if (!matchesSearch) return false;
+      
+      if (boothFilter === 'AVAILABLE') return !b.vendorId && b.status !== 'OCCUPIED';
+      if (boothFilter === 'OCCUPIED') return b.vendorId || b.status === 'OCCUPIED';
+      
+      return true;
+    });
+  }, [booths, boothSearch, boothFilter]);
 
-      {/* Top Bar */}
-      <div className="bg-white border-b px-4 py-2 flex items-center justify-between shadow-sm z-20 shrink-0">
+  return (
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+      {/* Sticky Top Toolbar */}
+      <div className="sticky top-0 z-50 bg-white border-b px-4 py-2 flex items-center justify-between shadow-sm shrink-0 h-14">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={handleBack}>
             <ArrowLeft size={16} className="mr-2" />
@@ -407,13 +358,13 @@ export function MapEditor() {
                 <button onClick={() => handleZoom(0.1)} className="p-1.5 hover:bg-white rounded-md text-gray-600">
                     <ZoomIn size={16} />
                 </button>
-                <button onClick={handleFitMap} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Fit Map">
+                <button onClick={handleCenterMap} className="p-1.5 hover:bg-white rounded-md text-gray-600 ml-1" title="Center Map">
                     <Maximize size={14} />
                 </button>
             </div>
 
             <Button variant="outline" size="sm" onClick={() => setIsUploadModalOpen(true)}>
-                <Upload size={16} className="mr-2" />
+                <MapIcon size={16} className="mr-2" />
                 Map Image
             </Button>
             
@@ -424,26 +375,114 @@ export function MapEditor() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden relative w-full h-[calc(100vh-120px)] bg-gray-100">
+      <div className="flex flex-1 overflow-hidden relative w-full">
+        {/* Left Collapsible Sidebar */}
+        <div 
+          className={`bg-white border-r flex flex-col transition-all duration-300 z-20 absolute md:relative h-full shadow-lg md:shadow-none ${
+            sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full md:w-0 md:translate-x-0 overflow-hidden'
+          }`}
+        >
+          <div className="p-3 border-b flex items-center justify-between min-w-[18rem]">
+            <h2 className="font-bold text-gray-800">Booths ({booths.length})</h2>
+            <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 hover:bg-gray-100 rounded">
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          
+          <div className="p-3 border-b space-y-3 min-w-[18rem]">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+              <Input 
+                placeholder="Search booths..." 
+                className="pl-8 h-9 text-sm"
+                value={boothSearch}
+                onChange={(e) => setBoothSearch(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setBoothFilter('ALL')}
+                className={`px-2 py-1 text-xs rounded-full border ${boothFilter === 'ALL' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300'}`}
+              >
+                All
+              </button>
+              <button 
+                onClick={() => setBoothFilter('AVAILABLE')}
+                className={`px-2 py-1 text-xs rounded-full border ${boothFilter === 'AVAILABLE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
+              >
+                Available
+              </button>
+              <button 
+                onClick={() => setBoothFilter('OCCUPIED')}
+                className={`px-2 py-1 text-xs rounded-full border ${boothFilter === 'OCCUPIED' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'}`}
+              >
+                Occupied
+              </button>
+            </div>
+
+            <div className="flex gap-3 text-[10px] text-gray-500 pt-1">
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-100 border border-blue-500"></div> Available</div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-100 border border-green-500"></div> Occupied</div>
+              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-100 border border-orange-500"></div> Selected</div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-w-[18rem]">
+            {filteredBooths.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-sm">No booths found</div>
+            ) : (
+              <div className="divide-y">
+                {filteredBooths.map(booth => {
+                  const isOccupied = booth.vendorId || booth.status === 'OCCUPIED';
+                  const isSelected = selectedBoothId === booth.id;
+                  
+                  return (
+                    <div 
+                      key={booth.id}
+                      onClick={() => setSelectedBoothId(booth.id)}
+                      className={`p-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                        isSelected ? 'bg-orange-50 border-l-4 border-orange-500' : 'border-l-4 border-transparent'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-medium text-sm text-gray-900">{booth.name}</div>
+                        {booth.vendor ? (
+                          <div className="text-xs text-gray-500 truncate max-w-[180px]">{booth.vendor.businessName}</div>
+                        ) : (
+                          <div className="text-xs text-gray-400 italic">Available</div>
+                        )}
+                      </div>
+                      <div className={`w-2 h-2 rounded-full ${isOccupied ? 'bg-green-500' : 'bg-blue-500'}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar Toggle (Visible when sidebar closed) */}
+        {!sidebarOpen && (
+          <button 
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-4 left-4 z-30 bg-white p-2 rounded shadow border hover:bg-gray-50"
+          >
+            <ChevronRight size={16} />
+          </button>
+        )}
+
         {/* Canvas Container */}
         <div 
           ref={mapContainerRef}
-          className={`flex-1 overflow-hidden relative h-full ${isPanning ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
-          onPointerDown={handleMapPointerDown}
-          onPointerMove={handleMapPointerMove}
-          onPointerUp={handleMapPointerUp}
-          onPointerLeave={handleMapPointerUp}
-          style={{ touchAction: 'none' }}
+          className="flex-1 overflow-hidden relative h-full bg-gray-100"
           onWheel={(e) => {
-             // Always zoom on wheel, no modifier needed for better UX? 
-             // Or keep ctrl requirement? User asked for "Zoom: mouse wheel zoom in/out". 
-             // Usually mapping apps zoom on scroll.
-             // Let's enable direct zoom.
              e.preventDefault();
              handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
           }}
         >
-          <div className="absolute inset-0 pointer-events-none">
+          {/* Removed pointer-events-none wrapper */}
+          <div className="absolute inset-0">
              <MapCanvas 
                mapImageUrl={mapUrl}
                booths={booths}
@@ -454,13 +493,14 @@ export function MapEditor() {
                onBoothUpdate={updateBoothLocally}
                onBackgroundClick={() => setSelectedBoothId(null)}
                onFixMap={handleFixMap}
+               centerRequestKey={centerRequestKey}
              />
           </div>
         </div>
 
-        {/* Booth Inspector Sidebar */}
+        {/* Right Booth Inspector */}
         {selectedBooth && (
-            <div className="w-80 bg-white border-l shadow-xl flex flex-col z-30 shrink-0 h-full">
+            <div className="w-80 bg-white border-l shadow-xl flex flex-col z-30 shrink-0 h-full absolute right-0 md:relative">
                 <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-900">Booth Details</h3>
                     <button onClick={() => setSelectedBoothId(null)} className="text-gray-400 hover:text-gray-600">

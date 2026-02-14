@@ -55,6 +55,11 @@ export function MapCanvas({
   const [retryKey, setRetryKey] = useState(0);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   
+  // Reset natural size when map URL changes to ensure fitToView triggers on new load
+  useEffect(() => {
+    setNaturalSize({ width: 0, height: 0 });
+  }, [mapImageUrl]);
+  
   // Robust fitToView Logic
   const fitToView = useCallback(() => {
     if (!wrapperRef.current || naturalSize.width === 0 || naturalSize.height === 0) return;
