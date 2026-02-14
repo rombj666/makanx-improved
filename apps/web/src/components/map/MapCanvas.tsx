@@ -73,10 +73,6 @@ export function MapCanvas({
     onViewportChange?.({ scale, x, y });
   }, [naturalSize, onViewportChange]);
 
-  // Handle Set Default Map button click
-  const handleFixMap = () => {
-    onFixMap?.();
-  };
 
   // Fit triggers
   useEffect(() => {
