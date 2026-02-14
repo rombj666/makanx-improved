@@ -73,39 +73,6 @@ export function MapCanvas({
     onViewportChange?.({ scale, x, y });
   }, [naturalSize, onViewportChange]);
 
-
-  // Fit triggers
-  useEffect(() => {
-    // Only fit if we have a valid image size
-    if (naturalSize.width > 0 && naturalSize.height > 0) {
-       fitToView();
-    }
-  }, [naturalSize, centerRequestKey, fitToView]);
-
-  // ResizeObserver for wrapper
-  useEffect(() => {
-    if (!wrapperRef.current) return;
-    
-    const resizeObserver = new ResizeObserver(() => {
-       // Debounce or just fit? Let's just fit for now, checking if dragging
-       // If dragging, maybe don't fit?
-       // Requirement: "Do not auto-fit while dragging"
-       // We can't easily access dragging state here without ref or prop.
-       // But typically resize happens on window resize.
-       fitToView();
-    });
-    
-    resizeObserver.observe(wrapperRef.current);
-    return () => resizeObserver.disconnect();
-  }, [fitToView]);
-
-  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { naturalWidth, naturalHeight } = e.currentTarget;
-    setNaturalSize({ width: naturalWidth, height: naturalHeight });
-    setImageError(false);
-    // fitToView will trigger via useEffect [naturalSize]
-  };
-
   // Interaction State
   const [dragging, setDragging] = useState<{
     mode: 'pan' | 'booth' | null;
@@ -127,6 +94,44 @@ export function MapCanvas({
     startTy: 0,
     captureEl: null
   });
+
+  // Fit triggers (natural size changed, re-fit only if not dragging)
+  useEffect(() => {
+    // Only fit if we have a valid image size and not actively dragging
+    if (naturalSize.width > 0 && naturalSize.height > 0 && dragging.mode === null) {
+      fitToView();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naturalSize, fitToView]);
+
+  // Center button request always overrides
+  useEffect(() => {
+    if (centerRequestKey > 0) {
+      fitToView();
+    }
+  }, [centerRequestKey, fitToView]);
+
+  // ResizeObserver for wrapper
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+       // Do not auto-fit while dragging; otherwise fit
+       if (dragging.mode === null) {
+         fitToView();
+       }
+    });
+    
+    resizeObserver.observe(wrapperRef.current);
+    return () => resizeObserver.disconnect();
+  }, [fitToView, dragging.mode]);
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    setNaturalSize({ width: naturalWidth, height: naturalHeight });
+    setImageError(false);
+    // fitToView will trigger via useEffect [naturalSize]
+  };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     // A) Pan must work even when readOnly=true (removed readOnly check)
