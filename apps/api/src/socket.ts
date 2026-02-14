@@ -5,11 +5,24 @@ import { verifyToken } from './utils/jwt';
 let io: Server;
 
 export const initSocket = (httpServer: HttpServer) => {
+  const normalize = (s: string) => s.trim().replace(/\/$/, "");
+
+  const allowedOrigins = [
+    "https://makanx-improved-web.vercel.app",
+    "http://localhost:5173"
+  ].map(normalize);
+
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || '*',
-      methods: ['GET', 'POST'],
-    },
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        const cleaned = normalize(origin);
+        if (allowedOrigins.includes(cleaned)) return cb(null, cleaned);
+        return cb(new Error("socket.io CORS blocked: " + origin));
+      },
+      methods: ["GET", "POST"],
+      credentials: true
+    }
   });
 
   io.on('connection', (socket: Socket) => {

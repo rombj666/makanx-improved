@@ -17,6 +17,7 @@ router.post(
   async (req: any, res: any) => {
     try {
       // Debug Auth
+      console.log(`[Upload] Origin: ${req.headers.origin}`);
       console.log(`[Upload] User: ${req.user?.userId}, Role: ${req.user?.role}`);
       console.log(`[Upload] Auth Header Present: ${!!req.headers.authorization}`);
 
@@ -24,7 +25,20 @@ router.post(
       const file = req.file;
 
       if (!file) {
-        return res.status(400).json({ success: false, message: 'No file uploaded' });
+        console.log('[Upload] No file received or field name incorrect (expected "file")');
+        return res.status(400).json({ success: false, message: 'No file received (field name must be "file")' });
+      }
+
+      console.log(`[Upload] File received: ${file.originalname}, ${file.mimetype}, ${file.size} bytes`);
+
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        return res.status(400).json({ success: false, message: 'Invalid file type. Only JPG, PNG, and WebP are allowed.' });
+      }
+
+      if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+         console.error('[Upload] Cloudinary configuration missing');
+         return res.status(500).json({ success: false, message: 'Cloudinary not configured' });
       }
 
       // Check event ownership

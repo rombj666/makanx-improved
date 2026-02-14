@@ -301,9 +301,10 @@ export function MapEditor() {
         toast.success('Map uploaded successfully');
         setIsUploadModalOpen(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error('Upload failed');
+      const msg = error.response?.data?.message || 'Upload failed';
+      toast.error(msg);
     } finally {
       setIsUploading(false);
     }
