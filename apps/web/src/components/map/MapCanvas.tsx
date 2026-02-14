@@ -33,6 +33,7 @@ interface MapCanvasProps {
   viewport?: Viewport;
   onViewportChange?: (v: Viewport) => void;
   centerRequestKey?: number;
+  onFixMap?: () => void;
 }
 
 export function MapCanvas({ 
@@ -45,13 +46,13 @@ export function MapCanvas({
   onBackgroundClick,
   viewport = { scale: 1, x: 0, y: 0 },
   onViewportChange,
-  centerRequestKey = 0
+  centerRequestKey = 0,
+  onFixMap
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [imageError, setImageError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [lastAction, setLastAction] = useState('');
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   
   // Robust fitToView Logic
@@ -70,8 +71,12 @@ export function MapCanvas({
     const y = (clientHeight - naturalSize.height * scale) / 2;
     
     onViewportChange?.({ scale, x, y });
-    setLastAction('FIT TO VIEW');
   }, [naturalSize, onViewportChange]);
+
+  // Handle Set Default Map button click
+  const handleFixMap = () => {
+    onFixMap?.();
+  };
 
   // Fit triggers
   useEffect(() => {
@@ -145,7 +150,6 @@ export function MapCanvas({
       startTy: viewport.y,
       captureEl: target
     });
-    setLastAction('PAN START');
     e.preventDefault();
   };
 
@@ -160,8 +164,6 @@ export function MapCanvas({
 
     e.stopPropagation();
     e.preventDefault();
-
-    setLastAction(`BOOTH DOWN: ${booth.name}`);
 
     if (selectedBoothId !== booth.id) {
       onBoothClick?.(booth);
@@ -196,7 +198,6 @@ export function MapCanvas({
         x: dragging.startTx + dx,
         y: dragging.startTy + dy
       });
-      setLastAction('PANNING');
     } else if (dragging.mode === 'booth' && dragging.boothId && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
       const scale = viewport.scale;
       const scaledDx = dx / scale;
@@ -206,7 +207,6 @@ export function MapCanvas({
         x: dragging.boothStartX + scaledDx,
         y: dragging.boothStartY + scaledDy
       });
-      setLastAction('DRAGGING BOOTH');
     }
   };
 
@@ -220,12 +220,7 @@ export function MapCanvas({
     if (dragging.mode === 'pan') {
       if (isClick) {
         onBackgroundClick?.();
-        setLastAction('BACKGROUND CLICK');
-      } else {
-        setLastAction('PAN END');
       }
-    } else {
-        setLastAction('BOOTH DROP');
     }
     
     // Release capture from stored element
@@ -286,16 +281,28 @@ export function MapCanvas({
                 <div className="flex flex-col items-center gap-2 pointer-events-auto">
                    <span className="text-red-500 mb-1">Failed to load map image</span>
                    <button 
-                     className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
-                     onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setImageError(false);
-                        setRetryKey(k => k + 1);
-                     }}
-                   >
-                     <RefreshCw size={14} /> Retry
-                   </button>
-                </div>
+                       className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+                       onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setImageError(false);
+                          setRetryKey(k => k + 1);
+                       }}
+                     >
+                       <RefreshCw size={14} /> Retry
+                     </button>
+                     {onFixMap && (
+                       <button 
+                         className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
+                         onPointerDown={(e) => {
+                            e.stopPropagation();
+                            handleFixMap();
+                         }}
+                       >
+                         Set Default Map
+                       </button>
+                     )}
+                   </div>
+                 </div>
               ) : (
                 <span>No Map Image Set</span>
               )}
