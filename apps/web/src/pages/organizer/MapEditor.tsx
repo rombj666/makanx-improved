@@ -280,6 +280,7 @@ export function MapEditor() {
     // Validate size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('File size too large (max 10MB)');
+      e.target.value = ''; // Reset input
       return;
     }
 
@@ -307,6 +308,7 @@ export function MapEditor() {
       toast.error(msg);
     } finally {
       setIsUploading(false);
+      e.target.value = ''; // Reset input so same file can be selected again if needed
     }
   };
 
