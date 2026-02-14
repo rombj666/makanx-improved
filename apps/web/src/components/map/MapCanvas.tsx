@@ -275,39 +275,40 @@ export function MapCanvas({
               }}
               onLoad={handleImageLoad}
             />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
-              {imageError ? (
-                <div className="flex flex-col items-center gap-2 pointer-events-auto">
-                   <span className="text-red-500 mb-1">Failed to load map image</span>
-                   <button 
-                       className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
-                       onPointerDown={(e) => {
-                          e.stopPropagation();
-                          setImageError(false);
-                          setRetryKey(k => k + 1);
-                       }}
-                     >
-                       <RefreshCw size={14} /> Retry
-                     </button>
-                     {onFixMap && (
-                       <button 
-                         className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
-                         onPointerDown={(e) => {
-                            e.stopPropagation();
-                            handleFixMap();
-                         }}
-                       >
-                         Set Default Map
-                       </button>
-                     )}
-                   </div>
-                 </div>
-              ) : (
-                <span>No Map Image Set</span>
-              )}
-            </div>
-          )}
+) : (
+  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
+    {imageError ? (
+      <div className="flex flex-col items-center gap-2 pointer-events-auto">
+        <span className="text-red-500 mb-1">Failed to load map image</span>
+
+        <button
+          className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            setImageError(false);
+            setRetryKey((k) => k + 1);
+          }}
+        >
+          <RefreshCw size={14} /> Retry
+        </button>
+
+        {onFixMap && (
+          <button
+            className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onFixMap(); // ✅ call prop directly (or keep handleFixMap if you defined it)
+            }}
+          >
+            Set Default Map
+          </button>
+        )}
+      </div>
+    ) : (
+      <span>No Map Image Set</span>
+    )}
+  </div>
+)}
 
           {/* Booths Layer */}
           <div className="absolute inset-0 z-10">
