@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
 import { toast } from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
@@ -32,7 +32,7 @@ interface MapCanvasProps {
   onBackgroundClick?: () => void;
   viewport?: Viewport;
   onViewportChange?: (v: Viewport) => void;
-  onFixMap?: () => void;
+  centerRequestKey?: number;
 }
 
 export function MapCanvas({ 
@@ -45,7 +45,7 @@ export function MapCanvas({
   onBackgroundClick,
   viewport = { scale: 1, x: 0, y: 0 },
   onViewportChange,
-  onFixMap
+  centerRequestKey = 0
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -53,34 +53,56 @@ export function MapCanvas({
   const [retryKey, setRetryKey] = useState(0);
   const [lastAction, setLastAction] = useState('');
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  
+  // Robust fitToView Logic
+  const fitToView = useCallback(() => {
+    if (!wrapperRef.current || naturalSize.width === 0 || naturalSize.height === 0) return;
 
-  // Auto-fit when image loads
+    const { clientWidth, clientHeight } = wrapperRef.current;
+    
+    // Calculate fit scale (95% of container)
+    const scaleX = clientWidth / naturalSize.width;
+    const scaleY = clientHeight / naturalSize.height;
+    const scale = Math.min(scaleX, scaleY) * 0.95;
+    
+    // Center the map
+    const x = (clientWidth - naturalSize.width * scale) / 2;
+    const y = (clientHeight - naturalSize.height * scale) / 2;
+    
+    onViewportChange?.({ scale, x, y });
+    setLastAction('FIT TO VIEW');
+  }, [naturalSize, onViewportChange]);
+
+  // Fit triggers
+  useEffect(() => {
+    // Only fit if we have a valid image size
+    if (naturalSize.width > 0 && naturalSize.height > 0) {
+       fitToView();
+    }
+  }, [naturalSize, centerRequestKey, fitToView]);
+
+  // ResizeObserver for wrapper
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+       // Debounce or just fit? Let's just fit for now, checking if dragging
+       // If dragging, maybe don't fit?
+       // Requirement: "Do not auto-fit while dragging"
+       // We can't easily access dragging state here without ref or prop.
+       // But typically resize happens on window resize.
+       fitToView();
+    });
+    
+    resizeObserver.observe(wrapperRef.current);
+    return () => resizeObserver.disconnect();
+  }, [fitToView]);
+
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
     setNaturalSize({ width: naturalWidth, height: naturalHeight });
     setImageError(false);
-
-    // Only auto-fit if not already zoomed/panned? 
-    // Or always on first load?
-    // User requirement: "Only auto-center on: first image load, when mapImageUrl changes"
-    
-    // We can detect if it's "first load" by checking if viewport is default
-    // Or just rely on naturalSize change effect?
-    // Let's do it right here.
-    
-    if (wrapperRef.current) {
-        const { clientWidth, clientHeight } = wrapperRef.current;
-        const scaleX = clientWidth / naturalWidth;
-        const scaleY = clientHeight / naturalHeight;
-        // Usually fitting means fit to screen.
-        const fitScale = Math.min(scaleX, scaleY);
-        
-        // Center it
-        const x = (clientWidth - naturalWidth * fitScale) / 2;
-        const y = (clientHeight - naturalHeight * fitScale) / 2;
-        
-        onViewportChange?.({ scale: fitScale, x, y });
-    }
+    // fitToView will trigger via useEffect [naturalSize]
   };
 
   // Interaction State
@@ -89,32 +111,30 @@ export function MapCanvas({
     pointerId: number | null;
     startX: number;
     startY: number;
-    startTx: number; // Viewport X
-    startTy: number; // Viewport Y
+    startTx: number;
+    startTy: number;
     boothId?: string;
     boothStartX?: number;
     boothStartY?: number;
+    captureEl?: HTMLElement | null;
   }>({
     mode: null,
     pointerId: null,
     startX: 0,
     startY: 0,
     startTx: 0,
-    startTy: 0
+    startTy: 0,
+    captureEl: null
   });
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (readOnly) return;
-    
-    // Background Pan Start
-    // Only if left click (button 0) or middle click (button 1)
+    // A) Pan must work even when readOnly=true (removed readOnly check)
+    // Only left click (0) or middle click (1)
     if (e.button !== 0 && e.button !== 1) return;
 
-    const target = e.target as HTMLElement;
+    const target = e.currentTarget as HTMLElement; // B) Use currentTarget (wrapper) for stability
     
-    // Safety check: if target is part of a booth (e.g. text span), find the booth container?
-    // Actually, booth pointer events are stopped by handleBoothPointerDown.
-    // So if we reach here, it SHOULD be background.
+    target.setPointerCapture(e.pointerId);
     
     setDragging({
       mode: 'pan',
@@ -122,61 +142,27 @@ export function MapCanvas({
       startX: e.clientX,
       startY: e.clientY,
       startTx: viewport.x,
-      startTy: viewport.y
+      startTy: viewport.y,
+      captureEl: target
     });
     setLastAction('PAN START');
-    
-    // Store capture element to release correctly later
-    target.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
 
   const handleBoothPointerDown = (e: React.PointerEvent, booth: Booth) => {
-    // If readOnly, we still allow selection (click) but NO dragging
-    // If readOnly, stopPropagation to prevent pan?
-    // Requirement: "Customer/Vendor view (readOnly=true) must still PAN + CLICK booths (select)"
-    // If we stopPropagation, background pan won't fire.
-    // So for readOnly:
-    // - Click booth -> Select (fire onBoothClick)
-    // - Drag booth -> Should PAN the map (pass through to background)?
-    //   OR should just do nothing?
-    //   Usually map apps: dragging a feature in read-only mode pans the map.
-    //   So we should NOT stopPropagation if readOnly.
-    
     if (readOnly) {
-       // We still want to select on click.
-       // We can detect click in onClick? Or pointerUp?
-       // If we let it bubble, background will start PAN.
-       // If user clicks (no drag), background PAN handles click as "Background Click".
-       // We need to intercept "Click" on booth.
-       
-       // Strategy for ReadOnly:
-       // 1. Capture pointer locally to detect click vs drag?
-       // 2. Or just use onClick for selection and let pointerDown bubble for panning?
-       //    If we let pointerDown bubble, MapCanvas starts panning.
-       //    If user clicks booth, MapCanvas finishes pan (dx<5) and calls onBackgroundClick.
-       //    This would DESELECT the booth!
-       //    So we MUST stopPropagation even in readOnly to prevent background click logic.
-       
-       // BUT if we stopPropagation, we can't pan by dragging the booth.
-       // Tradeoff: In readOnly, you must drag empty space to pan. Dragging booth does nothing.
-       // This satisfies "Customer view... Can pan map". (doesn't say MUST pan via booth).
-       
        e.stopPropagation();
-       
-       // Just select immediately?
        if (selectedBoothId !== booth.id) {
          onBoothClick?.(booth);
        }
        return;
     }
 
-    e.stopPropagation(); // Stop background pan
+    e.stopPropagation();
     e.preventDefault();
 
     setLastAction(`BOOTH DOWN: ${booth.name}`);
 
-    // Select booth immediately
     if (selectedBoothId !== booth.id) {
       onBoothClick?.(booth);
     }
@@ -193,7 +179,8 @@ export function MapCanvas({
       startTy: 0,
       boothId: booth.id,
       boothStartX: booth.x,
-      boothStartY: booth.y
+      boothStartY: booth.y,
+      captureEl: target
     });
   };
 
@@ -211,12 +198,10 @@ export function MapCanvas({
       });
       setLastAction('PANNING');
     } else if (dragging.mode === 'booth' && dragging.boothId && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
-      // Apply scale to delta
       const scale = viewport.scale;
       const scaledDx = dx / scale;
       const scaledDy = dy / scale;
 
-      // Update booth position
       onBoothUpdate?.(dragging.boothId, {
         x: dragging.boothStartX + scaledDx,
         y: dragging.boothStartY + scaledDy
@@ -230,7 +215,7 @@ export function MapCanvas({
 
     const dx = Math.abs(e.clientX - dragging.startX);
     const dy = Math.abs(e.clientY - dragging.startY);
-    const isClick = dx < 5 && dy < 5; // 5px threshold
+    const isClick = dx < 5 && dy < 5;
 
     if (dragging.mode === 'pan') {
       if (isClick) {
@@ -243,12 +228,12 @@ export function MapCanvas({
         setLastAction('BOOTH DROP');
     }
     
-    const target = e.target as HTMLElement;
-    if (target.hasPointerCapture && target.hasPointerCapture(e.pointerId)) {
-        target.releasePointerCapture(e.pointerId);
+    // Release capture from stored element
+    if (dragging.captureEl && dragging.captureEl.hasPointerCapture(e.pointerId)) {
+        dragging.captureEl.releasePointerCapture(e.pointerId);
     }
 
-    setDragging({ mode: null, pointerId: null, startX: 0, startY: 0, startTx: 0, startTy: 0 });
+    setDragging({ mode: null, pointerId: null, startX: 0, startY: 0, startTx: 0, startTy: 0, captureEl: null });
   };
 
   const mapSrc = mapImageUrl || '';
@@ -260,8 +245,6 @@ export function MapCanvas({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      // Also handle leave/cancel to clear state
-      onPointerLeave={handlePointerUp} 
       onPointerCancel={handlePointerUp}
       style={{ touchAction: 'none' }} 
     >
@@ -283,11 +266,6 @@ export function MapCanvas({
             minHeight: '100px'
           }}
         >
-          {/* Debug Overlay */}
-          <div className="absolute top-2 left-2 z-50 bg-black/50 text-white text-xs px-2 py-1 rounded pointer-events-none">
-            {lastAction || 'Ready'}
-          </div>
-
           {/* Map Image Layer */}
           {mapSrc && !imageError ? (
             <img 
@@ -305,33 +283,19 @@ export function MapCanvas({
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
               {imageError ? (
-                 <div className="flex flex-col items-center gap-2 pointer-events-auto">
+                <div className="flex flex-col items-center gap-2 pointer-events-auto">
                    <span className="text-red-500 mb-1">Failed to load map image</span>
-                   <span className="text-xs text-gray-400 mb-3 max-w-md truncate px-4">{mapSrc}</span>
-                   <div className="flex gap-2">
-                     <button 
-                       className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
-                       onPointerDown={(e) => {
-                          e.stopPropagation();
-                          setImageError(false);
-                          setRetryKey(k => k + 1);
-                       }}
-                     >
-                       <RefreshCw size={14} /> Retry
-                     </button>
-                     {onFixMap && (
-                       <button 
-                         className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
-                         onPointerDown={(e) => {
-                            e.stopPropagation();
-                            onFixMap();
-                         }}
-                       >
-                         Set Default Map
-                       </button>
-                     )}
-                   </div>
-                 </div>
+                   <button 
+                     className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+                     onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setImageError(false);
+                        setRetryKey(k => k + 1);
+                     }}
+                   >
+                     <RefreshCw size={14} /> Retry
+                   </button>
+                </div>
               ) : (
                 <span>No Map Image Set</span>
               )}
@@ -345,7 +309,7 @@ export function MapCanvas({
                 key={booth.id}
                 size={{ width: booth.width, height: booth.height }}
                 position={{ x: booth.x, y: booth.y }}
-                disableDragging={true} // We handle dragging manually!
+                disableDragging={true}
                 enableResizing={!readOnly && (selectedBoothId === booth.id)}
                 onResizeStop={(_, __, ref, ___, position) => {
                   onBoothUpdate?.(booth.id, { 
@@ -366,49 +330,10 @@ export function MapCanvas({
                       : 'border-blue-500 bg-blue-100/80 text-blue-900'}
                 `}
               >
-                {/* 
-                  Wrapper div to capture pointer events for manual drag/select 
-                  We put it inside Rnd so it moves with Rnd, but covers the area.
-                  POINTER EVENTS: 
-                  - If resizing enabled (selected), we need pointer-events-none on this overlay 
-                    so resize handles (children of Rnd) can be clicked?
-                    Actually Rnd handles are children of Rnd container.
-                    This overlay is a child of Rnd container.
-                    If this overlay is z-10 and full size, it might block handles if they are below?
-                    React-Rnd puts handles as children. 
-                    If we want handles to work, this overlay shouldn't block them.
-                    But we need this overlay to catch clicks for dragging.
-                    
-                    Solution: Rnd handles usually have high z-index.
-                    We will make this overlay pointer-events-auto ONLY for drag/click.
-                    If we are resizing, maybe we don't need this overlay?
-                    Actually, if we click this overlay, we start dragging.
-                    Resize handles are on the edge.
-                */}
+                {/* Interaction Overlay */}
                 <div 
-                  className={`absolute inset-0 z-10 ${selectedBoothId === booth.id && !readOnly ? 'pointer-events-none' : ''}`}
-                  onPointerDown={(e) => {
-                      // If it's selected and editable, we disabled pointer events so resize handles work.
-                      // BUT then we can't drag!
-                      // Catch-22.
-                      // Better approach: Rnd has `dragHandleClassName`.
-                      // We can set dragHandleClassName to a specific class we put on this div.
-                      // Then Rnd handles drag.
-                      // BUT we implemented manual drag.
-                      
-                      // If we use manual drag, we don't need Rnd's drag.
-                      // We disabled Rnd drag (`disableDragging={true}`).
-                      // So we MUST catch events here.
-                      
-                      // If we are selected, we want resize handles (provided by Rnd) to work.
-                      // Rnd handles are absolute positioned on edges.
-                      // This div is inset-0.
-                      // If handles have higher z-index, they will capture events first.
-                      // Let's rely on Rnd default z-index for handles.
-                      
-                      // Revert pointer-events-none change and rely on z-index.
-                      handleBoothPointerDown(e, booth)
-                  }}
+                  className="absolute inset-0 z-10"
+                  onPointerDown={(e) => handleBoothPointerDown(e, booth)}
                 />
                 
                 <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
