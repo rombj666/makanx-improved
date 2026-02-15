@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Rnd } from 'react-rnd';
 import { toast } from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
 
@@ -80,7 +79,7 @@ export function MapCanvas({
 
   // Interaction State
   const [dragging, setDragging] = useState<{
-    mode: 'pan' | 'booth' | null;
+    mode: 'pan' | 'booth' | 'resize' | null;
     pointerId: number | null;
     startX: number;
     startY: number;
@@ -89,6 +88,10 @@ export function MapCanvas({
     boothId?: string;
     boothStartX?: number;
     boothStartY?: number;
+    // Resize specific
+    resizeDir?: string; // nw, ne, sw, se
+    startWidth?: number;
+    startHeight?: number;
     captureEl?: HTMLElement | null;
   }>({
     mode: null,
@@ -192,11 +195,37 @@ export function MapCanvas({
     });
   };
 
+  const handleResizePointerDown = (e: React.PointerEvent, dir: string, booth: Booth) => {
+    if (readOnly) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+
+    setDragging({
+        mode: 'resize',
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startTx: 0,
+        startTy: 0,
+        boothId: booth.id,
+        boothStartX: booth.x,
+        boothStartY: booth.y,
+        startWidth: booth.width,
+        startHeight: booth.height,
+        resizeDir: dir,
+        captureEl: target
+    });
+  };
+
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging.mode || dragging.pointerId !== e.pointerId) return;
 
     const dx = e.clientX - dragging.startX;
     const dy = e.clientY - dragging.startY;
+    const scale = viewport.scale;
 
     if (dragging.mode === 'pan') {
       onViewportChange?.({
@@ -204,8 +233,8 @@ export function MapCanvas({
         x: dragging.startTx + dx,
         y: dragging.startTy + dy
       });
-    } else if (dragging.mode === 'booth' && dragging.boothId && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
-      const scale = viewport.scale;
+    } 
+    else if (dragging.mode === 'booth' && dragging.boothId && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
       const scaledDx = dx / scale;
       const scaledDy = dy / scale;
 
@@ -213,6 +242,39 @@ export function MapCanvas({
         x: dragging.boothStartX + scaledDx,
         y: dragging.boothStartY + scaledDy
       });
+    }
+    else if (dragging.mode === 'resize' && dragging.boothId && dragging.startWidth && dragging.startHeight && dragging.boothStartX !== undefined && dragging.boothStartY !== undefined) {
+        const scaledDx = dx / scale;
+        const scaledDy = dy / scale;
+        
+        let newW = dragging.startWidth;
+        let newH = dragging.startHeight;
+        let newX = dragging.boothStartX;
+        let newY = dragging.boothStartY;
+
+        if (dragging.resizeDir?.includes('e')) newW = Math.max(20, dragging.startWidth + scaledDx);
+        if (dragging.resizeDir?.includes('s')) newH = Math.max(20, dragging.startHeight + scaledDy);
+        if (dragging.resizeDir?.includes('w')) {
+            const possibleW = dragging.startWidth - scaledDx;
+            if (possibleW >= 20) {
+                newW = possibleW;
+                newX = dragging.boothStartX + scaledDx;
+            }
+        }
+        if (dragging.resizeDir?.includes('n')) {
+            const possibleH = dragging.startHeight - scaledDy;
+            if (possibleH >= 20) {
+                newH = possibleH;
+                newY = dragging.boothStartY + scaledDy;
+            }
+        }
+
+        onBoothUpdate?.(dragging.boothId, {
+            x: newX,
+            y: newY,
+            width: newW,
+            height: newH
+        });
     }
   };
 
@@ -316,26 +378,19 @@ export function MapCanvas({
   </div>
 )}
 
-          {/* Booths Layer */}
+          {/* Booths Layer - Manual Rendering replacing Rnd */}
           <div className="absolute inset-0 z-10">
             {booths.map(booth => (
-              <Rnd
+              <div
                 key={booth.id}
-                size={{ width: booth.width, height: booth.height }}
-                position={{ x: booth.x, y: booth.y }}
-                disableDragging={true}
-                enableResizing={!readOnly && (selectedBoothId === booth.id)}
-                onResizeStop={(_, __, ref, ___, position) => {
-                  onBoothUpdate?.(booth.id, { 
-                    width: parseInt(ref.style.width), 
-                    height: parseInt(ref.style.height),
-                    ...position 
-                  });
+                style={{
+                    left: booth.x,
+                    top: booth.y,
+                    width: booth.width,
+                    height: booth.height
                 }}
-                bounds="parent"
-                scale={viewport.scale}
                 className={`
-                  border-2 flex flex-col items-center justify-center cursor-pointer transition-colors
+                  absolute border-2 flex flex-col items-center justify-center cursor-pointer transition-colors select-none touch-none
                   ${readOnly ? 'cursor-default' : 'cursor-move hover:z-50'}
                   ${selectedBoothId === booth.id 
                     ? 'border-orange-500 bg-orange-100/80 z-50 ring-2 ring-orange-300 ring-offset-1' 
@@ -343,13 +398,8 @@ export function MapCanvas({
                       ? 'border-green-500 bg-green-100/80 text-green-900' 
                       : 'border-blue-500 bg-blue-100/80 text-blue-900'}
                 `}
+                onPointerDown={(e) => handleBoothPointerDown(e, booth)}
               >
-                {/* Interaction Overlay */}
-                <div 
-                  className="absolute inset-0 z-10"
-                  onPointerDown={(e) => handleBoothPointerDown(e, booth)}
-                />
-                
                 <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
                     <span className="font-bold text-xs select-none truncate w-full text-center">
                     {booth.name}
@@ -360,7 +410,29 @@ export function MapCanvas({
                     </span>
                     )}
                 </div>
-              </Rnd>
+
+                {/* Resize Handles (Only when selected and not readOnly) */}
+                {!readOnly && selectedBoothId === booth.id && (
+                    <>
+                        <div 
+                            className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-orange-500 cursor-nw-resize z-50"
+                            onPointerDown={(e) => handleResizePointerDown(e, 'nw', booth)} 
+                        />
+                        <div 
+                            className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-orange-500 cursor-ne-resize z-50"
+                            onPointerDown={(e) => handleResizePointerDown(e, 'ne', booth)}
+                        />
+                        <div 
+                            className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-orange-500 cursor-sw-resize z-50"
+                            onPointerDown={(e) => handleResizePointerDown(e, 'sw', booth)}
+                        />
+                        <div 
+                            className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-orange-500 cursor-se-resize z-50"
+                            onPointerDown={(e) => handleResizePointerDown(e, 'se', booth)}
+                        />
+                    </>
+                )}
+              </div>
             ))}
           </div>
         </div>

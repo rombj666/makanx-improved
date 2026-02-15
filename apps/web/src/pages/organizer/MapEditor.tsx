@@ -49,6 +49,7 @@ interface Vendor {
   name: string;
   email: string;
   vendorProfile?: {
+    id: string;
     businessName: string;
   };
 }
@@ -203,7 +204,8 @@ export function MapEditor() {
     if (!selectedBoothId) return;
     
     // Find vendor details for UI update
-    const vendor = vendors.find(v => v.id === vendorId);
+    // We iterate vendors to find one where vendorProfile.id matches the input
+    const vendor = vendors.find(v => v.vendorProfile?.id === vendorId);
     const vendorName = vendor?.vendorProfile?.businessName || vendor?.name;
 
     // Optimistic Update
@@ -525,7 +527,7 @@ export function MapEditor() {
                         >
                             <option value="">-- Unassigned --</option>
                             {vendors.map(v => (
-                                <option key={v.id} value={v.id}>
+                                <option key={v.id} value={v.vendorProfile?.id || ''} disabled={!v.vendorProfile?.id}>
                                     {v.vendorProfile?.businessName || v.name}
                                 </option>
                             ))}
@@ -549,6 +551,8 @@ export function MapEditor() {
                               onChange={(e) => updateBoothLocally(selectedBooth.id, { height: parseInt(e.target.value) || 0 })}
                             />
                         </div>
+                        {/* Hidden X/Y fields as requested */}
+                        {/* 
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">X</label>
                             <Input 
@@ -565,6 +569,7 @@ export function MapEditor() {
                               onChange={(e) => updateBoothLocally(selectedBooth.id, { y: parseInt(e.target.value) || 0 })}
                             />
                         </div>
+                        */}
                     </div>
                 </div>
                 
