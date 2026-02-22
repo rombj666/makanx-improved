@@ -3,20 +3,29 @@ import { Role, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
 export const createApplication = async (data: any) => {
-  // Assuming data matches VendorApplicationCreateInput or similar
-  // Since we don't have exact types from user, we'll just map fields loosely
-  // or pass data directly if it matches.
-  // For now, let's assume 'eventId' is in data.
-  
-  // Basic validation or transformation could happen here
+  // Normalize values safely
+  const email = (data.email || data.businessEmail || '').trim().toLowerCase();
+  const phone = (data.phone || '').replace(/[\s-]/g, '');
+
   return prisma.vendorApplication.create({
     data: {
       eventId: data.eventId,
-      applicantName: data.applicantName,
-      applicantEmail: data.applicantEmail,
-      businessName: data.businessName,
+
+      // Applicant identity
+      applicantName: data.contactName || data.applicantName || '',
+      applicantEmail: email,
+
+      // Business
+      businessName: data.vendorName || data.businessName || '',
+
+      // NEW fields (if exist in schema)
+      phoneNumber: phone,
+      category: data.category || 'Others',
+      description: data.description || '',
+      priceMin: Number(data.priceMin) || 0,
+      priceMax: Number(data.priceMax) || 0,
+
       status: 'PENDING',
-      // Map other fields as needed
     },
   });
 };
