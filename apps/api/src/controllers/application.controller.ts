@@ -18,9 +18,11 @@ export const handleWebhook = async (req: Request, res: Response) => {
     // Example expectation: { eventId, applicantName, applicantEmail, businessName, ... }
     
   // find event by slug
-  const event = await prisma.event.findUnique({
-    where: { slug: req.body.eventSlug }
-  });
+ const event = await prisma.event.findFirst({
+  where: {
+    name: req.body.eventName
+  }
+});
 
   if (!event) {
     return res.status(400).json({ success: false, error: 'Invalid event' });
