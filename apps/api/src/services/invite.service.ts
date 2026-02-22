@@ -20,16 +20,21 @@ export const verifyInvite = async (token: string) => {
   if (invite.isUsed) throw new Error('Invite token already used');
   if (new Date() > invite.expiresAt) throw new Error('Invite token expired');
 
+  // If application linked, use that email, otherwise we don't know the email!
+  // Fallback to invite.email if application not linked
+  const email = invite.application?.applicantEmail || invite.email;
+  const businessName = invite.application?.businessName || 'Business';
+
   return {
     valid: true,
     role: invite.role,
-    email: invite.application?.applicantEmail,
-    businessName: invite.application?.businessName,
+    email,
+    businessName,
   };
 };
 
-export const acceptInvite = async (input: z.infer<typeof acceptInviteSchema>) => {
-  const { token, password } = acceptInviteSchema.parse(input);
+export const acceptInvite = async (input: { token: string, password: string }) => {
+  const { token, password } = input;
 
   const invite = await prisma.inviteToken.findUnique({
     where: { token },
@@ -40,17 +45,14 @@ export const acceptInvite = async (input: z.infer<typeof acceptInviteSchema>) =>
   if (invite.isUsed) throw new Error('Invite token already used');
   if (new Date() > invite.expiresAt) throw new Error('Invite token expired');
 
-  // If application linked, use that email, otherwise we don't know the email!
-  // Assumption: Vendor Invite MUST be linked to application OR we need email in input.
-  // Given previous step, we linked application.
+  // Resolve user details
+  const email = invite.application?.applicantEmail || invite.email;
+  const name = invite.application?.applicantName || email.split('@')[0];
+  const businessName = invite.application?.businessName || 'My Business';
   
-  if (!invite.application) {
-    throw new Error('Invite not linked to any application data');
+  if (!email) {
+      throw new Error('No email found for this invite');
   }
-
-  const email = invite.application.applicantEmail;
-  const name = invite.application.applicantName;
-  const businessName = invite.application.businessName;
 
   // Check if user exists
   const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -67,17 +69,23 @@ export const acceptInvite = async (input: z.infer<typeof acceptInviteSchema>) =>
         email,
         password: hashedPassword,
         name,
-        role: invite.role,
+        role: invite.role, // e.g. VENDOR
       },
     });
 
-    // 2. Create VendorProfile
-    if (invite.role === Role.VENDOR) {
+    // 2. Create VendorProfile (if role is vendor)
+    if (invite.role === 'VENDOR') {
       await tx.vendorProfile.create({
         data: {
           userId: user.id,
           businessName,
-          description: `Vendor for ${businessName}`,
+          // Map other fields from application if available
+          description: invite.application?.description || `Vendor for ${businessName}`,
+          phoneNumber: invite.application?.phoneNumber,
+          category: invite.application?.category,
+          priceRange: (invite.application?.priceMin || invite.application?.priceMax) 
+             ? `${invite.application.priceMin}-${invite.application.priceMax}` 
+             : undefined,
         },
       });
     }
@@ -85,8 +93,19 @@ export const acceptInvite = async (input: z.infer<typeof acceptInviteSchema>) =>
     // 3. Mark token as used
     await tx.inviteToken.update({
       where: { id: invite.id },
-      data: { isUsed: true },
+      data: { isUsed: true, usedAt: new Date() },
     });
+    
+    // 4. Update Application status
+    if (invite.applicationId) {
+        await tx.vendorApplication.update({
+            where: { id: invite.applicationId },
+            data: { 
+                status: 'ACCOUNT_CREATED',
+                accountCreatedAt: new Date()
+            }
+        });
+    }
 
     return user;
   });

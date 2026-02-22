@@ -70,9 +70,17 @@ model VendorApplication {
   applicantName  String
   applicantEmail String
   businessName   String
+  phoneNumber    String?
+  description    String?
+  category       String?
+  priceMin       Float             @default(0)
+  priceMax       Float             @default(0)
   googleFormData Json?
   status         ApplicationStatus @default(PENDING)
   createdAt      DateTime          @default(now())
+  approvedAt     DateTime?
+  approvedByUserId String?
+  accountCreatedAt DateTime?
   inviteToken    InviteToken?
   event          Event             @relation(fields: [eventId], references: [id])
 }
@@ -129,14 +137,16 @@ model OrderItem {
 }
 
 model InviteToken {
-  id            String             @id @default(uuid())
-  token         String             @unique
-  role          Role
-  eventId       String?
-  applicationId String?            @unique
-  isUsed        Boolean            @default(false)
-  expiresAt     DateTime
-  application   VendorApplication? @relation(fields: [applicationId], references: [id])
+  id              String             @id @default(uuid())
+  token           String             @unique
+  role            Role
+  email           String
+  eventId         String?
+  applicationId   String?            @unique
+  isUsed          Boolean            @default(false)
+  expiresAt       DateTime
+  usedAt          DateTime?
+  application     VendorApplication? @relation(fields: [applicationId], references: [id])
 }
 
 model PasswordResetToken {
@@ -187,6 +197,7 @@ enum ApplicationStatus {
   PENDING
   APPROVED
   REJECTED
+  ACCOUNT_CREATED
 }
 
 enum EventStatus {

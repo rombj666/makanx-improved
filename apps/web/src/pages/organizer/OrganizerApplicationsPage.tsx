@@ -12,7 +12,7 @@ interface Application {
   applicantName: string;
   applicantEmail: string;
   businessName: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED';
   createdAt: string;
   eventName?: string; // Optional if we join event name
 }
@@ -21,7 +21,7 @@ export function OrganizerApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('PENDING');
 
   useEffect(() => {
     fetchApplications();
@@ -78,16 +78,16 @@ export function OrganizerApplicationsPage() {
       <Card className="border-none shadow-md">
         <CardHeader className="border-b bg-white rounded-t-lg">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-full md:w-auto">
-              {(['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).map(f => (
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-full md:w-auto overflow-x-auto">
+              {(['PENDING', 'APPROVED', 'REJECTED', 'ACCOUNT_CREATED', 'ALL'] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap ${
                     filter === f ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  {f.charAt(0) + f.slice(1).toLowerCase()}
+                  {f.charAt(0) + f.slice(1).toLowerCase().replace('_', ' ')}
                 </button>
               ))}
             </div>
@@ -137,9 +137,10 @@ export function OrganizerApplicationsPage() {
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         app.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
                         app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                        app.status === 'ACCOUNT_CREATED' ? 'bg-blue-100 text-blue-700' :
                         'bg-amber-100 text-amber-700'
                       }`}>
-                        {app.status}
+                        {app.status.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">

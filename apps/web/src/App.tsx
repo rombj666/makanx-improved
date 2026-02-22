@@ -7,6 +7,7 @@ import { Login } from './pages/auth/Login';
 // import { Register } from './pages/auth/Register'; // Removed
 import { Invite } from './pages/auth/Invite';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
+import ApplicationStatusPage from './pages/ApplicationStatus';
 import { CustomerHome } from './pages/customer/Home';
 import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
@@ -79,6 +80,7 @@ function App() {
               <Route path="/customer/event/:slug" element={<EventMap />} />
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/application-status" element={<ApplicationStatusPage />} />
               {/* <Route path="/register" element={<Register />} /> */}
               <Route path="/invite" element={<Invite />} />
               <Route path="/debug/static" element={<DebugStatic />} />

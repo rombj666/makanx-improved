@@ -8,6 +8,9 @@ const router = Router();
 // Webhook for Google Forms
 router.post('/webhook', applicationController.handleWebhook);
 
+// Public status check
+router.post('/status', applicationController.checkApplicationStatus);
+
 // Organizer routes
 router.get('/', requireAuth, requireRole([Role.ORGANIZER]), applicationController.getApplications);
 router.post('/:id/approve', requireAuth, requireRole([Role.ORGANIZER]), applicationController.approveApplication);
