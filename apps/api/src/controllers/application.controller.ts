@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import * as applicationService from '../services/application.service';
 import { ZodError } from 'zod';
 
-const WEBHOOK_SECRET = process.env.GOOGLE_WEBHOOK_SECRET || 'secret-token-from-google-script';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'secret-token-from-google-script';
 
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
