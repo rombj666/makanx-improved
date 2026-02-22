@@ -7,7 +7,9 @@ const router = Router();
 
 // Webhook for Google Forms
 router.post('/webhook', applicationController.handleWebhook);
-
+router.get('/webhook', (req, res) => {
+  res.send('Webhook route is alive');
+});
 // Public status check
 router.post('/status', applicationController.checkApplicationStatus);
 
