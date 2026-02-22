@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as applicationService from '../services/application.service';
 import { ZodError } from 'zod';
+import prisma from '../utils/prisma';
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'secret-token-from-google-script';
 
@@ -16,7 +17,28 @@ export const handleWebhook = async (req: Request, res: Response) => {
     // For now assuming payload matches schema or is transformed before calling service.
     // Example expectation: { eventId, applicantName, applicantEmail, businessName, ... }
     
-    const result = await applicationService.createApplication(req.body);
+  // find event by slug
+  const event = await prisma.event.findUnique({
+    where: { slug: req.body.eventSlug }
+  });
+
+  if (!event) {
+    return res.status(400).json({ success: false, error: 'Invalid event' });
+  }
+
+  const transformed = {
+    eventId: event.id,
+    applicantName: req.body.contactName,
+    applicantEmail: req.body.businessEmail,
+    businessName: req.body.vendorName,
+    phoneNumber: req.body.phone,
+    category: req.body.category,
+    description: req.body.description,
+    priceMin: req.body.priceMin,
+    priceMax: req.body.priceMax,
+  };
+
+  const result = await applicationService.createApplication(transformed);
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
