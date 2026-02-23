@@ -46,7 +46,6 @@ export function VendorOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [openSection, setOpenSection] = useState<OrderStatus | null>('PENDING');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [now, setNow] = useState(new Date());
 
   // 3.4 Live waiting timer
   useEffect(() => {
