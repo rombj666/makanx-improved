@@ -48,11 +48,6 @@ export function VendorOrders() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
   // 3.4 Live waiting timer
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   const fetchOrders = async () => {
     try {
       const { data } = await api.get('/orders/vendor-orders');
