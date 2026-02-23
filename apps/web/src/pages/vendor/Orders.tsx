@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { api } from '../../lib/api';
 import { toast } from 'react-hot-toast';
-import { Loader2, ChevronDown, ChevronRight, CheckSquare, Square, Clock } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight} from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
 import { useSocket } from '../../context/SocketContext';
@@ -115,16 +115,6 @@ useEffect(() => {
     return groups;
   }, [orders]);
 
-  // Actions
-  const handleStatusUpdate = async (orderId: string, status: OrderStatus) => {
-    try {
-      await api.put(`/orders/${orderId}/status`, { status });
-      toast.success(`Order marked ${status}`);
-      fetchOrders();
-    } catch (error) {
-      toast.error('Update failed');
-    }
-  };
 
   const handleBulkUpdate = async (status: OrderStatus) => {
     if (selectedOrderIds.size === 0) return;
@@ -141,32 +131,6 @@ useEffect(() => {
     }
   };
 
-  const toggleSelection = (id: string) => {
-    const next = new Set(selectedOrderIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedOrderIds(next);
-  };
-
-  const formatWaitTime = (createdAt: string) => {
-    const diff = now.getTime() - new Date(createdAt).getTime();
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return `${mins}m ${secs}s`;
-  };
-
-  const getTimerBadgeColors = (createdAt: string) => {
-    const diff = now.getTime() - new Date(createdAt).getTime();
-    const mins = Math.floor(diff / 60000);
-    
-    if (mins < 5) {
-      return 'bg-green-50 text-green-600 border border-green-100';
-    } else if (mins <= 10) {
-      return 'bg-orange-50 text-orange-600 border border-orange-100';
-    } else {
-      return 'bg-red-50 text-red-600 border border-red-100';
-    }
-  };
 
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
