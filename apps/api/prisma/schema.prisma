@@ -121,6 +121,9 @@ model Order {
   totalAmount   Decimal
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  acceptedAt    DateTime?
+  readyAt       DateTime?
+  completedAt   DateTime?
   customer      User          @relation(fields: [customerId], references: [id])
   vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   items         OrderItem[]

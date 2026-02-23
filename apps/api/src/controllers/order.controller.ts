@@ -52,3 +52,23 @@ export const updateStatus = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: error.message });
   }
 };
+
+export const bulkStatusUpdate = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    const { orderIds, status } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      throw new Error('Invalid orderIds');
+    }
+    
+    if (!Object.values(OrderStatus).includes(status)) {
+        throw new Error('Invalid status');
+    }
+
+    const result = await orderService.bulkStatusUpdate(req.user.userId, orderIds, status);
+    res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};

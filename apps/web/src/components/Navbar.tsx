@@ -34,10 +34,18 @@ export function Navbar() {
                   Dashboard
                 </Link>
               )}
-              {user.role === Role.VENDOR && (
-                <Link to="/vendor" className="text-sm hover:underline hover:text-orange-600">
-                  Dashboard
-                </Link>
+              {user.role === 'VENDOR' && (
+                <>
+                  <Link to="/vendor/orders" className="text-sm font-medium hover:text-orange-600 transition-colors">
+                    Orders
+                  </Link>
+                  <Link to="/vendor/menu" className="text-sm font-medium hover:text-orange-600 transition-colors">
+                    Menu
+                  </Link>
+                  <Link to="/vendor" className="text-sm font-medium hover:text-orange-600 transition-colors">
+                    Dashboard
+                  </Link>
+                </>
               )}
               <Button variant="outline" size="sm" onClick={logout} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800">
                 Logout

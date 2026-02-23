@@ -31,32 +31,44 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     const newSocket = io(SOCKET_URL);
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      console.log('Socket connected');
-      
-      // Join user room
-      newSocket.emit('join', localStorage.getItem('token'));
-      
-      // If vendor, we might want to join specific vendor room too if not handled by backend user room logic
-      // Backend currently joins 'user:{userId}'. 
-      // Backend also listens for 'join_vendor'
-      if (user.role === Role.VENDOR) {
-         // Ideally we need vendorId. For now, we rely on backend finding it or 
-         // we pass it if we have it in user object. 
-         // Let's assume we need to fetch profile to get vendorId or user context has it?
-         // Our User type in frontend AuthContext doesn't have vendorId.
-         // Backend OrderService emits to 'vendor:{vendorId}'.
-         // We need to know our vendorId to join. 
-         // Hack: Backend 'join' listener could look up vendorId and join that room too.
-         // Let's update backend socket logic if needed, but for now let's assume backend handles it 
-         // OR we fetch /auth/me returns vendorProfile.id
+newSocket.on('connect', async () => {
+  setIsConnected(true);
+
+  newSocket.emit('join', localStorage.getItem('token'));
+
+  if (user.role === Role.VENDOR) {
+    try {
+      const res = await fetch(`${SOCKET_URL}/api/orders/vendor-orders`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await res.json();
+      if (data.success && data.data.length > 0) {
+        const vendorId = data.data[0].vendorId;
+        newSocket.emit('join_vendor', vendorId);
       }
-    });
+    } catch (e) {
+      console.error("Vendor room join failed", e);
+    }
+  }
+});
 
     newSocket.on('disconnect', () => {
       setIsConnected(false);
     });
+let lastPlayed = 0;
+
+  newSocket.on("order_created", () => {
+    const now = Date.now();
+    if (now - lastPlayed > 1500) {
+      const audio = new Audio("/sounds/new-order.mp3");
+      audio.volume = 0.8;
+      audio.play().catch(() => {});
+      lastPlayed = now;
+    }
+  });
 
     setSocket(newSocket);
 

@@ -12,5 +12,6 @@ router.get('/my-orders', requireAuth, requireRole([Role.CUSTOMER]), orderControl
 // Vendor
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
+router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
 
 export default router;
