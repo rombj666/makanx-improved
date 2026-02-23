@@ -107,6 +107,8 @@ model MenuItem {
   price       Decimal
   imageUrl    String?
   isAvailable Boolean       @default(true)
+  createdAt   DateTime      @default(now())   // ADD THIS
+  updatedAt   DateTime      @updatedAt        // OPTIONAL but recommended
   vendor      VendorProfile @relation(fields: [vendorId], references: [id])
   orderItems  OrderItem[]
 }

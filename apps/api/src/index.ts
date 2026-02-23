@@ -11,6 +11,7 @@ import orderRoutes from './routes/order.routes';
 import organizerRoutes from './routes/organizer.routes';
 import organizerUploadRoutes from './routes/organizerUploadRoutes';
 import uploadRoutes from './routes/upload.routes';
+import menuRoutes from './routes/menu.routes';
 
 import { configureSecurity } from './middleware/security';
 
@@ -73,7 +74,7 @@ apiRouter.use('/orders', orderRoutes);
 apiRouter.use('/organizer', organizerRoutes);
 apiRouter.use('/organizer', organizerUploadRoutes);
 apiRouter.use('/uploads', uploadRoutes);
-
+apiRouter.use('/menu', menuRoutes);
 app.use('/api', apiRouter);
 
 app.get('/test-route', (req, res) => {
