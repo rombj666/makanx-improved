@@ -33,3 +33,35 @@ export const getVendorMenu = async (userId: string) => {
     orderBy: { createdAt: "desc" }
   });
 };
+
+export const updateMenuItem = async (
+  userId: string,
+  itemId: string,
+  data: any
+) => {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+  });
+
+  if (!vendorProfile) throw new Error('Vendor profile not found');
+
+  return prisma.menuItem.update({
+    where: { id: itemId },
+    data,
+  });
+};
+
+export const deleteMenuItem = async (
+  userId: string,
+  itemId: string
+) => {
+  const vendorProfile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+  });
+
+  if (!vendorProfile) throw new Error('Vendor profile not found');
+
+  return prisma.menuItem.delete({
+    where: { id: itemId },
+  });
+};

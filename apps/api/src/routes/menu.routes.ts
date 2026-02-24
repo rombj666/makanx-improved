@@ -5,6 +5,13 @@ import { Role } from '@makanx/shared';
 
 const router = Router();
 
+router.post(
+  '/',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  menuController.createMenuItem
+);
+
 router.get(
   '/',
   requireAuth,
@@ -12,11 +19,18 @@ router.get(
   menuController.getVendorMenu
 );
 
-router.post(
-  '/',
+router.put(
+  '/:id',
   requireAuth,
   requireRole([Role.VENDOR]),
-  menuController.createMenuItem
+  menuController.updateMenuItem
+);
+
+router.delete(
+  '/:id',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  menuController.deleteMenuItem
 );
 
 export default router;
