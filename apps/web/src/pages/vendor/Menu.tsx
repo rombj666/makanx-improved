@@ -33,18 +33,13 @@ export function VendorMenu() {
 
   const fetchMenu = async () => {
     try {
-      // Quick fix: Fetch vendor profile, then fetch items.
-      const { data: profileData } = await api.get('/vendor/profile'); 
-      if (profileData.success) {
-          const vendorId = profileData.data.id;
-          const { data: menuData } = await api.get(`/menu-items?vendorId=${vendorId}`);
-          if (menuData.success) {
-              setMenuItems(menuData.data);
-          }
+      const { data } = await api.get('/menu-items');
+
+      if (data.success) {
+        setMenuItems(data.data);
       }
     } catch (error) {
-      // Fallback or error
-      // toast.error('Failed to load menu');
+      toast.error('Failed to load menu');
     } finally {
       setIsLoading(false);
     }
