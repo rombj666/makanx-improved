@@ -29,6 +29,8 @@ export function VendorMenu() {
     imageUrl: ''
   });
 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const fetchMenu = async () => {
     try {
       // Quick fix: Fetch vendor profile, then fetch items.
@@ -55,13 +57,34 @@ export function VendorMenu() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = {
-        name: formData.name,
-        price: parseFloat(formData.price),
-        description: formData.description,
-        imageUrl: formData.imageUrl,
-        isAvailable: true
-      };
+    let imageUrl = formData.imageUrl;
+
+    if (selectedFile) {
+      const form = new FormData();
+      form.append("file", selectedFile);
+
+      const uploadRes = await api.post(
+        "/uploads/image?type=menuItem",
+        form,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (uploadRes.data.success) {
+        imageUrl = uploadRes.data.data.url;
+      }
+    }
+
+    const payload = {
+      name: formData.name,
+      price: parseFloat(formData.price),
+      description: formData.description,
+      imageUrl,
+      isAvailable: true,
+    };
 
       if (editingItem) {
         await api.put(`/menu-items/${editingItem.id}`, payload);
@@ -152,6 +175,28 @@ export function VendorMenu() {
               placeholder="e.g. Nasi Lemak"
             />
           </div>
+          <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Or Upload From Device
+              </label>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setSelectedFile(e.target.files[0]);
+                  }
+                }}
+                className="mt-1 block w-full text-sm border border-gray-300 rounded-md p-2"
+              />
+
+              {selectedFile && (
+                <p className="text-xs text-green-600 mt-1">
+                  Selected: {selectedFile.name}
+                </p>
+              )}
+            </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Price ($)</label>
             <Input 
