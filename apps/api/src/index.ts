@@ -74,7 +74,7 @@ apiRouter.use('/orders', orderRoutes);
 apiRouter.use('/organizer', organizerRoutes);
 apiRouter.use('/organizer', organizerUploadRoutes);
 apiRouter.use('/uploads', uploadRoutes);
-apiRouter.use('/menu', menuRoutes);
+apiRouter.use('/menu-items', menuRoutes);
 app.use('/api', apiRouter);
 
 app.get('/test-route', (req, res) => {
