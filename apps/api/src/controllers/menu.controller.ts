@@ -5,7 +5,13 @@ export const createMenuItem = async (req: any, res: any) => {
     const userId = req.user.userId;
     const item = await menuService.createMenuItem(userId, req.body);
 
-    res.json({ success: true, data: item });
+    // 🔥 Convert Decimal price -> Number
+    const normalizedItem = {
+      ...item,
+      price: Number(item.price),
+    };
+
+    res.json({ success: true, data: normalizedItem });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -16,7 +22,13 @@ export const getVendorMenu = async (req: any, res: any) => {
     const userId = req.user.userId;
     const items = await menuService.getVendorMenu(userId);
 
-    res.json({ success: true, data: items });
+    // 🔥 Convert Decimal price -> Number for ALL items
+    const normalizedItems = items.map((item: any) => ({
+      ...item,
+      price: Number(item.price),
+    }));
+
+    res.json({ success: true, data: normalizedItems });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
   }
