@@ -1,6 +1,6 @@
 {
   "name": "makanx-api",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
     "build": "npx prisma generate && npx prisma db push && tsc",
@@ -13,7 +13,7 @@
     "seed": "ts-node-dev prisma/seed.ts"
   },
   "dependencies": {
-    "@makanx/shared": "*",
+    "@makanx/shared": "C:\\Users\\rombj\\Documents\\trae_projects\\MakanX_Improve\\packages\\shared",
     "@prisma/client": "^5.0.0",
     "@types/express-rate-limit": "^6.0.2",
     "@types/multer": "^2.0.0",

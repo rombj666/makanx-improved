@@ -1,7 +1,7 @@
 {
   "name": "makanx-web",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@makanx/shared": "*",
+    "@makanx/shared": "C:\\Users\\rombj\\Documents\\trae_projects\\MakanX_Improve\\packages\\shared",
     "@types/lodash.debounce": "^4.0.9",
     "axios": "^1.4.0",
     "class-variance-authority": "^0.7.1",

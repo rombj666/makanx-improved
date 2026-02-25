@@ -1,5 +1,6 @@
 {
   "name": "makanx-improved",
+  "packageManager": "npm@10.2.4",
   "private": true,
   "workspaces": [
     "apps/*",
