@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
 import { Role } from '@makanx/shared';
@@ -36,15 +36,30 @@ export function Navbar() {
               )}
               {user.role === 'VENDOR' && (
                 <>
-                  <Link to="/vendor/orders" className="text-sm font-medium hover:text-orange-600 transition-colors">
-                    Orders
-                  </Link>
-                  <Link to="/vendor/menu" className="text-sm font-medium hover:text-orange-600 transition-colors">
-                    Menu
-                  </Link>
-                  <Link to="/vendor" className="text-sm font-medium hover:text-orange-600 transition-colors">
+                  <NavLink
+                    to="/vendor"
+                    className={({ isActive }) =>
+                      `text-sm font-medium transition-colors ${isActive ? 'text-orange-600' : 'text-gray-700 hover:text-orange-600'}`
+                    }
+                  >
                     Dashboard
-                  </Link>
+                  </NavLink>
+                  <NavLink
+                    to="/vendor/menu"
+                    className={({ isActive }) =>
+                      `text-sm font-medium transition-colors ${isActive ? 'text-orange-600' : 'text-gray-700 hover:text-orange-600'}`
+                    }
+                  >
+                    Menu
+                  </NavLink>
+                  <NavLink
+                    to="/vendor/map"
+                    className={({ isActive }) =>
+                      `text-sm font-medium transition-colors ${isActive ? 'text-orange-600' : 'text-gray-700 hover:text-orange-600'}`
+                    }
+                  >
+                    Booth
+                  </NavLink>
                 </>
               )}
               <Button variant="outline" size="sm" onClick={logout} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800">

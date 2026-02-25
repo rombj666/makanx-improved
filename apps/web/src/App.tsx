@@ -12,8 +12,8 @@ import { CustomerHome } from './pages/customer/Home';
 import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
 import { VendorDashboard } from './pages/vendor/Dashboard';
-import { VendorOrders } from './pages/vendor/Orders';
 import { VendorMenu } from './pages/vendor/Menu';
+import { VendorMap } from './pages/vendor/Map';
 import { OrganizerDashboard as OrganizerLegacyDashboard } from './pages/organizer/Dashboard';
 import { OrganizerDashboard } from './pages/organizer/OrganizerDashboard';
 import { MapEditor } from './pages/organizer/MapEditor';
@@ -124,8 +124,8 @@ function App() {
                 }
               >
                 <Route index element={<VendorDashboard />} />
-                <Route path="orders" element={<VendorOrders />} />
                 <Route path="menu" element={<VendorMenu />} />
+                <Route path="map" element={<VendorMap />} />
               </Route>
             </Route>
           </Routes>
