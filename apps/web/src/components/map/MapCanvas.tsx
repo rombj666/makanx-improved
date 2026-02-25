@@ -33,6 +33,7 @@ interface MapCanvasProps {
   onViewportChange?: (v: Viewport) => void;
   centerRequestKey?: number;
   onFixMap?: () => void;
+  myBoothId?: string | null;
 }
 
 export function MapCanvas({ 
@@ -46,7 +47,8 @@ export function MapCanvas({
   viewport = { scale: 1, x: 0, y: 0 },
   onViewportChange,
   centerRequestKey = 0,
-  onFixMap
+  onFixMap,
+  myBoothId = null
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -140,6 +142,20 @@ export function MapCanvas({
     setImageError(false);
     // fitToView will trigger via useEffect [naturalSize]
   };
+
+  const hasCenteredRef = useRef(false);
+  useEffect(() => {
+    if (!myBoothId || hasCenteredRef.current) return;
+    const b = booths.find(b => b.id === myBoothId);
+    if (!b || !wrapperRef.current) return;
+    const { clientWidth, clientHeight } = wrapperRef.current;
+    const centerX = b.x + b.width / 2;
+    const centerY = b.y + b.height / 2;
+    const x = clientWidth / 2 - centerX * viewport.scale;
+    const y = clientHeight / 2 - centerY * viewport.scale;
+    onViewportChange?.({ ...viewport, x, y });
+    hasCenteredRef.current = true;
+  }, [myBoothId, booths, onViewportChange, viewport]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     // A) Pan must work even when readOnly=true (removed readOnly check)
@@ -389,17 +405,35 @@ export function MapCanvas({
                     width: booth.width,
                     height: booth.height
                 }}
-                className={`
-                  absolute border-2 flex flex-col items-center justify-center cursor-pointer transition-colors select-none touch-none
-                  ${readOnly ? 'cursor-default' : 'cursor-move hover:z-50'}
-                  ${selectedBoothId === booth.id 
-                    ? 'border-orange-500 bg-orange-100/80 z-50 ring-2 ring-orange-300 ring-offset-1' 
-                    : booth.status === 'OCCUPIED' || booth.vendor
-                      ? 'border-green-500 bg-green-100/80 text-green-900' 
-                      : 'border-blue-500 bg-blue-100/80 text-blue-900'}
-                `}
+                className={(() => {
+                  const isMine = booth.id === myBoothId;
+                  return [
+                    'absolute rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none',
+                    'transition-all duration-300',
+                    readOnly ? 'cursor-default' : 'cursor-move',
+                    isMine
+                      ? 'z-20 scale-105 ring-4 ring-amber-400 shadow-2xl animate-pulse bg-white/70 backdrop-blur-sm'
+                      : 'opacity-70 bg-white/70'
+                  ].join(' ');
+                })()}
                 onPointerDown={(e) => handleBoothPointerDown(e, booth)}
               >
+                {booth.id === myBoothId && (
+                  <div className="absolute inset-0 rounded-xl bg-amber-400/20 blur-xl animate-pulse pointer-events-none" />
+                )}
+                {booth.id === myBoothId && (
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
+                    You are assigned here
+                  </div>
+                )}
+                {booth.id === myBoothId && (
+                  <>
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-amber-500" />
+                    <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-amber-500" />
+                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-amber-500" />
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-amber-500" />
+                  </>
+                )}
                 <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
                     <span className="font-bold text-xs select-none truncate w-full text-center">
                     {booth.name}
@@ -415,19 +449,19 @@ export function MapCanvas({
                 {!readOnly && selectedBoothId === booth.id && (
                     <>
                         <div 
-                            className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-orange-500 cursor-nw-resize z-50"
+                            className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-amber-500 cursor-nw-resize z-50"
                             onPointerDown={(e) => handleResizePointerDown(e, 'nw', booth)} 
                         />
                         <div 
-                            className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-orange-500 cursor-ne-resize z-50"
+                            className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-amber-500 cursor-ne-resize z-50"
                             onPointerDown={(e) => handleResizePointerDown(e, 'ne', booth)}
                         />
                         <div 
-                            className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-orange-500 cursor-sw-resize z-50"
+                            className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-amber-500 cursor-sw-resize z-50"
                             onPointerDown={(e) => handleResizePointerDown(e, 'sw', booth)}
                         />
                         <div 
-                            className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-orange-500 cursor-se-resize z-50"
+                            className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-amber-500 cursor-se-resize z-50"
                             onPointerDown={(e) => handleResizePointerDown(e, 'se', booth)}
                         />
                     </>
