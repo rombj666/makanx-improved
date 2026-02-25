@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "build:shared": "npm run build -w packages/shared",
-    "build:web": "npm run build -w apps/web"
+    "build:web": "npm run build -w apps/web",
+    "build:api": "npm run build -w apps/api",
+    "start:api": "npm run start -w apps/api"
   }
 }
