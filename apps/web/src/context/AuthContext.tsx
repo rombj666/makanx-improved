@@ -7,6 +7,10 @@ interface User {
   email: string;
   name: string;
   role: Role;
+  vendorProfile?: {
+    id: string;
+    businessName?: string;
+  };
 }
 
 interface AuthContextType {

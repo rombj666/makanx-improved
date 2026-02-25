@@ -7,6 +7,7 @@ import { api, toAbsoluteUrl } from '../../lib/api';
 interface Booth {
   id: string;
   name: string;
+  vendorId?: string | null;
   x: number;
   y: number;
   width: number;
@@ -37,7 +38,15 @@ export function VendorMap() {
             const boothsRes = await api.get(`/booths/event/${event.id}`);
             const list: Booth[] = boothsRes?.data?.data || [];
             setBooths(list);
-            setMyBoothId(list[0]?.id || null);
+            const currentVendorId = user?.vendorProfile?.id || null;
+            console.log('Booths:', list);
+            console.log('Current vendorProfile.id:', currentVendorId);
+            const myBooth = list.find((b) => b.vendorId === currentVendorId) || null;
+            console.log('My booth:', myBooth);
+            if (myBooth && (myBooth.x == null || myBooth.y == null || myBooth.width == null || myBooth.height == null)) {
+              console.warn('My booth missing position data:', myBooth);
+            }
+            setMyBoothId(myBooth?.id || null);
           } catch {
             setBooths([]);
             setMyBoothId(null);
@@ -102,7 +111,7 @@ export function VendorMap() {
               )}
             </div>
             
-            <div className="border border-gray-200 rounded-2xl overflow-hidden" style={{ height: '600px' }}>
+            <div className="border border-gray-200 rounded-2xl overflow-hidden relative" style={{ height: '600px' }}>
               <MapCanvas
                 mapImageUrl={mapImageUrl}
                 booths={booths}
