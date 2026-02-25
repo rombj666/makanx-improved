@@ -12,4 +12,5 @@
     "build:api": "npm run build:shared && npm run build -w apps/api",
     "start:api": "npm run start -w apps/api"
   }
+  
 }

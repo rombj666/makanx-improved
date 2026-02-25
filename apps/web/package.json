@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@makanx/shared": "C:\\Users\\rombj\\Documents\\trae_projects\\MakanX_Improve\\packages\\shared",
+    "@makanx/shared": "*",
     "@types/lodash.debounce": "^4.0.9",
     "axios": "^1.4.0",
     "class-variance-authority": "^0.7.1",
@@ -26,7 +26,7 @@
     "react-router-dom": "^6.14.0",
     "socket.io-client": "^4.7.2",
     "tailwind-merge": "^3.4.0",
-    "zod": "^4.3.6"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
