@@ -81,12 +81,9 @@ app.get('/test-route', (req, res) => {
   res.send('TEST OK');
 });
 
-app.get('/', (req, res) => {
-  res.send('MakanX API Running');
-});
-
 if (require.main === module) {
   httpServer.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);
   });
 }
+
