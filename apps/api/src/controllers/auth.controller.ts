@@ -8,7 +8,7 @@ export const register = async (req: Request, res: Response) => {
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues });
     }
     res.status(400).json({ success: false, error: error.message });
   }
@@ -20,7 +20,7 @@ export const login = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues });
     }
     res.status(401).json({ success: false, error: error.message });
   }
@@ -42,7 +42,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues });
     }
     // For security, generic error or success message is preferred, but 
     // service already handles hiding user existence.
@@ -58,7 +58,7 @@ export const confirmPasswordReset = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues });
     }
     res.status(400).json({ success: false, error: error.message });
   }

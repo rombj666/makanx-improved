@@ -19,7 +19,7 @@ export const acceptInvite = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues });
     }
     res.status(400).json({ success: false, error: error.message });
   }

@@ -1,4 +1,4 @@
-import React from 'react';
+import { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
@@ -25,7 +25,7 @@ import { Toaster } from 'react-hot-toast';
 
 import { DebugStatic } from './pages/DebugStatic';
 
-function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
+function ProtectedRoute({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, isLoading, isAuthenticated } = useAuth();
 
   if (isLoading) return <div>Loading...</div>;
