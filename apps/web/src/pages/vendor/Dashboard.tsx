@@ -5,7 +5,7 @@ import { useSocket } from '../../context/SocketContext';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
-import { useNavigate } from "react-router-dom";
+
 
 
 interface Order {
@@ -28,7 +28,6 @@ const COLUMNS = ['PENDING', 'PREPARING', 'READY', 'COMPLETED'];
 
 export function VendorDashboard() {
   // const { user } = useAuth(); // Unused
-  const navigate = useNavigate();
   const { socket } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
 
@@ -98,11 +97,6 @@ export function VendorDashboard() {
            <Button variant="outline" onClick={fetchOrders}>Refresh</Button>
         </div>
       </div>
-        <button
-          onClick={() => navigate("/vendor/map")}
-          className="bg-black text-white px-4 py-2 rounded-full shadow-md hover:scale-105 transition-all"
-        >
-        </button>
       <div className="flex-1 overflow-x-auto">
         <div className="flex gap-4 h-full min-w-[1000px]">
           {COLUMNS.map(status => (

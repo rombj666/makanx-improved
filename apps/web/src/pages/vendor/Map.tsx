@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
+import { api, toAbsoluteUrl } from '../../lib/api';
 
 interface Booth {
   id: string;
@@ -25,41 +26,27 @@ export function VendorMap() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch vendor's booth information and event map data
     const fetchVendorMapData = async () => {
       try {
-        // This would typically be an API call to get the vendor's booth and event map
-        // For now, we'll use mock data to demonstrate the structure
-        const mockBooths: Booth[] = [
-          {
-            id: 'booth-1',
-            name: 'Booth 1',
-            x: 100,
-            y: 100,
-            width: 80,
-            height: 60,
-            status: 'occupied',
-            vendor: {
-              businessName: 'Test Vendor'
-            }
-          },
-          {
-            id: 'booth-2',
-            name: 'Booth 2',
-            x: 200,
-            y: 150,
-            width: 80,
-            height: 60,
-            status: 'available'
+        const { data } = await api.get('/events?status=ACTIVE');
+        const event = data?.data?.[0] || null;
+        if (event) {
+          const resolved = toAbsoluteUrl(event.mapImageUrl) || '/images/event-map.jpg';
+          setMapImageUrl(resolved || '/images/event-map.jpg');
+          try {
+            const boothsRes = await api.get(`/booths/event/${event.id}`);
+            const list: Booth[] = boothsRes?.data?.data || [];
+            setBooths(list);
+            setMyBoothId(list[0]?.id || null);
+          } catch {
+            setBooths([]);
+            setMyBoothId(null);
           }
-        ];
-
-        // Simulate finding the vendor's booth
-        // For now, we'll just use the first booth as a placeholder
-        // In a real implementation, this would be based on the vendor's assigned booth
-        setBooths(mockBooths);
-        setMyBoothId(mockBooths[0]?.id || null);
-        setMapImageUrl('/images/event-map.jpg'); // This would come from the event data
+        } else {
+          setMapImageUrl('/images/event-map.jpg');
+          setBooths([]);
+          setMyBoothId(null);
+        }
       } catch (error) {
         console.error('Failed to fetch map data:', error);
       } finally {
@@ -121,9 +108,9 @@ export function VendorMap() {
                 booths={booths}
                 readOnly={true}
                 myBoothId={myBoothId}
+                onFixMap={() => setMapImageUrl('/images/event-map.jpg')}
                 onBoothClick={(booth) => {
                   if (booth.id === myBoothId) {
-                    // Could navigate to booth details or show more info
                     console.log('Clicked on vendor booth:', booth);
                   }
                 }}
