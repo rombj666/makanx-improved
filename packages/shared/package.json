@@ -1,11 +1,9 @@
 {
   "name": "@makanx/shared",
   "version": "1.0.0",
-  "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build:shared": "npm run build -w packages/shared",
-    "build:web": "npm run build -w apps/web"
+    "build": "tsc"
   }
 }
