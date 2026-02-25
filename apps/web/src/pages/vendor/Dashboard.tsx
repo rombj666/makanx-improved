@@ -7,7 +7,6 @@ import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from "react-router-dom";
 
-const navigate = useNavigate();
 
 interface Order {
   id: string;
@@ -29,6 +28,7 @@ const COLUMNS = ['PENDING', 'PREPARING', 'READY', 'COMPLETED'];
 
 export function VendorDashboard() {
   // const { user } = useAuth(); // Unused
+  const navigate = useNavigate();
   const { socket } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
 
