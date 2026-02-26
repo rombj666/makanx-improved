@@ -18,6 +18,12 @@ interface Booth {
   };
 }
 
+interface EventSummary {
+  id: string;
+  name?: string;
+  mapImageUrl?: string;
+}
+
 export function VendorMap() {
   const { user } = useAuth();
   const { isConnected } = useSocket();
@@ -30,30 +36,68 @@ export function VendorMap() {
     const fetchVendorMapData = async () => {
       try {
         const { data } = await api.get('/events?status=ACTIVE');
-        const event = data?.data?.[0] || null;
-        if (event) {
-          console.log('eventId:', event.id);
-          const resolved = toAbsoluteUrl(event.mapImageUrl) || '/images/event-map.jpg';
-          setMapImageUrl(resolved || '/images/event-map.jpg');
-          try {
-            const boothsRes = await api.get(`/booths/event/${event.id}`);
-            const list: Booth[] = boothsRes?.data?.data || [];
-            setBooths(list);
-            console.log('Fetched booths:', list);
-            const currentVendorId = user?.vendorProfile?.id || null;
-            console.log('Booths:', list);
-            console.log('Current vendorProfile.id:', currentVendorId);
-            const myBooth = list.find((b) => b.vendorId === currentVendorId) || null;
-            console.log('My booth:', myBooth);
-            if (myBooth && (myBooth.x == null || myBooth.y == null || myBooth.width == null || myBooth.height == null)) {
-              console.warn('My booth missing position data:', myBooth);
+        const events: EventSummary[] = data?.data || [];
+        console.log('Active events:', events.map(e => ({ id: e.id, name: e.name })));
+
+        const currentVendorId = user?.vendorProfile?.id || null;
+        // Try to find the event where this vendor has an assigned booth
+        if (events.length > 0) {
+          if (currentVendorId) {
+            // Fetch booths for all events concurrently and find match
+            const results = await Promise.all(events.map(async (e) => {
+              try {
+                const r = await api.get(`/booths/event/${e.id}`);
+                const list: Booth[] = r?.data?.data || [];
+                const myBooth = list.find((b) => b.vendorId === currentVendorId) || null;
+                return { event: e, list, myBooth };
+              } catch {
+                return { event: e, list: [] as Booth[], myBooth: null as Booth | null };
+              }
+            }));
+
+            const found = results.find(r => r.myBooth);
+            if (found) {
+              console.log('Vendor Event:', found.event);
+              console.log('Vendor Booth Page eventId:', found.event.id);
+              console.log('Fetched booths:', found.list);
+              console.log('Current vendorProfile.id:', currentVendorId);
+              console.log('My booth:', found.myBooth);
+              if (found.myBooth && (found.myBooth.x == null || found.myBooth.y == null || found.myBooth.width == null || found.myBooth.height == null)) {
+                console.warn('My booth missing position data:', found.myBooth);
+              }
+              setBooths(found.list);
+              setMyBoothId(found.myBooth?.id || null);
+              const resolved = toAbsoluteUrl(found.event.mapImageUrl) || '/images/event-map.jpg';
+              setMapImageUrl(resolved || '/images/event-map.jpg');
+              return;
             }
-            setMyBoothId(myBooth?.id || null);
-          } catch {
+          }
+
+          // Fallback: use first active event if no assigned booth found
+          const fallback = events[0];
+          console.warn('No matching booth found across active events. Falling back to first event:', fallback?.id);
+          if (fallback) {
+            console.log('Vendor Event:', fallback);
+            console.log('Vendor Booth Page eventId:', fallback.id);
+            const resolved = toAbsoluteUrl(fallback.mapImageUrl) || '/images/event-map.jpg';
+            setMapImageUrl(resolved || '/images/event-map.jpg');
+            try {
+              const boothsRes = await api.get(`/booths/event/${fallback.id}`);
+              const list: Booth[] = boothsRes?.data?.data || [];
+              setBooths(list);
+              console.log('Fetched booths:', list);
+              setMyBoothId(null);
+            } catch {
+              setBooths([]);
+              setMyBoothId(null);
+            }
+          } else {
+            setMapImageUrl('/images/event-map.jpg');
             setBooths([]);
             setMyBoothId(null);
           }
         } else {
+          console.warn('No ACTIVE events returned from API');
           setMapImageUrl('/images/event-map.jpg');
           setBooths([]);
           setMyBoothId(null);
