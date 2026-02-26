@@ -32,12 +32,14 @@ export function VendorMap() {
         const { data } = await api.get('/events?status=ACTIVE');
         const event = data?.data?.[0] || null;
         if (event) {
+          console.log('eventId:', event.id);
           const resolved = toAbsoluteUrl(event.mapImageUrl) || '/images/event-map.jpg';
           setMapImageUrl(resolved || '/images/event-map.jpg');
           try {
             const boothsRes = await api.get(`/booths/event/${event.id}`);
             const list: Booth[] = boothsRes?.data?.data || [];
             setBooths(list);
+            console.log('Fetched booths:', list);
             const currentVendorId = user?.vendorProfile?.id || null;
             console.log('Booths:', list);
             console.log('Current vendorProfile.id:', currentVendorId);

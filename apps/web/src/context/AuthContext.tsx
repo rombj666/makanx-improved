@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const { data } = await api.get('/auth/me');
           if (data.success) {
+            console.log('Logged in user (/auth/me):', data.data);
             setUser(data.data);
           }
         } catch (error) {
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = (token: string, user: User) => {
     localStorage.setItem('token', token);
+    console.log('Logged in user (login):', user);
     setUser(user);
   };
 

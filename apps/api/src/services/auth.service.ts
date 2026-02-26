@@ -58,7 +58,10 @@ export const login = async (input: unknown) => {
   const email = normalizeEmail(parsed.email);
   const { password } = parsed;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ 
+    where: { email },
+    include: { vendorProfile: true }
+  });
 
   console.log('[Auth Debug] Login attempt:', {
     email,
@@ -87,15 +90,39 @@ export const login = async (input: unknown) => {
   }
 
   const token = generateToken({ userId: user.id, role: user.role as Role });
-  return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
+  return { 
+    user: { 
+      id: user.id, 
+      email: user.email, 
+      name: user.name, 
+      role: user.role,
+      vendorProfile: user.vendorProfile ? { 
+        id: user.vendorProfile.id, 
+        businessName: user.vendorProfile.businessName || undefined 
+      } : undefined
+    }, 
+    token 
+  };
 };
 
 export const getMe = async (userId: string) => {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({ 
+    where: { id: userId },
+    include: { vendorProfile: true }
+  });
   if (!user) {
     throw new Error('User not found');
   }
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return { 
+    id: user.id, 
+    email: user.email, 
+    name: user.name, 
+    role: user.role,
+    vendorProfile: user.vendorProfile ? { 
+      id: user.vendorProfile.id, 
+      businessName: user.vendorProfile.businessName || undefined 
+    } : undefined
+  };
 };
 
 export const requestPasswordReset = async (input: unknown) => {
