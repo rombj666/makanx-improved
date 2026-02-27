@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import QRCode from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 
@@ -93,8 +93,12 @@ export function EventToolsDropdown({ event }: Props) {
       >
         <div className="flex flex-col items-center gap-4">
           <div ref={qrRef} className="bg-white p-4 rounded-lg border">
-            <QRCode value={url} size={256} includeMargin />
-          </div>
+          <QRCodeCanvas
+            value={url}
+            size={256}
+            includeMargin
+          />        
+            </div>
           <div className="w-full">
             <p className="text-sm text-gray-600 mb-1">Public URL</p>
             <div className="text-xs break-all px-2 py-1 bg-gray-100 rounded border">
