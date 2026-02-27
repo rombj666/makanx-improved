@@ -56,28 +56,37 @@ export function MapCanvas({
   const [retryKey, setRetryKey] = useState(0);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   
+  // =========================
+  // Customer (readOnly) Zoom/Pan State
+  // =========================
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const lastPinchDistanceRef = useRef<number | null>(null);
+  const lastPinchMidRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  
   // Reset natural size when map URL changes to ensure fitToView triggers on new load
   useEffect(() => {
     setNaturalSize({ width: 0, height: 0 });
   }, [mapImageUrl]);
   
-  // Robust fitToView Logic
+  // Robust fitToView Logic (Organizer only)
   const fitToView = useCallback(() => {
+    if (readOnly) return;
     if (!wrapperRef.current || naturalSize.width === 0 || naturalSize.height === 0) return;
 
     const { clientWidth, clientHeight } = wrapperRef.current;
-    
-    // Calculate fit scale (95% of container)
     const scaleX = clientWidth / naturalSize.width;
     const scaleY = clientHeight / naturalSize.height;
-    const scale = Math.min(scaleX, scaleY) * 0.95;
-    
-    // Center the map
-    const x = (clientWidth - naturalSize.width * scale) / 2;
-    const y = (clientHeight - naturalSize.height * scale) / 2;
-    
-    onViewportChange?.({ scale, x, y });
-  }, [naturalSize, onViewportChange]);
+    const s = Math.min(scaleX, scaleY) * 0.95;
+    const x = (clientWidth - naturalSize.width * s) / 2;
+    const y = (clientHeight - naturalSize.height * s) / 2;
+    onViewportChange?.({ scale: s, x, y });
+  }, [naturalSize, onViewportChange, readOnly]);
 
   // Interaction State
   const [dragging, setDragging] = useState<{
@@ -105,24 +114,26 @@ export function MapCanvas({
     captureEl: null
   });
 
-  // Fit triggers (natural size changed, re-fit only if not dragging)
+  // Fit triggers (Organizer only)
   useEffect(() => {
-    // Only fit if we have a valid image size and not actively dragging
+    if (readOnly) return;
     if (naturalSize.width > 0 && naturalSize.height > 0 && dragging.mode === null) {
       fitToView();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naturalSize, fitToView]);
+  }, [naturalSize, fitToView, readOnly]);
 
-  // Center button request always overrides
+  // Center button request (Organizer only)
   useEffect(() => {
+    if (readOnly) return;
     if (centerRequestKey > 0) {
       fitToView();
     }
-  }, [centerRequestKey, fitToView]);
+  }, [centerRequestKey, fitToView, readOnly]);
 
-  // ResizeObserver for wrapper
+  // ResizeObserver for wrapper (Organizer only)
   useEffect(() => {
+    if (readOnly) return;
     if (!wrapperRef.current) return;
     
     const resizeObserver = new ResizeObserver(() => {
@@ -134,7 +145,7 @@ export function MapCanvas({
     
     resizeObserver.observe(wrapperRef.current);
     return () => resizeObserver.disconnect();
-  }, [fitToView, dragging.mode]);
+  }, [fitToView, dragging.mode, readOnly]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
@@ -317,6 +328,219 @@ export function MapCanvas({
 
   const mapSrc = mapImageUrl || '';
 
+  // =========================
+  // Customer (readOnly) Handlers
+  // =========================
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!readOnly) return;
+    e.preventDefault();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const delta = -e.deltaY * 0.0015;
+    const newScale = clamp(scale * (1 + delta), 0.5, 3);
+
+    const contentX = (mouseX - position.x) / scale;
+    const contentY = (mouseY - position.y) / scale;
+    const newX = mouseX - contentX * newScale;
+    const newY = mouseY - contentY * newScale;
+
+    setScale(newScale);
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handlePointerDownRO = (e: React.PointerEvent) => {
+    if (!readOnly) return;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 1) {
+      dragStartRef.current = { x: e.clientX, y: e.clientY, originX: position.x, originY: position.y };
+    }
+    if (pointersRef.current.size === 2) {
+      const pts = Array.from(pointersRef.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      lastPinchDistanceRef.current = Math.hypot(dx, dy);
+      lastPinchMidRef.current = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    }
+    e.preventDefault();
+  };
+
+  const handlePointerMoveRO = (e: React.PointerEvent) => {
+    if (!readOnly) return;
+    if (!pointersRef.current.has(e.pointerId)) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    const pts = Array.from(pointersRef.current.values());
+    if (pts.length === 2 && lastPinchDistanceRef.current && lastPinchMidRef.current) {
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0) {
+        const factor = dist / lastPinchDistanceRef.current;
+        const newScale = clamp(scale * factor, 0.5, 3);
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        const contentX = (mid.x - position.x) / scale;
+        const contentY = (mid.y - position.y) / scale;
+        const newX = mid.x - contentX * newScale;
+        const newY = mid.y - contentY * newScale;
+        setScale(newScale);
+        setPosition({ x: newX, y: newY });
+        lastPinchDistanceRef.current = dist;
+        lastPinchMidRef.current = mid;
+      }
+      return;
+    }
+
+    if (pts.length === 1 && dragStartRef.current) {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setPosition({ x: dragStartRef.current.originX + dx, y: dragStartRef.current.originY + dy });
+    }
+  };
+
+  const handlePointerUpRO = (e: React.PointerEvent) => {
+    if (!readOnly) return;
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(e.pointerId)) {
+      el.releasePointerCapture(e.pointerId);
+    }
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) {
+      lastPinchDistanceRef.current = null;
+      lastPinchMidRef.current = null;
+    }
+    if (pointersRef.current.size === 0) {
+      dragStartRef.current = null;
+    }
+  };
+
+  if (readOnly) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-full h-full relative overflow-hidden select-none touch-none"
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDownRO}
+        onPointerMove={handlePointerMoveRO}
+        onPointerUp={handlePointerUpRO}
+        onPointerCancel={handlePointerUpRO}
+        style={{ touchAction: 'none' }}
+      >
+        <div
+          ref={contentRef}
+          className="origin-top-left will-change-transform"
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transformOrigin: '0 0',
+            width: 'fit-content',
+            height: 'fit-content',
+            transition: 'none'
+          }}
+        >
+          <div 
+            className="relative bg-white shadow-lg border border-slate-200"
+            style={{ 
+              width: naturalSize.width > 0 ? naturalSize.width : '100%', 
+              height: naturalSize.height > 0 ? naturalSize.height : '100%',
+              minWidth: '100px',
+              minHeight: '100px'
+            }}
+          >
+            {mapSrc && !imageError ? (
+              <img 
+                key={`${mapSrc}-${retryKey}`}
+                src={mapSrc}
+                alt="Event Map"
+                className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none z-0"
+                onError={(e) => {
+                  console.error('Map image failed to load:', mapSrc, e);
+                  setImageError(true);
+                  toast.error('Map image failed to load');
+                }}
+                onLoad={handleImageLoad}
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
+                {imageError ? (
+                  <div className="flex flex-col items-center gap-2 pointer-events-auto">
+                    <span className="text-red-500 mb-1">Failed to load map image</span>
+                    <button
+                      className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        setImageError(false);
+                        setRetryKey((k) => k + 1);
+                      }}
+                    >
+                      <RefreshCw size={14} /> Retry
+                    </button>
+                    {onFixMap && (
+                      <button
+                        className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          onFixMap();
+                        }}
+                      >
+                        Set Default Map
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span>No Map Image Set</span>
+                )}
+              </div>
+            )}
+            <div className="absolute inset-0 z-10">
+              {booths.map(booth => (
+                <div
+                  key={booth.id}
+                  style={{
+                      left: booth.x,
+                      top: booth.y,
+                      width: booth.width,
+                      height: booth.height
+                  }}
+                  className={[
+                    'absolute rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none',
+                    'transition-all duration-300',
+                    booth.id === myBoothId
+                      ? 'z-20 scale-105 ring-4 ring-amber-400 shadow-2xl animate-pulse bg-white/70 backdrop-blur-sm'
+                      : 'opacity-70 bg-white/70'
+                  ].join(' ')}
+                  onPointerDown={(e) => handleBoothPointerDown(e, booth)}
+                >
+                  {booth.id === myBoothId && (
+                    <div className="absolute inset-0 rounded-xl bg-amber-400/20 blur-xl animate-pulse pointer-events-none" />
+                  )}
+                  {booth.id === myBoothId && (
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-3 py-1 rounded-full shadow-lg whitespace-nowrap">
+                      You are assigned here
+                    </div>
+                  )}
+                  <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
+                      <span className="font-bold text-xs select-none truncate w-full text-center">
+                      {booth.name}
+                      </span>
+                      {booth.vendor && (
+                      <span className="text-[10px] bg-white/80 px-1 rounded truncate max-w-full">
+                          {booth.vendor.businessName}
+                      </span>
+                      )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Organizer/editor mode (existing logic)
   return (
     <div 
       ref={wrapperRef}
@@ -345,7 +569,6 @@ export function MapCanvas({
             minHeight: '100px'
           }}
         >
-          {/* Map Image Layer */}
           {mapSrc && !imageError ? (
             <img 
               key={`${mapSrc}-${retryKey}`}
@@ -359,42 +582,38 @@ export function MapCanvas({
               }}
               onLoad={handleImageLoad}
             />
-) : (
-  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
-    {imageError ? (
-      <div className="flex flex-col items-center gap-2 pointer-events-auto">
-        <span className="text-red-500 mb-1">Failed to load map image</span>
-
-        <button
-          className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            setImageError(false);
-            setRetryKey((k) => k + 1);
-          }}
-        >
-          <RefreshCw size={14} /> Retry
-        </button>
-
-        {onFixMap && (
-          <button
-            className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onFixMap(); // ✅ call prop directly (or keep handleFixMap if you defined it)
-            }}
-          >
-            Set Default Map
-          </button>
-        )}
-      </div>
-    ) : (
-      <span>No Map Image Set</span>
-    )}
-  </div>
-)}
-
-          {/* Booths Layer - Manual Rendering replacing Rnd */}
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-0 pointer-events-none">
+              {imageError ? (
+                <div className="flex flex-col items-center gap-2 pointer-events-auto">
+                  <span className="text-red-500 mb-1">Failed to load map image</span>
+                  <button
+                    className="flex items-center gap-2 px-3 py-1 bg-white border rounded shadow-sm hover:bg-gray-50 text-sm text-gray-700"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setImageError(false);
+                      setRetryKey((k) => k + 1);
+                    }}
+                  >
+                    <RefreshCw size={14} /> Retry
+                  </button>
+                  {onFixMap && (
+                    <button
+                      className="flex items-center gap-2 px-3 py-1 bg-orange-50 border border-orange-200 rounded shadow-sm hover:bg-orange-100 text-sm text-orange-700"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        onFixMap();
+                      }}
+                    >
+                      Set Default Map
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <span>No Map Image Set</span>
+              )}
+            </div>
+          )}
           <div className="absolute inset-0 z-10">
             {booths.map(booth => (
               <div
@@ -445,7 +664,6 @@ export function MapCanvas({
                     )}
                 </div>
 
-                {/* Resize Handles (Only when selected and not readOnly) */}
                 {!readOnly && selectedBoothId === booth.id && (
                     <>
                         <div 
