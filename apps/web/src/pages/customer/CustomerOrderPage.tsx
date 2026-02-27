@@ -80,10 +80,14 @@ export function CustomerOrderPage() {
     setIsPlacing(true);
     setError(null);
     try {
+      const guestId = localStorage.getItem('guestId') || crypto.randomUUID();
+      if (!localStorage.getItem('guestId')) localStorage.setItem('guestId', guestId);
+
       const res = await api.post('/orders', {
         vendorId,
         items,
         paymentMode: 'PAY_AT_BOOTH',
+        guestId,
       });
       if (res.data?.success) {
         const { order, estimatedMinutes } = res.data.data;

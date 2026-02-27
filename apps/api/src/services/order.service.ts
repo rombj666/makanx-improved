@@ -21,13 +21,18 @@ const createOrderSchema = z.object({
     })
   ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
+  guestId: z.string().optional(),
 });
 
 export const createOrder = async (
-  customerId: string,
+  customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
 ) => {
-  const { vendorId, items, paymentMode } = createOrderSchema.parse(input);
+  const { vendorId, items, paymentMode, guestId } = createOrderSchema.parse(input);
+
+  // Use guestId as customerId if provided and no customerId from JWT
+  const finalCustomerId = customerId || guestId;
+  if (!finalCustomerId) throw new Error('Customer identity missing');
 
   // Build order items + total
   let totalAmountNumber = 0;
@@ -83,7 +88,7 @@ export const createOrder = async (
 
     const createdOrder = await tx.order.create({
       data: {
-        customerId,
+        customerId: finalCustomerId,
         vendorId,
         boothId: booth.id,
         boothOrderNumber: updated.currentNumber, // starts at 1
@@ -118,12 +123,15 @@ export const createOrder = async (
     AuditAction.ORDER_STATUS_CHANGE,
     result.order.id,
     'Order',
-    customerId,
+    finalCustomerId,
     { status: OrderStatus.PENDING, paymentStatus, paymentMode }
   );
 
   // Realtime: vendor sees new order
   getIO().to(`vendor:${vendorId}`).emit('order_created', result.order);
+
+  // Realtime: customer (guest or logged in)
+  getIO().to(`user:${finalCustomerId}`).emit('order_created_customer', result.order);
 
   return result;
 };

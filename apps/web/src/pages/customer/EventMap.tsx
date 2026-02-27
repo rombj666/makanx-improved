@@ -16,6 +16,14 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [selectedBooth, setSelectedBooth] = useState<any>(null);
 
   useEffect(() => {
+    // Ensure guest identity exists
+    const existing = localStorage.getItem('guestId');
+    if (!existing) {
+      localStorage.setItem('guestId', crypto.randomUUID());
+    }
+  }, []);
+
+  useEffect(() => {
     if (initialEvent) {
       return;
     }

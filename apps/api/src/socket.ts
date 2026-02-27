@@ -30,32 +30,42 @@ export const initSocket = (httpServer: HttpServer) => {
   io.on('connection', (socket: Socket) => {
     console.log('Client connected:', socket.id);
 
-   socket.on('join', async (token: string) => {
-  try {
-    const decoded = verifyToken(token);
-    const { userId, role } = decoded;
-
-    socket.join(`user:${userId}`);
-    console.log(`Socket ${socket.id} joined user:${userId}`);
-
-    if (role === 'VENDOR') {
-      const vendorProfile = await prisma.vendorProfile.findUnique({
-        where: { userId }
-      });
-
-      if (vendorProfile) {
-        socket.join(`vendor:${vendorProfile.id}`);
-        console.log(
-          `Socket ${socket.id} joined vendor:${vendorProfile.id}`
-        );
-      } else {
-        console.warn(`Vendor profile not found for user ${userId}`);
+  socket.on('join', async (payload: string) => {
+    // Check for guest ID format "user:GUEST_ID"
+    if (payload && payload.startsWith('user:')) {
+      const guestId = payload.split(':')[1];
+      if (guestId) {
+        socket.join(`user:${guestId}`);
+        console.log(`Socket ${socket.id} joined guest room user:${guestId}`);
       }
+      return;
     }
-  } catch (e) {
-    console.error('Socket join failed:', e);
-  }
-});
+
+    try {
+      const decoded = verifyToken(payload);
+      const { userId, role } = decoded;
+
+      socket.join(`user:${userId}`);
+      console.log(`Socket ${socket.id} joined user:${userId}`);
+
+      if (role === 'VENDOR') {
+        const vendorProfile = await prisma.vendorProfile.findUnique({
+          where: { userId }
+        });
+
+        if (vendorProfile) {
+          socket.join(`vendor:${vendorProfile.id}`);
+          console.log(
+            `Socket ${socket.id} joined vendor:${vendorProfile.id}`
+          );
+        } else {
+          console.warn(`Vendor profile not found for user ${userId}`);
+        }
+      }
+    } catch (e) {
+      console.error('Socket join failed:', e);
+    }
+  });
 
     socket.on('join_vendor', (vendorId: string) => {
        // verify token again or assume trusted if we had proper middleware

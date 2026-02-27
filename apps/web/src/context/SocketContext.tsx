@@ -20,7 +20,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    const guestId = localStorage.getItem('guestId') || crypto.randomUUID();
+    if (!localStorage.getItem('guestId')) {
+      localStorage.setItem('guestId', guestId);
+    }
+
+    if (!user && !guestId) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -31,13 +36,17 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     const newSocket = io(SOCKET_URL);
 
-newSocket.on('connect', async () => {
-  setIsConnected(true);
+    newSocket.on('connect', async () => {
+      setIsConnected(true);
 
-  newSocket.emit('join', localStorage.getItem('token'));
+      if (user) {
+        newSocket.emit('join', localStorage.getItem('token'));
+      } else {
+        newSocket.emit('join', `user:${guestId}`);
+      }
 
-  if (user.role === Role.VENDOR) {
-    try {
+      if (user?.role === Role.VENDOR) {
+        try {
       const res = await fetch(`${SOCKET_URL}/api/orders/vendor-orders`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`

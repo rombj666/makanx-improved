@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import * as orderController from '../controllers/order.controller';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireRole, optionalAuth } from '../middleware/auth';
 import { Role } from '@makanx/shared';
 
 const router = Router();
 
 // Customer
-router.post('/', requireAuth, requireRole([Role.CUSTOMER]), orderController.createOrder);
-router.get('/my-orders', requireAuth, requireRole([Role.CUSTOMER]), orderController.getCustomerOrders);
+router.post('/', optionalAuth, orderController.createOrder);
+router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
 
 // Vendor
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);

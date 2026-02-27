@@ -9,9 +9,12 @@ const isValidOrderStatus = (value: any): value is OrderStatus => {
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    // Check for user or guest identity
+    if (!req.user && !req.body.guestId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
 
-    const result = await orderService.createOrder(req.user.userId, req.body);
+    const result = await orderService.createOrder(req.user?.userId, req.body);
     return res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
@@ -34,10 +37,14 @@ export const getVendorOrders = async (req: Request, res: Response) => {
 
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
-    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    // customerId is userId (JWT) or guestId (query param)
+    const customerId = req.user?.userId || (req.query.guestId as string);
+    
+    if (!customerId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
 
-    // customerId is userId in your design (guest user created on QR login)
-    const result = await orderService.getCustomerOrders(req.user.userId);
+    const result = await orderService.getCustomerOrders(customerId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });

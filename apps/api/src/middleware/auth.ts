@@ -33,6 +33,22 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next();
+
+  const token = authHeader.split(' ')[1];
+  if (!token) return next();
+
+  try {
+    const decoded = verifyToken(token);
+    req.user = decoded;
+  } catch (error) {
+    // Ignore invalid token in optional auth
+  }
+  next();
+};
+
 export const requireRole = (roles: Role[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
