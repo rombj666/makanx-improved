@@ -170,8 +170,7 @@ export function OrganizerDashboard() {
           </div>
         </div>
         
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <Link to="/organizer/applications">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar relative">          <Link to="/organizer/applications">
             <Button variant="outline" size="sm" className="whitespace-nowrap">
               <FileText size={16} className="mr-2" />
               Apps

@@ -64,8 +64,7 @@ export function EventToolsDropdown({ event }: Props) {
       </Button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-lg z-20 py-1">
-          <button
+        <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-44 bg-white border rounded-md shadow-lg z-50 py-1">          <button
             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
             onClick={handleOpenQr}
           >
