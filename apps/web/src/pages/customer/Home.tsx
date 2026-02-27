@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { EventMap } from './EventMap';
 
 interface Event {
   id: string;
@@ -13,9 +14,31 @@ interface Event {
 }
 
 export function CustomerHome() {
+  const { slug } = useParams();
   const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [eventData, setEventData] = useState<any | null>(null);
 
   useEffect(() => {
+    if (slug) {
+      const run = async () => {
+        try {
+          setLoading(true);
+          const res = await api.post('/auth/customer/qr', { slug });
+          const { accessToken, event } = res.data.data;
+          localStorage.setItem('customer_token', accessToken);
+          api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+          setEventData(event);
+        } catch (error) {
+          console.error(error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      run();
+      return;
+    }
+
     const fetchEvents = async () => {
       try {
         const { data } = await api.get('/events');
@@ -27,7 +50,19 @@ export function CustomerHome() {
       }
     };
     fetchEvents();
-  }, []);
+  }, [slug]);
+
+  if (slug) {
+    if (loading || !eventData) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600" />
+        </div>
+      );
+    }
+
+    return <EventMap event={eventData} />;
+  }
 
   return (
     <div className="container mx-auto p-6">

@@ -125,6 +125,27 @@ export const getMe = async (userId: string) => {
   };
 };
 
+export const customerQrLoginBySlug = async (slug: string) => {
+  const event = await prisma.event.findUnique({
+    where: { slug }
+  });
+  if (!event) {
+    throw new Error('Invalid event');
+  }
+  const email = `guest+${Date.now()}-${Math.random().toString(36).slice(2, 8)}@makanx.local`;
+  const passwordHash = await hashPassword(Math.random().toString(36));
+  const user = await prisma.user.create({
+    data: {
+      email,
+      password: passwordHash,
+      name: 'Guest',
+      role: Role.CUSTOMER
+    }
+  });
+  const token = generateToken({ userId: user.id, role: user.role as Role });
+  return { accessToken: token, user, event };
+};
+
 export const requestPasswordReset = async (input: unknown) => {
   const parsed = requestResetSchema.parse(input);
   const email = normalizeEmail(parsed.email);

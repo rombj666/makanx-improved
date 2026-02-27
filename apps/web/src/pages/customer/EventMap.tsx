@@ -4,13 +4,20 @@ import { api } from '../../lib/api';
 import { VendorModal } from '../../components/VendorModal';
 import { cn } from '../../lib/utils';
 
-export function EventMap() {
+interface EventMapProps {
+  event?: any;
+}
+
+export function EventMap({ event: initialEvent }: EventMapProps) {
   const { slug } = useParams();
-  const [event, setEvent] = useState<any>(null);
+  const [event, setEvent] = useState<any>(initialEvent || null);
   const [selectedBooth, setSelectedBooth] = useState<any>(null);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
+    if (initialEvent) {
+      return;
+    }
     const fetchEvent = async () => {
       try {
         const { data } = await api.get(`/events/${slug}`);
@@ -21,8 +28,10 @@ export function EventMap() {
         console.error(error);
       }
     };
-    fetchEvent();
-  }, [slug]);
+    if (slug) {
+      fetchEvent();
+    }
+  }, [slug, initialEvent]);
 
   if (!event) return <div className="flex h-screen items-center justify-center">Loading event...</div>;
 

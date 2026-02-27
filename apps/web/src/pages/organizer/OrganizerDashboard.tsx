@@ -19,6 +19,7 @@ import {
 interface Event {
   id: string;
   name: string;
+  slug: string;
   status: 'ACTIVE' | 'ARCHIVED';
   mapImageUrl?: string;
 }
@@ -26,6 +27,7 @@ interface Event {
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Plus, MapPin, Calendar } from 'lucide-react';
+import { EventToolsDropdown } from '../../components/organizer/EventToolsDropdown';
 
 export function OrganizerDashboard() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -48,7 +50,7 @@ export function OrganizerDashboard() {
 
   useEffect(() => {
     if (selectedEventId) {
-      fetchEventBooths(selectedEventId);
+      fetchEventBooths(selectedEventId);  
     } else {
       setBooths([]);
     }
@@ -187,6 +189,9 @@ export function OrganizerDashboard() {
               Sales
             </Button>
           </Link>
+          {selectedEvent && (
+            <EventToolsDropdown event={selectedEvent} />
+          )}
           <Button 
             size="sm" 
             className="whitespace-nowrap bg-orange-600 hover:bg-orange-700"

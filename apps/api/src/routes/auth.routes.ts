@@ -18,6 +18,7 @@ const resetLimiter = rateLimit({
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.get('/me', requireAuth, authController.getMe);
+router.post('/customer/qr', authController.customerQrLogin);
 
 // Password Reset
 router.post('/password/reset/request', resetLimiter, authController.requestPasswordReset);

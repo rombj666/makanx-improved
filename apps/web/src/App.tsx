@@ -79,6 +79,7 @@ function App() {
               */}
               <Route path="/home" element={<CustomerHome />} />
               
+              <Route path="/customer/:slug" element={<CustomerHome />} />
               <Route path="/customer/event/:slug" element={<EventMap />} />
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
