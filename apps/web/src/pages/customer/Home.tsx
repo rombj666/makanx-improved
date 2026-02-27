@@ -16,14 +16,12 @@ interface Event {
 export function CustomerHome() {
   const { slug } = useParams();
   const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(false);
   const [eventData, setEventData] = useState<any | null>(null);
 
   useEffect(() => {
     if (slug) {
       const run = async () => {
         try {
-          setLoading(true);
           const res = await api.post('/auth/customer/qr', { slug });
           const { accessToken, event } = res.data.data;
           localStorage.setItem('customer_token', accessToken);
@@ -31,8 +29,6 @@ export function CustomerHome() {
           setEventData(event);
         } catch (error) {
           console.error(error);
-        } finally {
-          setLoading(false);
         }
       };
       run();
@@ -53,15 +49,25 @@ export function CustomerHome() {
   }, [slug]);
 
   if (slug) {
-    if (loading || !eventData) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600" />
+    return (
+      <div className="relative w-full h-full">
+        <div className="absolute inset-0">
+          <EventMap event={eventData || undefined} />
         </div>
-      );
-    }
-
-    return <EventMap event={eventData} />;
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md rounded-full px-6 py-2 shadow-lg">
+          <h1 className="text-sm font-semibold text-gray-800">
+            {eventData?.name || 'Loading...'}
+          </h1>
+        </div>
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 w-[90%] max-w-md">
+          <input
+            type="text"
+            placeholder="Search food or vendor..."
+            className="w-full rounded-full px-4 py-2 shadow-md border focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
