@@ -24,6 +24,7 @@ import { Role } from '@makanx/shared';
 import { Toaster } from 'react-hot-toast';
 
 import { DebugStatic } from './pages/DebugStatic';
+import { CustomerLayout } from './layouts/CustomerLayout';
 
 function ProtectedRoute({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -64,23 +65,16 @@ function App() {
       <SocketProvider>
         <BrowserRouter>
           <Routes>
-            <Route element={<Layout />}>
-              {/* Public Routes */}
-              <Route path="/" element={<Navigate to="/login" replace />} />
-              {/* Customer Home was at /, now accessible via... maybe just for logged in users? 
-                  Or maybe we move CustomerHome to /events or /home? 
-                  The prompt says "no default landing page", implying the app is gated. 
-                  But CustomerHome was public before. 
-                  "Ensure "/" redirects to "/login" (no default landing page)."
-                  I will assume the public event page /customer/event/:slug is still accessible.
-                  But the generic home list is gone or hidden.
-                  Let's create a /home route for CustomerHome if needed, OR just hide it.
-                  I'll map /home to CustomerHome for now so it's not lost.
-              */}
-              <Route path="/home" element={<CustomerHome />} />
-              
+            {/* CUSTOMER ROUTES (NO NAVBAR) */}
+            <Route element={<CustomerLayout />}>
               <Route path="/customer/:slug" element={<CustomerHome />} />
               <Route path="/customer/event/:slug" element={<EventMap />} />
+            </Route>
+
+            {/* DASHBOARD ROUTES (WITH NAVBAR) */}
+            <Route element={<Layout />}>
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/home" element={<CustomerHome />} />
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/application-status" element={<ApplicationStatusPage />} />
