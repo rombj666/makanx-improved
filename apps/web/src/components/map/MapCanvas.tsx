@@ -320,7 +320,7 @@ export function MapCanvas({
   return (
     <div 
       ref={wrapperRef}
-      className="relative bg-gray-100 overflow-hidden w-full h-full select-none"
+      className="w-full h-full relative overflow-hidden select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

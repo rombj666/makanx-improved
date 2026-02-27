@@ -52,7 +52,7 @@ export function CustomerHome() {
     return (
       <div className="relative w-full h-full">
         <div className="absolute inset-0">
-          <EventMap event={eventData || undefined} />
+          <EventMap slug={slug} />
         </div>
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md rounded-full px-6 py-2 shadow-lg">
           <h1 className="text-sm font-semibold text-gray-800">
