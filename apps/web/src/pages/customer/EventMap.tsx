@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
+import { getOrCreateGuestId } from '../../lib/guest';
 
 interface EventMapProps {
   event?: any;
@@ -15,13 +16,8 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [event, setEvent] = useState<any>(initialEvent || null);
   const [selectedBooth, setSelectedBooth] = useState<any>(null);
 
-  useEffect(() => {
-    // Ensure guest identity exists
-    const existing = localStorage.getItem('guestId');
-    if (!existing) {
-      localStorage.setItem('guestId', crypto.randomUUID());
-    }
-  }, []);
+  // Stable guestId using useMemo to avoid regeneration in StrictMode
+  const guestId = useMemo(() => getOrCreateGuestId(), []);
 
   useEffect(() => {
     if (initialEvent) {

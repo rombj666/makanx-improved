@@ -8,8 +8,8 @@ import { createAuditLog } from './audit.service';
  * Create Order
  * - Validates menu items belong to vendor
  * - Calculates total
- * - Finds vendor's booth (first assigned booth)
- * - Uses BoothOrderCounter to assign boothOrderNumber starting from 1 and never resetting
+ * - Validates vendor has an assigned booth (first assigned booth)
+ * - Assigns order without booth-specific numbering (schema has no booth counters)
  * - Returns { order, estimatedMinutes }
  */
 const createOrderSchema = z.object({
@@ -63,7 +63,7 @@ export const createOrder = async (
   const paymentStatus =
     paymentMode === PaymentMode.MOCK_PAID ? PaymentStatus.PAID : PaymentStatus.PENDING;
 
-  // Find booth for this vendor (first assigned booth)
+  // Ensure the vendor has at least one assigned booth
   const booth = await prisma.booth.findFirst({
     where: { vendorId },
     select: { id: true },
@@ -71,27 +71,12 @@ export const createOrder = async (
 
   if (!booth) throw new Error('Vendor has no assigned booth');
 
-  // Transaction: increment counter + create order + compute ETA
+  // Transaction: create order + compute ETA (vendor-based)
   const result = await prisma.$transaction(async (tx) => {
-    // Ensure counter exists
-    const counter = await tx.boothOrderCounter.upsert({
-      where: { boothId: booth.id },
-      create: { boothId: booth.id, currentNumber: 0 },
-      update: {}, // no-op
-    });
-
-    // Increment and get new number
-    const updated = await tx.boothOrderCounter.update({
-      where: { boothId: booth.id },
-      data: { currentNumber: { increment: 1 } },
-    });
-
     const createdOrder = await tx.order.create({
       data: {
         customerId: finalCustomerId,
         vendorId,
-        boothId: booth.id,
-        boothOrderNumber: updated.currentNumber, // starts at 1
         totalAmount,
         status: OrderStatus.PENDING,
         paymentMode,
@@ -104,12 +89,9 @@ export const createOrder = async (
       },
     });
 
-    // ETA: count pending+preparing for booth (includes this order)
+    // ETA: count pending+preparing for this vendor (includes this order)
     const pendingCount = await tx.order.count({
-      where: {
-        boothId: booth.id,
-        status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING] },
-      },
+      where: { vendorId, status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING] } },
     });
 
     const avgMinutesPerOrder = 5;
@@ -148,7 +130,6 @@ export const getVendorOrders = async (userId: string) => {
     include: {
       items: { include: { menuItem: true } },
       customer: { select: { name: true } },
-      booth: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -163,7 +144,6 @@ export const getCustomerOrders = async (customerId: string) => {
     include: {
       items: { include: { menuItem: true } },
       vendor: { select: { businessName: true } },
-      booth: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -196,7 +176,6 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
     include: {
       items: { include: { menuItem: true } },
       vendor: { select: { businessName: true } },
-      booth: { select: { id: true, name: true } },
     },
   });
 

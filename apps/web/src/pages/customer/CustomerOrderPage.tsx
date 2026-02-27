@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { getOrCreateGuestId } from '../../lib/guest';
 
 interface MenuItem {
   id: string;
@@ -80,8 +81,7 @@ export function CustomerOrderPage() {
     setIsPlacing(true);
     setError(null);
     try {
-      const guestId = localStorage.getItem('guestId') || crypto.randomUUID();
-      if (!localStorage.getItem('guestId')) localStorage.setItem('guestId', guestId);
+      const guestId = getOrCreateGuestId();
 
       const res = await api.post('/orders', {
         vendorId,
