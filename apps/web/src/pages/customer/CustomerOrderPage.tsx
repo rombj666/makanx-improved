@@ -119,7 +119,6 @@ export function CustomerOrderPage() {
           updatedAt: order.updatedAt,
           displayNumber,
         });
-        subscribeToPush(guestId);
       } else {
         setError('Order failed');
       }
@@ -160,6 +159,17 @@ export function CustomerOrderPage() {
               </div>
             </div>
           )}
+          <div className="mt-3 p-3 border rounded-lg text-sm">
+            <div className="mb-2">Enable Order Notifications 🔔</div>
+            <div className="flex items-center gap-2 justify-center">
+              <button
+                onClick={() => subscribeToPush(getOrCreateGuestId())}
+                className="px-3 py-2 rounded bg-black text-white"
+              >
+                Enable Order Notifications
+              </button>
+            </div>
+          </div>
           <button
             onClick={() => navigate(`/customer/event/${slug}`)}
             className="mt-4 px-4 py-2 rounded-lg bg-black text-white"

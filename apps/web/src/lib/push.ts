@@ -25,11 +25,6 @@ export const subscribeToPush = async (customerId: string) => {
   if (!("serviceWorker" in navigator)) return;
   if (!("PushManager" in window)) return;
 
-  const existing = localStorage.getItem("mx_notif_asked");
-  if (existing === "1") return;
-
-  localStorage.setItem("mx_notif_asked", "1");
-
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return;
 

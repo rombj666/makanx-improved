@@ -96,10 +96,7 @@ export function VendorDashboard() {
   };
 
   const getOrdersByStatus = (status: string) => {
-    return orders.filter(o => {
-      const displayStatus = o.status === 'PENDING' ? 'PREPARING' : o.status;
-      return displayStatus === status;
-    });
+    return orders.filter(o => o.status === status);
   };
 
   const [productionBatch, setProductionBatch] = useState<
@@ -257,29 +254,7 @@ export function VendorDashboard() {
                           ))}
                         </ul>
 
-                        <div className="flex flex-col gap-2 mt-2">
-                          {order.status === 'PENDING' && (
-                            <Button
-                              size="sm"
-                              onClick={() => updateStatus(order.id, 'PREPARING')}
-                            >
-                              Accept
-                            </Button>
-                          )}
-                          {order.status === 'PREPARING' && (
-                            <Button size="sm" onClick={() => updateStatus(order.id, 'READY')}>
-                              Mark Ready
-                            </Button>
-                          )}
-                          {order.status === 'READY' && (
-                            <Button
-                              size="sm"
-                              onClick={() => updateStatus(order.id, 'COMPLETED')}
-                            >
-                              Complete
-                            </Button>
-                          )}
-                        </div>
+
                       </CardContent>
                     </Card>
                   ))}
