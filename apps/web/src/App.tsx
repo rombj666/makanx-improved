@@ -24,6 +24,7 @@ import { Role } from '@makanx/shared';
 import { Toaster } from 'react-hot-toast';
 
 import { DebugStatic } from './pages/DebugStatic';
+import { CustomerOrderPage } from './pages/customer/CustomerOrderPage';
 import { CustomerLayout } from './layouts/CustomerLayout';
 
 function ProtectedRoute({ children, roles }: { children: ReactNode; roles?: Role[] }) {
@@ -69,6 +70,7 @@ function App() {
             <Route element={<CustomerLayout />}>
               <Route path="/customer/:slug" element={<CustomerHome />} />
               <Route path="/customer/event/:slug" element={<EventMap />} />
+              <Route path="/customer/event/:slug/order/:vendorId" element={<CustomerOrderPage />} />
             </Route>
 
             {/* DASHBOARD ROUTES (WITH NAVBAR) */}
