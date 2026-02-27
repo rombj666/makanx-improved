@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../context/SocketContext';
 // import { useAuth } from '../../context/AuthContext';
@@ -28,6 +28,13 @@ interface Order {
 }
 
 const COLUMNS = ['PREPARING', 'READY', 'COMPLETED'] as const;
+type Column = (typeof COLUMNS)[number];
+
+type ProductionWindow = {
+  windowStart: string;
+  windowEnd: string;
+  items: { productId: string; productName: string; totalQty: number }[];
+};
 
 export function VendorDashboard() {
   // const { user } = useAuth(); // Unused
@@ -35,7 +42,6 @@ export function VendorDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewMode, setViewMode] = useState<'kitchen' | 'fulfillment'>('kitchen');
   const [groupingEnabled, setGroupingEnabled] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -64,7 +70,6 @@ export function VendorDashboard() {
 
   const fetchOrders = async () => {
     try {
-      setIsLoading(true);
       const { data } = await api.get('/orders/vendor-orders');
       if (data.success) {
         setOrders(data.data);
@@ -77,21 +82,6 @@ export function VendorDashboard() {
       }
     } catch (error) {
       console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const updateStatus = async (orderId: string, status: string) => {
-    try {
-      const { data } = await api.patch(`/orders/${orderId}/status`, { status });
-      if (data.success) {
-        setOrders(prev => prev.map(o => o.id === orderId ? data.data : o));
-        toast.success(`Order marked as ${status}`);
-        fetchOrders();
-      }
-    } catch (error) {
-      toast.error('Failed to update status');
     }
   };
 
@@ -99,13 +89,7 @@ export function VendorDashboard() {
     return orders.filter(o => o.status === status);
   };
 
-  const [productionBatch, setProductionBatch] = useState<
-    {
-      windowStart: string;
-      windowEnd: string;
-      items: { productId: string; productName: string; totalQty: number }[];
-    }[]
-  >([]);
+  const [productionBatch, setProductionBatch] = useState<ProductionWindow[]>([]);
 
   const fetchProductionBatch = async () => {
     if (!groupingEnabled) return;
@@ -119,37 +103,131 @@ export function VendorDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (groupingEnabled) {
-      fetchProductionBatch();
-    }
-  }, [groupingEnabled]);
+  const KitchenQueueView = ({
+    groupingEnabled,
+    setGroupingEnabled,
+    productionWindows,
+    onRefreshBatch,
+  }: {
+    groupingEnabled: boolean;
+    setGroupingEnabled: Dispatch<SetStateAction<boolean>>;
+    productionWindows: ProductionWindow[];
+    onRefreshBatch: () => void;
+  }) => {
+    useEffect(() => {
+      if (!groupingEnabled) return;
+      onRefreshBatch();
+      const interval = setInterval(() => {
+        onRefreshBatch();
+      }, 10000);
+      return () => clearInterval(interval);
+    }, [groupingEnabled, onRefreshBatch]);
 
-  useEffect(() => {
-    if (!groupingEnabled || viewMode !== 'kitchen') return;
-    const interval = setInterval(() => {
-      fetchProductionBatch();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [groupingEnabled, viewMode]);
+    return (
+      <div className="flex-1 overflow-x-auto">
+        <div className="flex justify-between items-center mb-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300"
+              checked={groupingEnabled}
+              onChange={(e) => setGroupingEnabled(e.target.checked)}
+            />
+            Group production by 5-min windows
+          </label>
+        </div>
 
-  const fulfillmentOrders = useMemo(
-    () => orders.filter((o) => o.status === 'PREPARING' || o.status === 'READY'),
-    [orders]
-  );
+        {!groupingEnabled && (
+          <div className="mb-4 rounded-lg border bg-white p-4 text-sm text-gray-500">
+            Enable grouping to view production queue.
+          </div>
+        )}
 
-  const aggregateItems = (items: OrderItem[]) => {
-    const map = new Map<string, { name: string; quantity: number }>();
-    items.forEach((item) => {
-      const key = item.menuItem.name;
-      const existing = map.get(key);
-      if (existing) {
-        existing.quantity += item.quantity;
-      } else {
-        map.set(key, { name: item.menuItem.name, quantity: item.quantity });
-      }
-    });
-    return Array.from(map.values());
+        {/* Block A (Grouped Windows Panel) START: was L194, ends L224 */}
+        {groupingEnabled && (
+          <>
+            {productionWindows.length === 0 ? (
+              <div className="mb-4 rounded-lg border bg-white p-4 text-sm text-gray-500">
+                No unfinished orders in any window.
+              </div>
+            ) : (
+              productionWindows.map((win) => {
+                const start = new Date(win.windowStart);
+                const end = new Date(win.windowEnd);
+                const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={win.windowStart} className="rounded-lg border bg-white p-4 mb-4">
+                    <div className="text-sm font-semibold mb-2">
+                      {fmt(start)} – {fmt(end)}
+                    </div>
+                    <ul className="text-sm space-y-1">
+                      {win.items.map((item) => (
+                        <li key={item.productId} className="flex justify-between">
+                          <span>{item.productName}</span>
+                          <span className="font-semibold">{item.totalQty} cups</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+        {/* Block A (Grouped Windows Panel) END: was L194, ends L224 */}
+      </div>
+    );
+  };
+
+  const FulfillmentBoardView = ({
+    orders,
+    COLUMNS,
+    getOrdersByStatus,
+  }: {
+    orders: Order[];
+    COLUMNS: readonly Column[];
+    getOrdersByStatus: (status: string) => Order[];
+  }) => {
+    void orders;
+    return (
+      <div className="flex-1 overflow-x-auto">
+        {/* Block B (3 Columns Board) START: was L225, ends L264 */}
+        <div className="flex gap-4 h-full min-w-[1000px]">
+          {COLUMNS.map((status) => (
+            <div key={status} className="flex-1 bg-gray-50 rounded-lg p-4 flex flex-col">
+              <h3 className="font-bold text-lg mb-4 text-center sticky top-0 bg-gray-50 pb-2 border-b">
+                {status} ({getOrdersByStatus(status).length})
+              </h3>
+              <div className="flex-1 overflow-y-auto space-y-4">
+                {getOrdersByStatus(status).map((order) => (
+                  <Card key={order.id} className="cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold">#{order.id.slice(-4)}</span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(order.createdAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium mb-2">{order.customer?.name ?? 'Guest'}</p>
+                      <ul className="text-sm space-y-1 mb-3">
+                        {order.items.map((item, idx) => (
+                          <li key={idx} className="flex justify-between">
+                            <span>
+                              {item.quantity}x {item.menuItem.name}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Block B (3 Columns Board) END: was L225, ends L264 */}
+      </div>
+    );
   };
 
   return (
@@ -173,172 +251,28 @@ export function VendorDashboard() {
               Order Fulfillment
             </Button>
           </div>
-          <Button variant="outline" onClick={() => { fetchOrders(); if (groupingEnabled) fetchProductionBatch(); }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              fetchOrders();
+              if (groupingEnabled) fetchProductionBatch();
+            }}
+          >
             Refresh
           </Button>
         </div>
       </div>
-      {viewMode === 'kitchen' && (
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex justify-between items-center mb-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="rounded border-gray-300"
-                checked={groupingEnabled}
-                onChange={(e) => setGroupingEnabled(e.target.checked)}
-              />
-              Group production by 5-min windows
-            </label>
-          </div>
-          {groupingEnabled && (
-            <>
-              {productionBatch.length === 0 ? (
-                <div className="mb-4 rounded-lg border bg-white p-4 text-sm text-gray-500">
-                  No unfinished orders in any window.
-                </div>
-              ) : (
-                productionBatch.map((win) => {
-                  const start = new Date(win.windowStart);
-                  const end = new Date(win.windowEnd);
-                  const fmt = (d: Date) =>
-                    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  return (
-                    <div key={win.windowStart} className="rounded-lg border bg-white p-4 mb-4">
-                      <div className="text-sm font-semibold mb-2">
-                        {fmt(start)} – {fmt(end)}
-                      </div>
-                      <ul className="text-sm space-y-1">
-                        {win.items.map((item) => (
-                          <li key={item.productId} className="flex justify-between">
-                            <span>{item.productName}</span>
-                            <span className="font-semibold">{item.totalQty} cups</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })
-              )}
-            </>
-          )}
-          <div className="flex gap-4 h-full min-w-[1000px]">
-            {COLUMNS.map((status) => (
-              <div key={status} className="flex-1 bg-gray-50 rounded-lg p-4 flex flex-col">
-                <h3 className="font-bold text-lg mb-4 text-center sticky top-0 bg-gray-50 pb-2 border-b">
-                  {status} ({getOrdersByStatus(status).length})
-                </h3>
-                <div className="flex-1 overflow-y-auto space-y-4">
-                  {getOrdersByStatus(status).map((order) => (
-                    <Card
-                      key={order.id}
-                      className="cursor-pointer hover:shadow-md transition-shadow"
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-bold">#{order.id.slice(-4)}</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(order.createdAt).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-sm font-medium mb-2">
-                          {order.customer?.name ?? 'Guest'}
-                        </p>
-                        <ul className="text-sm space-y-1 mb-3">
-                          {order.items.map((item, idx) => (
-                            <li key={idx} className="flex justify-between">
-                              <span>
-                                {item.quantity}x {item.menuItem.name}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-
-
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {viewMode === "kitchen" && (
+        <KitchenQueueView
+          groupingEnabled={groupingEnabled}
+          setGroupingEnabled={setGroupingEnabled}
+          productionWindows={productionBatch}
+          onRefreshBatch={fetchProductionBatch}
+        />
       )}
-      {viewMode === 'fulfillment' && (
-        <div className="flex-1 overflow-y-auto">
-          {isLoading && (
-            <div className="flex justify-center items-center h-full text-sm text-gray-500">
-              Loading orders...
-            </div>
-          )}
-          {!isLoading && fulfillmentOrders.length === 0 && (
-            <div className="text-center text-gray-500 mt-12 text-sm">
-              No PREPARING or READY orders.
-            </div>
-          )}
-          {!isLoading && fulfillmentOrders.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {fulfillmentOrders.map((order) => {
-                const aggregated = aggregateItems(order.items);
-                const totalItems = aggregated.reduce((sum, it) => sum + it.quantity, 0);
-                return (
-                  <Card key={order.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-bold text-lg">#{order.id.slice(-4)}</div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(order.createdAt).toLocaleTimeString()}
-                          </div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            {order.customer?.name ?? 'Guest'}
-                          </div>
-                        </div>
-                        <div className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
-                          {order.status}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 mb-1">Items</div>
-                        <ul className="text-sm space-y-0.5">
-                          {aggregated.map((item) => (
-                            <li key={item.name} className="flex justify-between">
-                              <span>{item.name}</span>
-                              <span className="font-medium">x{item.quantity}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="text-xs text-gray-500 mt-2">
-                          Total items: <span className="font-semibold">{totalItems}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        {order.status === 'PREPARING' && (
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => updateStatus(order.id, 'READY')}
-                          >
-                            Mark READY
-                          </Button>
-                        )}
-                        {order.status === 'READY' && (
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => updateStatus(order.id, 'COMPLETED')}
-                          >
-                            Complete Order
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
+
+      {viewMode === "fulfillment" && (
+        <FulfillmentBoardView orders={orders} COLUMNS={COLUMNS} getOrdersByStatus={getOrdersByStatus} />
       )}
     </div>
   );
