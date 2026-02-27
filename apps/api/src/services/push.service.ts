@@ -83,7 +83,9 @@ export const sendReadyNotification = async (order: {
           } as any,
           payload
         );
+        console.log('Push sent');
       } catch (err: any) {
+        console.error('Push error:', err);
         const statusCode = err?.statusCode || err?.statusCode === 0 ? err.statusCode : undefined;
         if (statusCode === 404 || statusCode === 410) {
           await prisma.pushSubscription.delete({
@@ -94,4 +96,3 @@ export const sendReadyNotification = async (order: {
     })
   );
 };
-

@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { registerServiceWorker } from "./lib/push";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -10,4 +9,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-registerServiceWorker();
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}

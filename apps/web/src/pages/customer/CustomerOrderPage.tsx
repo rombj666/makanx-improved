@@ -6,7 +6,6 @@ import { getOrCreateGuestId } from '../../lib/guest';
 import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
 import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { subscribeToPush } from '../../lib/push';
 import { enableSound, primeReadySound, isSoundEnabled } from '../../lib/alerts';
 
 interface MenuItem {
@@ -36,6 +35,48 @@ export function CustomerOrderPage() {
   const [confirmed, setConfirmed] = useState<{ number: string; eta: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { addOrUpdate } = useCustomerOrders(slug || '');
+  const enableNotification = async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Notification permission denied.');
+        return;
+      }
+      if (!('serviceWorker' in navigator)) {
+        alert('Service worker not supported.');
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      if (!publicKey) {
+        alert('Notification configuration error.');
+        return;
+      }
+      const convertedKey = (function urlBase64ToUint8Array(base64String: string) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+      })(publicKey as string);
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey,
+      });
+      const customerId = getOrCreateGuestId();
+      await api.post('/push/subscribe', {
+        customerId,
+        subscription,
+      });
+      alert('Notifications enabled!');
+      navigate(`/customer/event/${slug}`);
+    } catch (error) {
+      alert('Failed to enable notifications.');
+    }
+  };
 
   useEffect(() => {
     const run = async () => {
@@ -121,7 +162,7 @@ export function CustomerOrderPage() {
         });
       } else {
         setError('Order failed');
-      }
+      } 
     } catch (e: any) {
       setError(e.response?.data?.error || 'Order failed');
     } finally {
@@ -163,7 +204,7 @@ export function CustomerOrderPage() {
             <div className="mb-2">Enable Order Notifications 🔔</div>
             <div className="flex items-center gap-2 justify-center">
               <button
-                onClick={() => subscribeToPush(getOrCreateGuestId())}
+                onClick={enableNotification}
                 className="px-3 py-2 rounded bg-black text-white"
               >
                 Enable Order Notifications

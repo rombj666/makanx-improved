@@ -13,6 +13,7 @@ import organizerUploadRoutes from './routes/organizerUploadRoutes';
 import uploadRoutes from './routes/upload.routes';
 import menuRoutes from './routes/menu.routes';
 import pushRoutes from './routes/push.routes';
+import webpush from 'web-push';
 
 import { configureSecurity } from './middleware/security';
 
@@ -64,6 +65,15 @@ app.use(express.json());
 import path from 'path';
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+const vapidSubject = process.env.VAPID_EMAIL || process.env.VAPID_SUBJECT || '';
+const vapidPublic = process.env.VAPID_PUBLIC_KEY || '';
+const vapidPrivate = process.env.VAPID_PRIVATE_KEY || '';
+if (vapidSubject && vapidPublic && vapidPrivate) {
+  try {
+    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+  } catch {}
+}
 
 // Routes
 const apiRouter = express.Router();
