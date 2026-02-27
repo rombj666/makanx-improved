@@ -86,7 +86,6 @@ export const createOrder = async (
       },
       include: {
         items: { include: { menuItem: true } },
-        customer: { select: { name: true, email: true } },
       },
     });
 
@@ -130,10 +129,91 @@ export const getVendorOrders = async (userId: string) => {
     where: { vendorId: vendorProfile.id },
     include: {
       items: { include: { menuItem: true } },
-      customer: { select: { name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
+};
+
+export const getVendorProductionBatch = async (userId: string) => {
+  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendorProfile) throw new Error('Vendor profile not found');
+
+  const windowMs = 5 * 60 * 1000;
+
+  const orders = await prisma.order.findMany({
+    where: {
+      vendorId: vendorProfile.id,
+      NOT: { status: OrderStatus.COMPLETED },
+    },
+    include: {
+      items: {
+        include: {
+          menuItem: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  type WindowAgg = {
+    windowStart: string;
+    windowEnd: string;
+    items: { productId: string; productName: string; totalQty: number }[];
+  };
+
+  const map = new Map<
+    string,
+    {
+      windowStart: Date;
+      windowEnd: Date;
+      items: Map<
+        string,
+        {
+          productId: string;
+          productName: string;
+          totalQty: number;
+        }
+      >;
+    }
+  >();
+
+  orders.forEach((order) => {
+    const created = new Date(order.createdAt);
+    const bucketStart = new Date(Math.floor(created.getTime() / windowMs) * windowMs);
+    const key = bucketStart.toISOString();
+    let win = map.get(key);
+    if (!win) {
+      win = {
+        windowStart: bucketStart,
+        windowEnd: new Date(bucketStart.getTime() + windowMs),
+        items: new Map(),
+      };
+      map.set(key, win);
+    }
+    order.items.forEach((item) => {
+      const prodKey = item.menuItemId;
+      const existing = win!.items.get(prodKey);
+      if (existing) {
+        existing.totalQty += item.quantity;
+      } else {
+        win!.items.set(prodKey, {
+          productId: item.menuItemId,
+          productName: item.menuItem.name,
+          totalQty: item.quantity,
+        });
+      }
+    });
+  });
+
+  const windows: WindowAgg[] = Array.from(map.entries())
+    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+    .map(([_, v]) => ({
+      windowStart: v.windowStart.toISOString(),
+      windowEnd: v.windowEnd.toISOString(),
+      items: Array.from(v.items.values()),
+    }));
+
+  return windows;
 };
 
 /**

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
+import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import { subscribeToPush } from '../../lib/push';
 import { enableSound, primeReadySound, isSoundEnabled } from '../../lib/alerts';
@@ -166,7 +167,13 @@ export function CustomerOrderPage() {
             Back to Map
           </button>
         </div>
-        <MyOrdersBar eventSlug={String(slug)} />
+        {/* Responsive orders UI */}
+        <div className="lg:hidden">
+          <MobileOrdersSidebar eventSlug={String(slug)} />
+        </div>
+        <div className="hidden lg:block">
+          <MyOrdersBar eventSlug={String(slug)} />
+        </div>
       </div>
     );
   }
@@ -235,7 +242,12 @@ export function CustomerOrderPage() {
           {isPlacing ? 'Placing...' : 'Place Order'}
         </button>
       </div>
-      <MyOrdersBar eventSlug={String(slug)} />
+      <div className="lg:hidden">
+        <MobileOrdersSidebar eventSlug={String(slug || '')} />
+      </div>
+      <div className="hidden lg:block">
+        <MyOrdersBar eventSlug={String(slug)} />
+      </div>
     </div>
   );
 }

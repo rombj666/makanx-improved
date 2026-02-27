@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
+import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 
 interface EventMapProps {
   event?: any;
@@ -98,7 +99,12 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
           </div>
         </div>
       )}
-      <MyOrdersBar eventSlug={String(slug)} />
+      <div className="lg:hidden">
+        <MobileOrdersSidebar eventSlug={String(slug)} />
+      </div>
+      <div className="hidden lg:block">
+        <MyOrdersBar eventSlug={String(slug)} />
+      </div>
     </div>
   );
 }

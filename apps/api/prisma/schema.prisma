@@ -27,7 +27,6 @@ model User {
   updatedAt     DateTime       @updatedAt
   isActive      Boolean        @default(true)
   managedEvents Event[]        @relation("OrganizerEvents")
-  orders        Order[]
   vendorProfile VendorProfile?
 }
 
@@ -126,7 +125,6 @@ model Order {
   acceptedAt    DateTime?
   completedAt   DateTime?
   readyAt       DateTime?
-  customer      User          @relation(fields: [customerId], references: [id])
   vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   items         OrderItem[]
 }

@@ -11,6 +11,12 @@ router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
 
 // Vendor
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
+router.get(
+  '/vendor/production-batch',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  orderController.getVendorProductionBatch
+);
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
 router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
 

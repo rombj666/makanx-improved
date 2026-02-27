@@ -22,8 +22,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const guestId = getOrCreateGuestId();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-    if (!user && !guestId) {
+    if ((!user && !guestId) || (user && !token)) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -37,8 +38,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     newSocket.on('connect', async () => {
       setIsConnected(true);
 
-      if (user) {
-        newSocket.emit('join', localStorage.getItem('token'));
+      if (user && token) {
+        newSocket.emit('join', token);
       } else {
         newSocket.emit('join', `user:${guestId}`);
       }
@@ -47,7 +48,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         try {
       const res = await fetch(`${SOCKET_URL}/api/orders/vendor-orders`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${token || ''}`
         }
       });
 
