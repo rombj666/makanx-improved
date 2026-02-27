@@ -12,6 +12,7 @@ import organizerRoutes from './routes/organizer.routes';
 import organizerUploadRoutes from './routes/organizerUploadRoutes';
 import uploadRoutes from './routes/upload.routes';
 import menuRoutes from './routes/menu.routes';
+import pushRoutes from './routes/push.routes';
 
 import { configureSecurity } from './middleware/security';
 
@@ -75,6 +76,7 @@ apiRouter.use('/organizer', organizerRoutes);
 apiRouter.use('/organizer', organizerUploadRoutes);
 apiRouter.use('/uploads', uploadRoutes);
 apiRouter.use('/menu-items', menuRoutes);
+apiRouter.use('/push', pushRoutes);
 app.use('/api', apiRouter);
 
 app.get('/test-route', (req, res) => {
@@ -86,4 +88,3 @@ if (require.main === module) {
     console.log(`[server]: Server is running at http://localhost:${port}`);
   });
 }
-

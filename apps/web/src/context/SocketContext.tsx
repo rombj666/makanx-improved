@@ -11,6 +11,7 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 import { API_ORIGIN } from '../lib/api';
+import { getOrCreateGuestId } from '../lib/guest';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_ORIGIN || 'http://localhost:3001';
 
@@ -20,10 +21,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const guestId = localStorage.getItem('guestId') || crypto.randomUUID();
-    if (!localStorage.getItem('guestId')) {
-      localStorage.setItem('guestId', guestId);
-    }
+    const guestId = getOrCreateGuestId();
 
     if (!user && !guestId) {
       if (socket) {

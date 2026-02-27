@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getIO } from '../socket';
 import { OrderStatus, PaymentMode, PaymentStatus, AuditAction, Prisma } from '@prisma/client';
 import { createAuditLog } from './audit.service';
+import { sendReadyNotification } from './push.service';
 
 /**
  * Create Order
@@ -190,6 +191,10 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   // Notify customer + vendor realtime
   getIO().to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
   getIO().to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
+
+  if (status === OrderStatus.READY) {
+    await sendReadyNotification(updatedOrder);
+  }
 
   return updatedOrder;
 };

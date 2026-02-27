@@ -141,6 +141,15 @@ model OrderItem {
   order      Order    @relation(fields: [orderId], references: [id])
 }
 
+model PushSubscription {
+  id         String   @id @default(uuid())
+  customerId String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime @default(now())
+}
+
 model InviteToken {
   id            String             @id @default(uuid())
   token         String             @unique

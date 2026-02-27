@@ -1,8 +1,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
+import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
+import { useCustomerOrders } from '../../hooks/useCustomerOrders';
+import { subscribeToPush } from '../../lib/push';
+import { enableSound, primeReadySound, isSoundEnabled } from '../../lib/alerts';
 
 interface MenuItem {
   id: string;
@@ -24,11 +28,13 @@ interface Booth {
 
 export function CustomerOrderPage() {
   const { slug, vendorId } = useParams();
+  const navigate = useNavigate();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isPlacing, setIsPlacing] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ number: number; eta: number } | null>(null);
+  const [confirmed, setConfirmed] = useState<{ number: string; eta: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { addOrUpdate } = useCustomerOrders(slug || '');
 
   useEffect(() => {
     const run = async () => {
@@ -91,7 +97,28 @@ export function CustomerOrderPage() {
       });
       if (res.data?.success) {
         const { order, estimatedMinutes } = res.data.data;
-        setConfirmed({ number: order.boothOrderNumber, eta: estimatedMinutes });
+        const raw =
+          order?.boothOrderNumber ??
+          order?.displayNumber ??
+          order?.orderNumber ??
+          order?.sequence ??
+          null;
+        const displayNumber =
+          raw !== null && raw !== undefined && `${raw}`.trim() !== ''
+            ? String(raw).toUpperCase()
+            : String(order.id || '').slice(-4).toUpperCase();
+        setConfirmed({ number: displayNumber, eta: estimatedMinutes });
+        addOrUpdate({
+          orderId: order.id,
+          vendorId: order.vendorId,
+          vendorName: booth?.vendor?.businessName || '',
+          status: order.status,
+          estimatedMinutes: Math.max(Number(estimatedMinutes ?? 0), 0),
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+          displayNumber,
+        });
+        subscribeToPush(guestId);
       } else {
         setError('Order failed');
       }
@@ -103,6 +130,19 @@ export function CustomerOrderPage() {
   };
 
   if (confirmed) {
+    const showSoundPrompt =
+      (typeof window !== 'undefined') &&
+      localStorage.getItem('mx_sound_prompted') !== '1' &&
+      !isSoundEnabled();
+    const onEnableSound = () => {
+      enableSound();
+      primeReadySound();
+      try { localStorage.setItem('mx_sound_prompted', '1'); } catch {}
+      navigate(`/customer/event/${slug}`);
+    };
+    const onNotNow = () => {
+      try { localStorage.setItem('mx_sound_prompted', '1'); } catch {}
+    };
     return (
       <div className="w-full h-full bg-white flex items-center justify-center">
         <div className="text-center space-y-3">
@@ -110,7 +150,23 @@ export function CustomerOrderPage() {
           <p className="text-gray-600">Your Number</p>
           <div className="text-5xl font-extrabold tracking-tight">#{confirmed.number}</div>
           <p className="text-gray-500">Estimated Time: ~{confirmed.eta} minutes</p>
+          {showSoundPrompt && (
+            <div className="mt-3 p-3 border rounded-lg text-sm">
+              <div className="mb-2">Enable sound alerts when your order is READY?</div>
+              <div className="flex items-center gap-2 justify-center">
+                <button onClick={onEnableSound} className="px-3 py-2 rounded bg-black text-white">Enable</button>
+                <button onClick={onNotNow} className="px-3 py-2 rounded border">Not now</button>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => navigate(`/customer/event/${slug}`)}
+            className="mt-4 px-4 py-2 rounded-lg bg-black text-white"
+          >
+            Back to Map
+          </button>
         </div>
+        <MyOrdersBar eventSlug={String(slug)} />
       </div>
     );
   }
@@ -179,6 +235,7 @@ export function CustomerOrderPage() {
           {isPlacing ? 'Placing...' : 'Place Order'}
         </button>
       </div>
+      <MyOrdersBar eventSlug={String(slug)} />
     </div>
   );
 }
