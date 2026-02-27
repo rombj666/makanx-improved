@@ -1,74 +1,83 @@
 import { Request, Response } from 'express';
 import * as orderService from '../services/order.service';
 import { ZodError } from 'zod';
-import { OrderStatus } from '@makanx/shared';
+import { OrderStatus } from '@prisma/client';
+
+const isValidOrderStatus = (value: any): value is OrderStatus => {
+  return Object.values(OrderStatus).includes(value);
+};
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    if (!req.user) throw new Error('Unauthorized');
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const result = await orderService.createOrder(req.user.userId, req.body);
-    res.status(201).json({ success: true, data: result });
+    return res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ success: false, error: error.issues });
     }
-    res.status(400).json({ success: false, error: error.message });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
 
 export const getVendorOrders = async (req: Request, res: Response) => {
   try {
-    if (!req.user) throw new Error('Unauthorized');
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const result = await orderService.getVendorOrders(req.user.userId);
-    res.status(200).json({ success: true, data: result });
+    return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
 
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
-    if (!req.user) throw new Error('Unauthorized');
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    // customerId is userId in your design (guest user created on QR login)
     const result = await orderService.getCustomerOrders(req.user.userId);
-    res.status(200).json({ success: true, data: result });
+    return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
 
 export const updateStatus = async (req: Request, res: Response) => {
   try {
-    if (!req.user) throw new Error('Unauthorized');
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const { status } = req.body;
-    
-    // Basic validation for status enum
-    if (!Object.values(OrderStatus).includes(status)) {
-        throw new Error('Invalid status');
+
+    if (!isValidOrderStatus(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
     }
 
     const result = await orderService.updateOrderStatus(req.params.id, req.user.userId, status);
-    res.status(200).json({ success: true, data: result });
+    return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
 
 export const bulkStatusUpdate = async (req: Request, res: Response) => {
   try {
-    if (!req.user) throw new Error('Unauthorized');
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const { orderIds, status } = req.body;
 
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
-      throw new Error('Invalid orderIds');
+    if (!Array.isArray(orderIds) || orderIds.length === 0 || orderIds.some((x) => typeof x !== 'string')) {
+      return res.status(400).json({ success: false, error: 'Invalid orderIds' });
     }
-    
-    if (!Object.values(OrderStatus).includes(status)) {
-        throw new Error('Invalid status');
+
+    if (!isValidOrderStatus(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
     }
 
     const result = await orderService.bulkStatusUpdate(req.user.userId, orderIds, status);
-    res.status(200).json({ success: true, ...result });
+    return res.status(200).json({ success: true, ...result });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };

@@ -1,82 +1,137 @@
 import prisma from '../utils/prisma';
 import { z } from 'zod';
 import { getIO } from '../socket';
-import { OrderStatus, PaymentMode, PaymentStatus, AuditAction } from '@prisma/client';
+import { OrderStatus, PaymentMode, PaymentStatus, AuditAction, Prisma } from '@prisma/client';
 import { createAuditLog } from './audit.service';
 
+/**
+ * Create Order
+ * - Validates menu items belong to vendor
+ * - Calculates total
+ * - Finds vendor's booth (first assigned booth)
+ * - Uses BoothOrderCounter to assign boothOrderNumber starting from 1 and never resetting
+ * - Returns { order, estimatedMinutes }
+ */
 const createOrderSchema = z.object({
   vendorId: z.string().uuid(),
-  items: z.array(z.object({
-    menuItemId: z.string().uuid(),
-    quantity: z.number().min(1),
-  })),
+  items: z.array(
+    z.object({
+      menuItemId: z.string().uuid(),
+      quantity: z.number().min(1),
+    })
+  ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
 });
 
-export const createOrder = async (customerId: string, input: z.infer<typeof createOrderSchema>) => {
+export const createOrder = async (
+  customerId: string,
+  input: z.infer<typeof createOrderSchema>
+) => {
   const { vendorId, items, paymentMode } = createOrderSchema.parse(input);
 
-  // Calculate total and verify items
-  let totalAmount = 0;
-  const orderItemsData = [];
+  // Build order items + total
+  let totalAmountNumber = 0;
+
+  const orderItemsData: {
+    menuItemId: string;
+    quantity: number;
+    price: Prisma.Decimal;
+  }[] = [];
 
   for (const item of items) {
     const menuItem = await prisma.menuItem.findUnique({ where: { id: item.menuItemId } });
     if (!menuItem) throw new Error(`Menu item ${item.menuItemId} not found`);
-    if (menuItem.vendorId !== vendorId) throw new Error(`Menu item does not belong to vendor`);
-    
-    // Prisma Decimal to JS Number for simple calculation (watch out for float precision in real apps)
-    const price = Number(menuItem.price);
-    totalAmount += price * item.quantity;
-    
+    if (menuItem.vendorId !== vendorId) throw new Error('Menu item does not belong to vendor');
+
+    const priceNumber = Number(menuItem.price);
+    totalAmountNumber += priceNumber * item.quantity;
+
     orderItemsData.push({
       menuItemId: item.menuItemId,
       quantity: item.quantity,
-      price: menuItem.price, // Store snapshot price
+      price: menuItem.price, // snapshot
     });
   }
 
-  const paymentStatus = paymentMode === PaymentMode.MOCK_PAID ? PaymentStatus.PAID : PaymentStatus.PENDING;
+  const totalAmount = new Prisma.Decimal(totalAmountNumber);
 
-  const order = await prisma.order.create({
-    data: {
-      customerId,
-      vendorId,
-      totalAmount,
-      status: 'PENDING',
-      paymentMode,
-      paymentStatus,
-      items: {
-        create: orderItemsData,
-      },
-    },
-    include: {
-      items: {
-        include: { menuItem: true }
-      },
-      customer: {
-        select: { name: true, email: true }
-      }
-    },
+  const paymentStatus =
+    paymentMode === PaymentMode.MOCK_PAID ? PaymentStatus.PAID : PaymentStatus.PENDING;
+
+  // Find booth for this vendor (first assigned booth)
+  const booth = await prisma.booth.findFirst({
+    where: { vendorId },
+    select: { id: true },
   });
 
-  // Audit Log
+  if (!booth) throw new Error('Vendor has no assigned booth');
+
+  // Transaction: increment counter + create order + compute ETA
+  const result = await prisma.$transaction(async (tx) => {
+    // Ensure counter exists
+    const counter = await tx.boothOrderCounter.upsert({
+      where: { boothId: booth.id },
+      create: { boothId: booth.id, currentNumber: 0 },
+      update: {}, // no-op
+    });
+
+    // Increment and get new number
+    const updated = await tx.boothOrderCounter.update({
+      where: { boothId: booth.id },
+      data: { currentNumber: { increment: 1 } },
+    });
+
+    const createdOrder = await tx.order.create({
+      data: {
+        customerId,
+        vendorId,
+        boothId: booth.id,
+        boothOrderNumber: updated.currentNumber, // starts at 1
+        totalAmount,
+        status: OrderStatus.PENDING,
+        paymentMode,
+        paymentStatus,
+        items: { create: orderItemsData },
+      },
+      include: {
+        items: { include: { menuItem: true } },
+        customer: { select: { name: true, email: true } },
+      },
+    });
+
+    // ETA: count pending+preparing for booth (includes this order)
+    const pendingCount = await tx.order.count({
+      where: {
+        boothId: booth.id,
+        status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING] },
+      },
+    });
+
+    const avgMinutesPerOrder = 5;
+    const estimatedMinutes = pendingCount * avgMinutesPerOrder;
+
+    return { order: createdOrder, estimatedMinutes };
+  });
+
+  // Audit log
   await createAuditLog(
     AuditAction.ORDER_STATUS_CHANGE,
-    order.id,
+    result.order.id,
     'Order',
     customerId,
-    { status: 'PENDING', paymentStatus, paymentMode }
+    { status: OrderStatus.PENDING, paymentStatus, paymentMode }
   );
 
-  // Emit Realtime Event to Vendor
-  getIO().to(`vendor:${vendorId}`).emit('order_created', order);
+  // Realtime: vendor sees new order
+  getIO().to(`vendor:${vendorId}`).emit('order_created', result.order);
 
-  return order;
+  return result;
 };
 
+/**
+ * Vendor Orders (for vendor dashboard)
+ */
 export const getVendorOrders = async (userId: string) => {
-  // Find vendor profile for user
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
@@ -84,169 +139,119 @@ export const getVendorOrders = async (userId: string) => {
     where: { vendorId: vendorProfile.id },
     include: {
       items: { include: { menuItem: true } },
-      customer: { select: { name: true } }
+      customer: { select: { name: true } },
+      booth: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
 };
 
+/**
+ * Customer Orders (for customer "My Orders")
+ */
 export const getCustomerOrders = async (customerId: string) => {
   return prisma.order.findMany({
     where: { customerId },
     include: {
       items: { include: { menuItem: true } },
-      vendor: { select: { businessName: true } }
+      vendor: { select: { businessName: true } },
+      booth: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
 };
 
+/**
+ * Update status (vendor only)
+ */
 export const updateOrderStatus = async (orderId: string, userId: string, status: OrderStatus) => {
-  const order = await prisma.order.findUnique({ 
+  const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { vendor: true }
+    include: { vendor: true },
   });
-
   if (!order) throw new Error('Order not found');
 
-  // Verify user owns the vendor profile
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
-  if (!vendorProfile || vendorProfile.id !== order.vendorId) {
-    throw new Error('Unauthorized');
-  }
+  if (!vendorProfile || vendorProfile.id !== order.vendorId) throw new Error('Unauthorized');
 
-  // Determine timestamps to update
-  const data: any = { status };
   const now = new Date();
+  const data: Prisma.OrderUpdateInput = { status };
 
-  if (status === 'PREPARING' && !order.acceptedAt) data.acceptedAt = now;
-  if (status === 'READY' && !order.readyAt) data.readyAt = now;
-  if (status === 'COMPLETED' && !order.completedAt) data.completedAt = now;
+  // Only set timestamps if they are null
+  if (status === OrderStatus.PREPARING && !order.acceptedAt) (data as any).acceptedAt = now;
+  if (status === OrderStatus.READY && !order.readyAt) (data as any).readyAt = now;
+  if (status === OrderStatus.COMPLETED && !order.completedAt) (data as any).completedAt = now;
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data,
     include: {
-        items: { include: { menuItem: true } },
-        vendor: { select: { businessName: true } }
-    }
+      items: { include: { menuItem: true } },
+      vendor: { select: { businessName: true } },
+      booth: { select: { id: true, name: true } },
+    },
   });
 
-  // Audit Log
   await createAuditLog(
     AuditAction.ORDER_STATUS_CHANGE,
     order.id,
     'Order',
-    userId, // Vendor ID (User ID)
+    userId,
     { oldStatus: order.status, newStatus: status }
   );
 
-  // Emit Realtime Event to Customer
+  // Notify customer + vendor realtime
   getIO().to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
-  
-  // Also emit to vendor room so other devices update? 
-  // Or assume the caller updates local state. 
-  // Better to emit to ensure sync.
   getIO().to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
 
   return updatedOrder;
 };
 
+/**
+ * Bulk status update (vendor only)
+ */
 export const bulkStatusUpdate = async (userId: string, orderIds: string[], status: OrderStatus) => {
-  // Find vendor profile
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
-  // Prepare timestamp updates
-  const data: any = { status };
   const now = new Date();
 
-  if (status === 'PREPARING') {
-      // Only set acceptedAt if it is currently null. 
-      // Prisma updateMany doesn't support conditional set based on current value easily in one go 
-      // UNLESS we just accept overwriting or do raw query.
-      // However, the requirement says "Apply timestamp updates only when the respective timestamp is null".
-      // We can't do conditional update inside updateMany easily for fields.
-      // BUT we can run updateMany ONLY on records where timestamp IS null.
-      // But we also need to update status for ALL records in orderIds.
-      
-      // Strategy:
-      // 1. Update status for all matching orders.
-      // 2. Update timestamp for matching orders where timestamp is null.
-      // This requires 2 queries but is safe.
-      // Or we can just do one update if we don't mind overwriting (but req says don't overwrite).
-      
-      // Let's do:
-      // 1. Update status for all.
-      // 2. Update timestamp for those with status=NEW_STATUS and timestamp=NULL.
-  }
-
-  // Actually, a cleaner way for bulk might be to just iterate if N is small, but for "bulk" we want efficiency.
-  // Let's use updateMany.
-  
-  // Step 1: Update Status for all valid orders owned by vendor
+  // 1) Update status for all
   const updateResult = await prisma.order.updateMany({
-      where: {
-          id: { in: orderIds },
-          vendorId: vendorProfile.id
-      },
-      data: { status }
+    where: { id: { in: orderIds }, vendorId: vendorProfile.id },
+    data: { status },
   });
 
-  // Step 2: Conditionally update timestamps
-  // We only update the timestamp if it's null.
-  // We can do this by adding `timestamp: null` to the where clause.
-  
-  let timestampUpdateResult = { count: 0 };
-
-  if (status === 'PREPARING') {
-      timestampUpdateResult = await prisma.order.updateMany({
-          where: {
-              id: { in: orderIds },
-              vendorId: vendorProfile.id,
-              acceptedAt: null
-          },
-          data: { acceptedAt: now }
-      });
-  } else if (status === 'READY') {
-      timestampUpdateResult = await prisma.order.updateMany({
-          where: {
-              id: { in: orderIds },
-              vendorId: vendorProfile.id,
-              readyAt: null
-          },
-          data: { readyAt: now }
-      });
-  } else if (status === 'COMPLETED') {
-      timestampUpdateResult = await prisma.order.updateMany({
-          where: {
-              id: { in: orderIds },
-              vendorId: vendorProfile.id,
-              completedAt: null
-          },
-          data: { completedAt: now }
-      });
+  // 2) Conditionally set timestamps only where null
+  if (status === OrderStatus.PREPARING) {
+    await prisma.order.updateMany({
+      where: { id: { in: orderIds }, vendorId: vendorProfile.id, acceptedAt: null },
+      data: { acceptedAt: now },
+    });
+  }
+  if (status === OrderStatus.READY) {
+    await prisma.order.updateMany({
+      where: { id: { in: orderIds }, vendorId: vendorProfile.id, readyAt: null },
+      data: { readyAt: now },
+    });
+  }
+  if (status === OrderStatus.COMPLETED) {
+    await prisma.order.updateMany({
+      where: { id: { in: orderIds }, vendorId: vendorProfile.id, completedAt: null },
+      data: { completedAt: now },
+    });
   }
 
-  // Audit Logs (Bulk) - Ideally we create one log entry per order or a bulk entry
-  // For simplicity/performance, maybe skip or do a generic log?
-  // Let's skip individual audit logs for bulk action to save DB ops for now, 
-  // or just log the bulk action itself if AuditLog supported it.
-  
-  // Emit events? 
-  // We should emit events to affected customers.
-  // We can fetch the updated orders to know who to notify.
-  // If orderIds list is huge, this is heavy. Assuming reasonable batch size.
-  const updatedOrders = await prisma.order.findMany({
-      where: { id: { in: orderIds }, vendorId: vendorProfile.id },
-      select: { id: true, customerId: true, status: true, vendorId: true }
+  // Notify customers (light payload)
+  const affected = await prisma.order.findMany({
+    where: { id: { in: orderIds }, vendorId: vendorProfile.id },
+    select: { id: true, customerId: true, status: true, vendorId: true },
   });
 
-  updatedOrders.forEach(order => {
-      getIO().to(`user:${order.customerId}`).emit('order_updated', order);
+  affected.forEach((o) => {
+    getIO().to(`user:${o.customerId}`).emit('order_updated', o);
   });
-  
-  // Notify vendor dashboard
+
   getIO().to(`vendor:${vendorProfile.id}`).emit('orders_bulk_updated', { orderIds, status });
 
   return { updatedCount: updateResult.count };

@@ -55,8 +55,8 @@ model VendorProfile {
   userId       String     @unique
   businessName String
   description  String?
-  phoneNumber  String?
   category     String?
+  phoneNumber  String?
   priceRange   String?
   booths       Booth[]
   menuItems    MenuItem[]
@@ -65,24 +65,24 @@ model VendorProfile {
 }
 
 model VendorApplication {
-  id             String            @id @default(uuid())
-  eventId        String
-  applicantName  String
-  applicantEmail String
-  businessName   String
-  phoneNumber    String?
-  description    String?
-  category       String?
-  priceMin       Float             @default(0)
-  priceMax       Float             @default(0)
-  googleFormData Json?
-  status         ApplicationStatus @default(PENDING)
-  createdAt      DateTime          @default(now())
-  approvedAt     DateTime?
-  approvedByUserId String?
+  id               String            @id @default(uuid())
+  eventId          String
+  applicantName    String
+  applicantEmail   String
+  businessName     String
+  googleFormData   Json?
+  status           ApplicationStatus @default(PENDING)
+  createdAt        DateTime          @default(now())
   accountCreatedAt DateTime?
-  inviteToken    InviteToken?
-  event          Event             @relation(fields: [eventId], references: [id])
+  approvedAt       DateTime?
+  approvedByUserId String?
+  category         String?
+  description      String?
+  phoneNumber      String?
+  priceMax         Float             @default(0)
+  priceMin         Float             @default(0)
+  inviteToken      InviteToken?
+  event            Event             @relation(fields: [eventId], references: [id])
 }
 
 model Booth {
@@ -107,8 +107,8 @@ model MenuItem {
   price       Decimal
   imageUrl    String?
   isAvailable Boolean       @default(true)
-  createdAt   DateTime      @default(now())   // ADD THIS
-  updatedAt   DateTime      @updatedAt        // OPTIONAL but recommended
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   vendor      VendorProfile @relation(fields: [vendorId], references: [id])
   orderItems  OrderItem[]
 }
@@ -124,8 +124,8 @@ model Order {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   acceptedAt    DateTime?
-  readyAt       DateTime?
   completedAt   DateTime?
+  readyAt       DateTime?
   customer      User          @relation(fields: [customerId], references: [id])
   vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   items         OrderItem[]
@@ -142,16 +142,16 @@ model OrderItem {
 }
 
 model InviteToken {
-  id              String             @id @default(uuid())
-  token           String             @unique
-  role            Role
-  email           String
-  eventId         String?
-  applicationId   String?            @unique
-  isUsed          Boolean            @default(false)
-  expiresAt       DateTime
-  usedAt          DateTime?
-  application     VendorApplication? @relation(fields: [applicationId], references: [id])
+  id            String             @id @default(uuid())
+  token         String             @unique
+  role          Role
+  eventId       String?
+  applicationId String?            @unique
+  isUsed        Boolean            @default(false)
+  expiresAt     DateTime
+  email         String
+  usedAt        DateTime?
+  application   VendorApplication? @relation(fields: [applicationId], references: [id])
 }
 
 model PasswordResetToken {
