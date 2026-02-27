@@ -27,7 +27,7 @@ interface Event {
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Plus, MapPin, Calendar } from 'lucide-react';
-import { EventToolsDropdown } from '../../components/organizer/EventToolsDropdown';
+import { QRCodeCanvas } from 'qrcode.react';
 
 export function OrganizerDashboard() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -38,6 +38,7 @@ export function OrganizerDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   // Form state
   const [newEventName, setNewEventName] = useState('');
@@ -170,7 +171,8 @@ export function OrganizerDashboard() {
           </div>
         </div>
         
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar relative">          <Link to="/organizer/applications">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar relative">
+          <Link to="/organizer/applications">
             <Button variant="outline" size="sm" className="whitespace-nowrap">
               <FileText size={16} className="mr-2" />
               Apps
@@ -189,7 +191,14 @@ export function OrganizerDashboard() {
             </Button>
           </Link>
           {selectedEvent && (
-            <EventToolsDropdown event={selectedEvent} />
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="whitespace-nowrap"
+              onClick={() => setIsQrModalOpen(true)}
+            >
+              Generate QR Code
+            </Button>
           )}
           <Button 
             size="sm" 
@@ -262,6 +271,24 @@ export function OrganizerDashboard() {
           </div>
         </form>
       </Modal>
+      {selectedEvent && (
+        <Modal
+          isOpen={isQrModalOpen}
+          onClose={() => setIsQrModalOpen(false)}
+          title="Event QR Code"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <QRCodeCanvas
+              value={`${window.location.origin}/customer/${selectedEvent.slug}`}
+              size={256}
+              includeMargin
+            />
+            <div className="text-xs break-all bg-gray-100 p-2 rounded border">
+              {`${window.location.origin}/customer/${selectedEvent.slug}`}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
