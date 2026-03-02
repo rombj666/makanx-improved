@@ -273,6 +273,9 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   getIO().to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
 
   if (status === OrderStatus.READY) {
+    console.log("Order marked READY:", order.id);
+    console.log("Customer ID:", order.customerId);
+    console.log("Attempting to send push...");
     await sendReadyNotification(updatedOrder);
   }
 

@@ -94,7 +94,9 @@ export function VendorDashboard() {
   const fetchProductionBatch = async () => {
     if (!groupingEnabled) return;
     try {
-      const { data } = await api.get('/orders/vendor/production-batch');
+      const { data } = await api.get('/orders/vendor/production-batch', {
+        params: { groupByWindow: true },
+      });
       if (data.success) {
         setProductionBatch(data.data || []);
       }

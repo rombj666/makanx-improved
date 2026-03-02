@@ -62,6 +62,7 @@ export const sendReadyNotification = async (order: {
   });
 
   if (!subs.length) return;
+  console.log("Found subscriptions:", subs.length);
 
   const title = 'MakanX Order Ready';
   const displayNumber = order.id.slice(-4).toUpperCase();

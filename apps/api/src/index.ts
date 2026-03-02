@@ -41,26 +41,30 @@ const allowedOrigins = new Set(
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: function (origin, callback) {
       if (!origin) return callback(null, true);
 
       const cleaned = normalize(origin);
 
       if (allowedOrigins.has(cleaned)) {
-        return callback(null, cleaned);
+        return callback(null, true);
       }
 
-      return callback(new Error("CORS blocked: " + origin));
+      console.log("CORS BLOCKED:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    methods: ["GET","POST","PUT","DELETE","PATCH","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization"],
   })
 );
 
 app.options("*", cors());
 
 app.use(express.json());
+
+app.use((req, res, next) => {
+  console.log(`[${req.method}] ${req.originalUrl}`);
+  next();
+});
 
 import path from 'path';
 
@@ -72,7 +76,20 @@ const vapidPrivate = process.env.VAPID_PRIVATE_KEY || '';
 if (vapidSubject && vapidPublic && vapidPrivate) {
   try {
     webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-  } catch {}
+    console.log('[push] VAPID configured:', {
+      subject: vapidSubject,
+      publicKeyLen: vapidPublic.length,
+      privateKeyLen: vapidPrivate.length,
+    });
+  } catch (err: any) {
+    console.error('[push] VAPID configuration error:', err?.message || err);
+  }
+} else {
+  console.warn('[push] VAPID missing:', {
+    hasSubject: !!vapidSubject,
+    hasPublic: !!vapidPublic,
+    hasPrivate: !!vapidPrivate,
+  });
 }
 
 // Routes

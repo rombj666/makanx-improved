@@ -39,7 +39,12 @@ export const getVendorProductionBatch = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
+    console.log("Production batch requested by vendor:", req.user?.userId);
+    console.log("Group by window:", req.query.groupByWindow);
+
     const result = await orderService.getVendorProductionBatch(req.user.userId);
+    console.log("Returning production batch count:", result.length);
+
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });

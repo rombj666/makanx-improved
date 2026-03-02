@@ -36,17 +36,25 @@ export function CustomerOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const { addOrUpdate } = useCustomerOrders(slug || '');
   const enableNotification = async () => {
+    console.log("Starting push enable...");
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        alert('Notification permission denied.');
-        return;
-      }
       if (!('serviceWorker' in navigator)) {
-        alert('Service worker not supported.');
+        console.error("Service worker not supported");
         return;
       }
       const registration = await navigator.serviceWorker.ready;
+      console.log("SW registration:", registration);
+
+      const existing = await registration.pushManager.getSubscription();
+      console.log("Existing subscription:", existing);
+
+      const permission = await Notification.requestPermission();
+      console.log("Notification permission:", permission);
+
+      if (permission !== 'granted') {
+        console.error("Permission denied");
+        return;
+      }
       const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
       if (!publicKey) {
         alert('Notification configuration error.');
@@ -66,14 +74,21 @@ export function CustomerOrderPage() {
         userVisibleOnly: true,
         applicationServerKey: convertedKey,
       });
+      console.log("Created subscription:", subscription);
+
       const customerId = getOrCreateGuestId();
-      await api.post('/push/subscribe', {
+      const resp = await api.post('/push/subscribe', {
         customerId,
-        subscription,
+        subscription: {
+          endpoint: subscription.endpoint,
+          keys: subscription.toJSON().keys,
+        },
       });
+      console.log("Subscription sent to backend:", resp.status, resp.data);
       alert('Notifications enabled!');
       navigate(`/customer/event/${slug}`);
     } catch (error) {
+      console.error("Enable notification error:", error);
       alert('Failed to enable notifications.');
     }
   };
