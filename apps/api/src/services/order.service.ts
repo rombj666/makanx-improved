@@ -143,7 +143,7 @@ export const getVendorProductionBatch = async (userId: string) => {
   const orders = await prisma.order.findMany({
     where: {
       vendorId: vendorProfile.id,
-      NOT: { status: OrderStatus.COMPLETED },
+      status: { in: [OrderStatus.PREPARING, OrderStatus.READY] },
     },
     include: {
       items: {

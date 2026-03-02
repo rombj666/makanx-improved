@@ -1,7 +1,6 @@
-import { Dispatch, SetStateAction, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../context/SocketContext';
-// import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
@@ -30,26 +29,17 @@ interface Order {
 const COLUMNS = ['PREPARING', 'READY', 'COMPLETED'] as const;
 type Column = (typeof COLUMNS)[number];
 
-type ProductionWindow = {
-  windowStart: string;
-  windowEnd: string;
-  items: { productId: string; productName: string; totalQty: number }[];
-};
-
 export function VendorDashboard() {
-  // const { user } = useAuth(); // Unused
   const { socket } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewMode, setViewMode] = useState<'kitchen' | 'fulfillment'>('kitchen');
-  const [groupingEnabled, setGroupingEnabled] = useState(false);
+  const [groupByWindow, setGroupByWindow] = useState(false);
+  const [productionData, setProductionData] = useState<any[]>([]);
 
   useEffect(() => {
     fetchOrders();
 
     if (socket) {
-      // Socket logic...
-      // Removed unused joinVendorRoom function and data destructuring to fix build errors.
-      
       socket.on('order_created', (newOrder: Order) => {
         setOrders(prev => [newOrder, ...prev]);
         toast.success('New Order Received!');
@@ -89,97 +79,32 @@ export function VendorDashboard() {
     return orders.filter(o => o.status === status);
   };
 
-  const [productionBatch, setProductionBatch] = useState<ProductionWindow[]>([]);
-
   const fetchProductionBatch = async () => {
-    if (!groupingEnabled) return;
     try {
-      const { data } = await api.get('/orders/vendor/production-batch', {
-        params: { groupByWindow: true },
-      });
-      if (data.success) {
-        setProductionBatch(data.data || []);
+      console.log("Fetching production batch. Group:", groupByWindow);
+      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=${groupByWindow}`);
+      if (res.data.success) {
+        setProductionData(res.data.data);
       }
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error("Production fetch error:", err);
     }
   };
 
-  const KitchenQueueView = ({
-    groupingEnabled,
-    setGroupingEnabled,
-    productionWindows,
-    onRefreshBatch,
-  }: {
-    groupingEnabled: boolean;
-    setGroupingEnabled: Dispatch<SetStateAction<boolean>>;
-    productionWindows: ProductionWindow[];
-    onRefreshBatch: () => void;
-  }) => {
-    useEffect(() => {
-      if (!groupingEnabled) return;
-      onRefreshBatch();
-      const interval = setInterval(() => {
-        onRefreshBatch();
-      }, 10000);
-      return () => clearInterval(interval);
-    }, [groupingEnabled, onRefreshBatch]);
-
-    return (
-      <div className="flex-1 overflow-x-auto">
-        <div className="flex justify-between items-center mb-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="rounded border-gray-300"
-              checked={groupingEnabled}
-              onChange={(e) => setGroupingEnabled(e.target.checked)}
-            />
-            Group production by 5-min windows
-          </label>
+  const GroupedProduction = ({ data }: { data: any[] }) => (
+    <>
+      {data.map((block: any) => (
+        <div key={block.window}>
+          <h4>{block.window}</h4>
+          {block.items.map((item: any) => (
+            <div key={item.name}>
+              {item.name} — {item.quantity}
+            </div>
+          ))}
         </div>
-
-        {!groupingEnabled && (
-          <div className="mb-4 rounded-lg border bg-white p-4 text-sm text-gray-500">
-            Enable grouping to view production queue.
-          </div>
-        )}
-
-        {/* Block A (Grouped Windows Panel) START: was L194, ends L224 */}
-        {groupingEnabled && (
-          <>
-            {productionWindows.length === 0 ? (
-              <div className="mb-4 rounded-lg border bg-white p-4 text-sm text-gray-500">
-                No unfinished orders in any window.
-              </div>
-            ) : (
-              productionWindows.map((win) => {
-                const start = new Date(win.windowStart);
-                const end = new Date(win.windowEnd);
-                const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                return (
-                  <div key={win.windowStart} className="rounded-lg border bg-white p-4 mb-4">
-                    <div className="text-sm font-semibold mb-2">
-                      {fmt(start)} – {fmt(end)}
-                    </div>
-                    <ul className="text-sm space-y-1">
-                      {win.items.map((item) => (
-                        <li key={item.productId} className="flex justify-between">
-                          <span>{item.productName}</span>
-                          <span className="font-semibold">{item.totalQty} cups</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })
-            )}
-          </>
-        )}
-        {/* Block A (Grouped Windows Panel) END: was L194, ends L224 */}
-      </div>
-    );
-  };
+      ))}
+    </>
+  );
 
   const FulfillmentBoardView = ({
     orders,
@@ -193,7 +118,6 @@ export function VendorDashboard() {
     void orders;
     return (
       <div className="flex-1 overflow-x-auto">
-        {/* Block B (3 Columns Board) START: was L225, ends L264 */}
         <div className="flex gap-4 h-full min-w-[1000px]">
           {COLUMNS.map((status) => (
             <div key={status} className="flex-1 bg-gray-50 rounded-lg p-4 flex flex-col">
@@ -227,10 +151,23 @@ export function VendorDashboard() {
             </div>
           ))}
         </div>
-        {/* Block B (3 Columns Board) END: was L225, ends L264 */}
       </div>
     );
   };
+
+  useEffect(() => {
+    fetchProductionBatch();
+  }, [groupByWindow]);
+
+  const SingleOrderList = ({ data }: { data: any[] }) => (
+    <>
+      {data.map((order: any) => (
+        <div key={order.id}>
+          Order #{order.orderNumber}
+        </div>
+      ))}
+    </>
+  );
 
   return (
     <div className="container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
@@ -253,11 +190,20 @@ export function VendorDashboard() {
               Order Fulfillment
             </Button>
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300"
+              checked={groupByWindow}
+              onChange={(e) => setGroupByWindow(e.target.checked)}
+            />
+            Group by 5-min window
+          </label>
           <Button
             variant="outline"
             onClick={() => {
               fetchOrders();
-              if (groupingEnabled) fetchProductionBatch();
+              fetchProductionBatch();
             }}
           >
             Refresh
@@ -265,12 +211,20 @@ export function VendorDashboard() {
         </div>
       </div>
       {viewMode === "kitchen" && (
-        <KitchenQueueView
-          groupingEnabled={groupingEnabled}
-          setGroupingEnabled={setGroupingEnabled}
-          productionWindows={productionBatch}
-          onRefreshBatch={fetchProductionBatch}
-        />
+        <div className="mt-4">
+          {groupByWindow && productionData?.length === 0 && (
+            <p>No grouped production data.</p>
+          )}
+          {!groupByWindow && productionData?.length === 0 && (
+            <p>No live orders.</p>
+          )}
+          {groupByWindow && (
+            <GroupedProduction data={productionData} />
+          )}
+          {!groupByWindow && (
+            <SingleOrderList data={productionData} />
+          )}
+        </div>
       )}
 
       {viewMode === "fulfillment" && (
