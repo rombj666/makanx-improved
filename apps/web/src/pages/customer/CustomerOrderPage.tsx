@@ -70,6 +70,13 @@ export function CustomerOrderPage() {
         }
         return outputArray;
       })(publicKey as string);
+      
+      console.log("Frontend VAPID key raw:", import.meta.env.VITE_VAPID_PUBLIC_KEY);
+      console.log(
+        "Frontend VAPID key length:",
+        import.meta.env.VITE_VAPID_PUBLIC_KEY?.length
+      );
+      
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: convertedKey,
