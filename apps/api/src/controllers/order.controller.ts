@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as orderService from '../services/order.service';
 import { ZodError } from 'zod';
 import { OrderStatus } from '@prisma/client';
+import prisma from '../utils/prisma';
 
 const isValidOrderStatus = (value: any): value is OrderStatus => {
   return Object.values(OrderStatus).includes(value);
@@ -39,10 +40,24 @@ export const getVendorProductionBatch = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
+    const groupByWindow = req.query.groupByWindow === "true";
+    
     console.log("Production batch requested by vendor:", req.user?.userId);
-    console.log("Group by window:", req.query.groupByWindow);
+    console.log("Group by window:", groupByWindow);
 
-    const result = await orderService.getVendorProductionBatch(req.user.userId);
+    // Get vendor profile first to get vendorId
+    const vendorProfile = await prisma.vendorProfile.findUnique({ 
+      where: { userId: req.user.userId } 
+    });
+    
+    if (!vendorProfile) {
+      return res.status(404).json({ success: false, error: 'Vendor profile not found' });
+    }
+
+    const result = await orderService.getVendorProductionBatch(
+      vendorProfile.id,
+      groupByWindow
+    );
     console.log("Returning production batch count:", result.length);
 
     return res.status(200).json({ success: true, data: result });

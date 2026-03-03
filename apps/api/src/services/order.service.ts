@@ -134,16 +134,14 @@ export const getVendorOrders = async (userId: string) => {
   });
 };
 
-export const getVendorProductionBatch = async (userId: string) => {
-  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
-  if (!vendorProfile) throw new Error('Vendor profile not found');
-
-  const windowMs = 5 * 60 * 1000;
-
+export const getVendorProductionBatch = async (
+  vendorId: string,
+  groupByWindow: boolean
+) => {
   const orders = await prisma.order.findMany({
     where: {
-      vendorId: vendorProfile.id,
-      status: { in: [OrderStatus.PREPARING, OrderStatus.READY] },
+      vendorId,
+      status: "PREPARING",
     },
     include: {
       items: {
@@ -152,68 +150,38 @@ export const getVendorProductionBatch = async (userId: string) => {
         },
       },
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: {
+      createdAt: "asc",
+    },
   });
 
-  type WindowAgg = {
-    windowStart: string;
-    windowEnd: string;
-    items: { productId: string; productName: string; totalQty: number }[];
-  };
+  if (!groupByWindow) {
+    // Return raw orders immediately
+    return orders;
+  }
 
-  const map = new Map<
-    string,
-    {
-      windowStart: Date;
-      windowEnd: Date;
-      items: Map<
-        string,
-        {
-          productId: string;
-          productName: string;
-          totalQty: number;
-        }
-      >;
-    }
-  >();
+  // Group into 5-minute windows
+  const grouped: Record<string, any[]> = {};
 
   orders.forEach((order) => {
     const created = new Date(order.createdAt);
-    const bucketStart = new Date(Math.floor(created.getTime() / windowMs) * windowMs);
-    const key = bucketStart.toISOString();
-    let win = map.get(key);
-    if (!win) {
-      win = {
-        windowStart: bucketStart,
-        windowEnd: new Date(bucketStart.getTime() + windowMs),
-        items: new Map(),
-      };
-      map.set(key, win);
+    const minutes = Math.floor(created.getMinutes() / 5) * 5;
+    const windowStart = new Date(created);
+    windowStart.setMinutes(minutes, 0, 0);
+
+    const key = windowStart.toISOString();
+
+    if (!grouped[key]) {
+      grouped[key] = [];
     }
-    order.items.forEach((item) => {
-      const prodKey = item.menuItemId;
-      const existing = win!.items.get(prodKey);
-      if (existing) {
-        existing.totalQty += item.quantity;
-      } else {
-        win!.items.set(prodKey, {
-          productId: item.menuItemId,
-          productName: item.menuItem.name,
-          totalQty: item.quantity,
-        });
-      }
-    });
+
+    grouped[key].push(order);
   });
 
-  const windows: WindowAgg[] = Array.from(map.entries())
-    .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-    .map(([_, v]) => ({
-      windowStart: v.windowStart.toISOString(),
-      windowEnd: v.windowEnd.toISOString(),
-      items: Array.from(v.items.values()),
-    }));
-
-  return windows;
+  return Object.entries(grouped).map(([window, orders]) => ({
+    window,
+    orders,
+  }));
 };
 
 /**

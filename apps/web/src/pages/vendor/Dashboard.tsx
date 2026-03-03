@@ -79,6 +79,32 @@ export function VendorDashboard() {
     return orders.filter(o => o.status === status);
   };
 
+  const OrderCard = ({ order }: { order: any }) => (
+    <Card className="p-4 mb-2">
+      <div className="flex justify-between items-start">
+        <div>
+          <h5 className="font-semibold">Order #{order.orderNumber}</h5>
+          <p className="text-sm text-gray-600">{new Date(order.createdAt).toLocaleTimeString()}</p>
+        </div>
+        <span className={`px-2 py-1 rounded text-xs ${
+          order.status === 'PREPARING' ? 'bg-yellow-100 text-yellow-800' :
+          order.status === 'READY' ? 'bg-green-100 text-green-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>
+          {order.status}
+        </span>
+      </div>
+      <div className="mt-2">
+        {order.items.map((item: any) => (
+          <div key={item.id} className="flex justify-between text-sm">
+            <span>{item.quantity}x {item.menuItem.name}</span>
+            <span>${item.price}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+
   const fetchProductionBatch = async () => {
     try {
       console.log("Fetching production batch. Group:", groupByWindow);
@@ -94,13 +120,13 @@ export function VendorDashboard() {
   const GroupedProduction = ({ data }: { data: any[] }) => (
     <>
       {data.map((block: any) => (
-        <div key={block.window}>
-          <h4>{block.window}</h4>
-          {block.items.map((item: any) => (
-            <div key={item.name}>
-              {item.name} — {item.quantity}
-            </div>
-          ))}
+        <div key={block.window} className="mb-6">
+          <h4 className="font-bold text-lg mb-2">{new Date(block.window).toLocaleTimeString()}</h4>
+          <div className="space-y-2">
+            {block.orders.map((order: any) => (
+              <OrderCard key={order.id} order={order} />
+            ))}
+          </div>
         </div>
       ))}
     </>
@@ -162,9 +188,7 @@ export function VendorDashboard() {
   const SingleOrderList = ({ data }: { data: any[] }) => (
     <>
       {data.map((order: any) => (
-        <div key={order.id}>
-          Order #{order.orderNumber}
-        </div>
+        <OrderCard key={order.id} order={order} />
       ))}
     </>
   );
