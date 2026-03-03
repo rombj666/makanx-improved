@@ -5,6 +5,11 @@ const publicKey = process.env.VAPID_PUBLIC_KEY || '';
 const privateKey = process.env.VAPID_PRIVATE_KEY || '';
 const subject = process.env.VAPID_SUBJECT || '';
 
+console.log(
+  "VAPID PUBLIC KEY (first 20):",
+  process.env.VAPID_PUBLIC_KEY?.slice(0, 20)
+);
+
 if (publicKey && privateKey && subject) {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
