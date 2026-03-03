@@ -27,16 +27,16 @@ export function MyOrdersBar({ eventSlug }: { eventSlug: string }) {
   }, [orders]);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
+    <div className="h-full flex flex-col">
       <div
-        className="mx-auto max-w-2xl bg-white border-t shadow-lg px-4 py-3 flex items-center justify-between cursor-pointer"
+        className="bg-white border-b px-4 py-3 flex items-center justify-between cursor-pointer"
         onClick={() => setOpen((v) => !v)}
       >
         <div className="font-semibold">My Orders ({activeCount})</div>
         <div className="text-sm text-gray-600">{summary}</div>
       </div>
       {open && orders.length > 0 && (
-        <div className="mx-auto max-w-2xl bg-white border-t shadow-inner">
+        <div className="bg-white flex-1 overflow-y-auto">
           <ul className="divide-y">
             {orders.map((o) => (
               <li key={o.orderId} className="px-4 py-3 flex items-center justify-between">
