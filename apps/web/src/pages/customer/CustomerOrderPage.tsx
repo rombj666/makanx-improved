@@ -76,12 +76,22 @@ export function CustomerOrderPage() {
         "Frontend VAPID key length:",
         import.meta.env.VITE_VAPID_PUBLIC_KEY?.length
       );
-      
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedKey,
-      });
-      console.log("Created subscription:", subscription);
+      let subscription: PushSubscription;
+      try {
+        console.log("Converted key is Uint8Array:", convertedKey instanceof Uint8Array);
+        console.log("Converted key length:", convertedKey?.length);
+        const sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+        console.log("SUBSCRIBE OK:", sub);
+        subscription = sub;
+      } catch (err: any) {
+        console.log("SUBSCRIBE FAIL name:", err?.name);
+        console.log("SUBSCRIBE FAIL message:", err?.message);
+        console.log("SUBSCRIBE FAIL full:", err);
+        throw err;
+      }
 
       const customerId = getOrCreateGuestId();
       const resp = await api.post('/push/subscribe', {
