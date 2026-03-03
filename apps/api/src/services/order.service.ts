@@ -79,7 +79,7 @@ export const createOrder = async (
         customerId: finalCustomerId,
         vendorId,
         totalAmount,
-        status: OrderStatus.PENDING,
+        status: OrderStatus.PREPARING,
         paymentMode,
         paymentStatus,
         items: { create: orderItemsData },
@@ -89,9 +89,8 @@ export const createOrder = async (
       },
     });
 
-    // ETA: count pending+preparing for this vendor (includes this order)
     const pendingCount = await tx.order.count({
-      where: { vendorId, status: { in: [OrderStatus.PENDING, OrderStatus.PREPARING] } },
+      where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
     });
 
     const avgMinutesPerOrder = 5;
@@ -106,7 +105,7 @@ export const createOrder = async (
     result.order.id,
     'Order',
     finalCustomerId,
-    { status: OrderStatus.PENDING, paymentStatus, paymentMode }
+    { status: OrderStatus.PREPARING, paymentStatus, paymentMode }
   );
 
   // Realtime: vendor sees new order
