@@ -1,41 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 
-export function MobileOrdersSidebar({ eventSlug }: { eventSlug: string }) {
+export function CustomerSidebar({ eventSlug }: { eventSlug: string }) {
   const { orders } = useCustomerOrders(eventSlug);
   const [open, setOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)');
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   const count = orders.length;
 
-  if (!isMobile) return null;
-
   return (
     <>
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 md:hidden">
-        <button
-          aria-label="Open My Orders"
-          onClick={() => setOpen(true)}
-          className="bg-black text-white px-6 py-3 rounded-full shadow-xl text-sm font-semibold"
-          style={{ touchAction: 'manipulation' }}
-        >
-          My Orders
-        </button>
-      </div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="fixed top-1/2 left-0 -translate-y-1/2 bg-black text-white p-2 rounded-r-md z-50 hidden md:block"
+        aria-label="Toggle Orders Sidebar"
+      >
+        {open ? '←' : '→'}
+      </button>
 
       <div
-        className={`fixed top-0 left-0 h-full z-40 w-[80%] max-w-[420px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 left-0 h-full w-80 bg-white shadow-xl transition-transform duration-300 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ willChange: 'transform' }}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="font-semibold">My Orders ({count})</div>
@@ -59,16 +44,17 @@ export function MobileOrdersSidebar({ eventSlug }: { eventSlug: string }) {
                     <div className="font-bold">#{o.displayNumber}</div>
                     <div className="text-xs text-gray-500">
                       {o.status === 'READY' ? (
-                        <span className="text-green-700 font-semibold">READY</span>
+                        <span className="text-green-700 font-semibold">READY — Collect now</span>
                       ) : (
-                        <span className="text-gray-700">{o.status}</span>
+                        <span className="text-gray-700">
+                          {o.status === 'PREPARING' ? `~${o.estimatedMinutes} min` : o.status}
+                        </span>
                       )}
                     </div>
                   </div>
                   {o.vendorName ? (
                     <div className="text-xs text-gray-500">Vendor: {o.vendorName}</div>
                   ) : null}
-
                   {Array.isArray(o.items) && o.items.length > 0 ? (
                     <div className="mt-2">
                       <div className="text-xs font-medium text-gray-600 mb-1">Items:</div>

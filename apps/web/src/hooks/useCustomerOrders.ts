@@ -149,7 +149,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
               orderId: upd.orderId!,
               vendorId: upd.vendorId || '',
               vendorName: upd.vendorName || '',
-              status: upd.status || 'PENDING',
+              status: upd.status || 'PREPARING',
               estimatedMinutes: upd.estimatedMinutes ?? 0,
               createdAt: updated.createdAt || new Date().toISOString(),
               updatedAt: updated.updatedAt || new Date().toISOString(),

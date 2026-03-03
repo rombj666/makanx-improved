@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
-import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
+import { CustomerSidebar } from '../../components/customer/CustomerSidebar';
 import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 
 interface EventMapProps {
@@ -42,8 +42,8 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
 
   return (
     <div className="flex h-screen">
-      <div className="hidden md:block w-80 border-r bg-white overflow-y-auto">
-        <MyOrdersBar eventSlug={String(slug)} />
+      <div className="hidden md:block">
+        <CustomerSidebar eventSlug={String(slug)} />
       </div>
       <div className="flex-1 relative">
         <MapCanvas

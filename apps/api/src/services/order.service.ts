@@ -188,7 +188,10 @@ export const getVendorProductionBatch = async (
  */
 export const getCustomerOrders = async (customerId: string) => {
   return prisma.order.findMany({
-    where: { customerId },
+    where: { 
+      customerId,
+      status: { in: ['PREPARING', 'READY'] }
+    },
     include: {
       items: { include: { menuItem: true } },
       vendor: { select: { businessName: true } },

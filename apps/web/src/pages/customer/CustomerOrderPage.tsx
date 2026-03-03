@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { MyOrdersBar } from '../../components/customer/MyOrdersBar';
+import { CustomerSidebar } from '../../components/customer/CustomerSidebar';
 import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import { enableSound, primeReadySound, isSoundEnabled } from '../../lib/alerts';
@@ -255,7 +255,7 @@ export function CustomerOrderPage() {
           <MobileOrdersSidebar eventSlug={String(slug)} />
         </div>
         <div className="hidden lg:block">
-          <MyOrdersBar eventSlug={String(slug)} />
+          <CustomerSidebar eventSlug={String(slug)} />
         </div>
       </div>
     );
@@ -329,7 +329,7 @@ export function CustomerOrderPage() {
         <MobileOrdersSidebar eventSlug={String(slug || '')} />
       </div>
       <div className="hidden lg:block">
-        <MyOrdersBar eventSlug={String(slug)} />
+        <CustomerSidebar eventSlug={String(slug)} />
       </div>
     </div>
   );

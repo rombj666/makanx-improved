@@ -20,7 +20,7 @@ export function MyOrdersBar({ eventSlug }: { eventSlug: string }) {
     }
     const latest = orders[0];
     const etaText =
-      latest.status === 'PENDING' || latest.status === 'PREPARING'
+      latest.status === 'PREPARING'
         ? `~${latest.estimatedMinutes} min`
         : latest.status;
     return `Latest: #${latest.displayNumber} — ${etaText}`;
@@ -49,7 +49,7 @@ export function MyOrdersBar({ eventSlug }: { eventSlug: string }) {
                     <span className="text-green-700 font-semibold">READY — Collect now</span>
                   ) : (
                     <span className="text-gray-700">
-                      {o.status === 'PENDING' || o.status === 'PREPARING'
+                      {o.status === 'PREPARING'
                         ? `~${o.estimatedMinutes} min`
                         : o.status}
                     </span>

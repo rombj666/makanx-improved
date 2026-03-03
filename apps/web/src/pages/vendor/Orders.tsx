@@ -18,7 +18,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
-  status: 'PENDING' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+  status: 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
   totalAmount: number;
   createdAt: string;
   acceptedAt?: string | null;
@@ -27,7 +27,7 @@ interface Order {
   items: OrderItem[];
 }
 
-const ORDER_STATUSES = ['PENDING', 'PREPARING', 'READY', 'COMPLETED'] as const;
+const ORDER_STATUSES = ['PREPARING', 'READY', 'COMPLETED'] as const;
 type OrderStatus = typeof ORDER_STATUSES[number];
 
 // Helpers
@@ -44,7 +44,7 @@ export function VendorOrders() {
   const {socket, isConnected } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [openSection, setOpenSection] = useState<OrderStatus | null>('PENDING');
+  const [openSection, setOpenSection] = useState<OrderStatus | null>('PREPARING');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
   // 3.4 Live waiting timer
@@ -102,7 +102,7 @@ useEffect(() => {
 
   // Group orders
   const groupedOrders = useMemo(() => {
-    const groups: Record<string, Order[]> = { PENDING: [], PREPARING: [], READY: [], COMPLETED: [] };
+    const groups: Record<string, Order[]> = { PREPARING: [], READY: [], COMPLETED: [] };
     orders.forEach(o => {
       if (groups[o.status]) groups[o.status].push(o);
     });

@@ -116,7 +116,7 @@ model Order {
   id            String        @id @default(uuid())
   customerId    String
   vendorId      String
-  status        OrderStatus   @default(PENDING)
+  status        OrderStatus   @default(PREPARING)
   paymentMode   PaymentMode   @default(PAY_AT_BOOTH)
   paymentStatus PaymentStatus @default(PENDING)
   totalAmount   Decimal
@@ -180,11 +180,9 @@ enum Role {
 }
 
 enum OrderStatus {
-  PENDING
   PREPARING
   READY
   COMPLETED
-  CANCELLED
 }
 
 enum PaymentMode {
