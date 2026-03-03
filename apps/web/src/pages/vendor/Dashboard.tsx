@@ -102,6 +102,13 @@ export function VendorDashboard() {
           </div>
         ))}
       </div>
+      {order.status === 'PREPARING' && (
+        <div className="mt-3">
+          <Button onClick={() => markReady(order.id)} className="bg-green-500 text-white px-3 py-1 rounded">
+            Mark Ready
+          </Button>
+        </div>
+      )}
     </Card>
   );
 
@@ -115,6 +122,14 @@ export function VendorDashboard() {
     } catch (err) {
       console.error("Production fetch error:", err);
     }
+  };
+  const markReady = async (id: string) => {
+    await api.patch(`/orders/${id}/status`, { status: 'READY' });
+    await fetchProductionBatch();
+  };
+  const markComplete = async (id: string) => {
+    await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
+    await fetchProductionBatch();
   };
 
   const GroupedProduction = ({ data }: { data: any[] }) => (
@@ -170,6 +185,13 @@ export function VendorDashboard() {
                           </li>
                         ))}
                       </ul>
+                      {order.status === 'READY' && (
+                        <div className="mt-2">
+                          <Button onClick={() => markComplete(order.id)} className="bg-blue-500 text-white px-3 py-1 rounded">
+                            Complete
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
