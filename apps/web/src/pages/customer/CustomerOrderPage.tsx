@@ -192,6 +192,7 @@ export function CustomerOrderPage() {
           updatedAt: order.updatedAt,
           displayNumber,
         });
+        try { localStorage.setItem('mx_center_map', '1'); } catch {}
       } else {
         setError('Order failed');
       } 

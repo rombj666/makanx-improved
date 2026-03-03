@@ -154,6 +154,24 @@ export function MapCanvas({
     // fitToView will trigger via useEffect [naturalSize]
   };
 
+  const hasCenteredInitialRO = useRef(false);
+  useEffect(() => {
+    if (!readOnly) return;
+    if (hasCenteredInitialRO.current) return;
+    if (!containerRef.current) return;
+    if (naturalSize.width === 0 || naturalSize.height === 0) return;
+    const { clientWidth, clientHeight } = containerRef.current;
+    const scaleFit = Math.min(
+      clientWidth / naturalSize.width,
+      clientHeight / naturalSize.height
+    );
+    const newX = (clientWidth - naturalSize.width * scaleFit) / 2;
+    const newY = (clientHeight - naturalSize.height * scaleFit) / 2;
+    setScale(scaleFit);
+    setPosition({ x: newX, y: newY });
+    hasCenteredInitialRO.current = true;
+  }, [naturalSize, readOnly]);
+
   const hasCenteredRef = useRef(false);
   useEffect(() => {
     if (!myBoothId || hasCenteredRef.current) return;
