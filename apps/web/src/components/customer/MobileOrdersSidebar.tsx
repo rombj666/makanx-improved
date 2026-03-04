@@ -20,23 +20,38 @@ export function MobileOrdersSidebar({ eventSlug }: { eventSlug: string }) {
 
   return (
     <>
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 md:hidden">
+      <div className="fixed bottom-4 left-4 right-4 z-40 md:hidden">
         <button
-          aria-label="Open My Orders"
           onClick={() => setOpen(true)}
-          className="bg-black text-white px-6 py-3 rounded-full shadow-xl text-sm font-semibold"
-          style={{ touchAction: 'manipulation' }}
+          className="w-full bg-white border rounded-xl shadow-xl px-4 py-3 text-left"
+          aria-label="Open Order Tracker"
         >
-          My Orders
+          {orders.length === 0 ? (
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">No active orders</div>
+              <div className="text-xs text-gray-500">(Tap to refresh)</div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Order #{orders[0].displayNumber}</div>
+              <div className="text-sm text-gray-700">
+                {orders[0].status === 'READY' ? (
+                  <span className="text-green-700 font-semibold">READY — Collect now</span>
+                ) : (
+                  <span>
+                    {orders[0].status === 'PREPARING'
+                      ? `Preparing (~${orders[0].estimatedMinutes} min)`
+                      : orders[0].status}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="text-xs text-gray-500 mt-1">Tap to expand</div>
         </button>
       </div>
 
-      <div
-        className={`fixed top-0 left-0 h-full z-40 w-[80%] max-w-[420px] bg-white shadow-2xl transition-transform duration-300 ease-out ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
-        style={{ willChange: 'transform' }}
-      >
+      <div className={`fixed bottom-0 left-0 right-0 z-40 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${open ? 'translate-y-0' : 'translate-y-full'}`}>
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="font-semibold">My Orders ({count})</div>
           <button
@@ -48,7 +63,7 @@ export function MobileOrdersSidebar({ eventSlug }: { eventSlug: string }) {
           </button>
         </div>
 
-        <div className="h-[calc(100%-56px)] overflow-y-auto">
+        <div className="max-h-[65vh] overflow-y-auto">
           {orders.length === 0 ? (
             <div className="p-4 text-sm text-gray-500">No active orders</div>
           ) : (

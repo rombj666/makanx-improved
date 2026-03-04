@@ -3,10 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { CustomerSidebar } from '../../components/customer/CustomerSidebar';
-import { MobileOrdersSidebar } from '../../components/customer/MobileOrdersSidebar';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { enableSound, primeReadySound, isSoundEnabled } from '../../lib/alerts';
+import { enableSound, primeReadySound } from '../../lib/alerts';
 
 interface MenuItem {
   id: string;
@@ -36,76 +34,18 @@ export function CustomerOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const { addOrUpdate } = useCustomerOrders(slug || '');
   const enableNotification = async () => {
-    console.log("Starting push enable...");
     try {
-      if (!('serviceWorker' in navigator)) {
-        console.error("Service worker not supported");
-        return;
-      }
-      const registration = await navigator.serviceWorker.ready;
-      console.log("SW registration:", registration);
-
-      const existing = await registration.pushManager.getSubscription();
-      console.log("Existing subscription:", existing);
-
       const permission = await Notification.requestPermission();
-      console.log("Notification permission:", permission);
-
       if (permission !== 'granted') {
-        console.error("Permission denied");
+        alert('Notification permission denied');
         return;
       }
-      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-      if (!publicKey) {
-        alert('Notification configuration error.');
-        return;
-      }
-      const convertedKey = (function urlBase64ToUint8Array(base64String: string) {
-        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-        for (let i = 0; i < rawData.length; ++i) {
-          outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-      })(publicKey as string);
-      
-      console.log("Frontend VAPID key raw:", import.meta.env.VITE_VAPID_PUBLIC_KEY);
-      console.log(
-        "Frontend VAPID key length:",
-        import.meta.env.VITE_VAPID_PUBLIC_KEY?.length
-      );
-      let subscription: PushSubscription;
       try {
-        console.log("Converted key is Uint8Array:", convertedKey instanceof Uint8Array);
-        console.log("Converted key length:", convertedKey?.length);
-        const sub = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: convertedKey,
-        });
-        console.log("SUBSCRIBE OK:", sub);
-        subscription = sub;
-      } catch (err: any) {
-        console.log("SUBSCRIBE FAIL name:", err?.name);
-        console.log("SUBSCRIBE FAIL message:", err?.message);
-        console.log("SUBSCRIBE FAIL full:", err);
-        throw err;
-      }
-
-      const customerId = getOrCreateGuestId();
-      const resp = await api.post('/push/subscribe', {
-        customerId,
-        subscription: {
-          endpoint: subscription.endpoint,
-          keys: subscription.toJSON().keys,
-        },
-      });
-      console.log("Subscription sent to backend:", resp.status, resp.data);
-      alert('Notifications enabled!');
+        localStorage.setItem('pushEnabled', 'true');
+        localStorage.setItem('pushEnabledTime', String(Date.now()));
+      } catch {}
       navigate(`/customer/event/${slug}`);
     } catch (error) {
-      console.error("Enable notification error:", error);
       alert('Failed to enable notifications.');
     }
   };
@@ -204,45 +144,42 @@ export function CustomerOrderPage() {
   };
 
   if (confirmed) {
-    const showSoundPrompt =
-      (typeof window !== 'undefined') &&
-      localStorage.getItem('mx_sound_prompted') !== '1' &&
-      !isSoundEnabled();
-    const onEnableSound = () => {
-      enableSound();
-      primeReadySound();
-      try { localStorage.setItem('mx_sound_prompted', '1'); } catch {}
-      navigate(`/customer/event/${slug}`);
+    const [soundEnabled, setSoundEnabled] = useState(
+      (typeof window !== 'undefined' && localStorage.getItem('soundEnabled') === 'true') || false
+    );
+    const toggleSound = () => {
+      const v = !soundEnabled;
+      setSoundEnabled(v);
+      try { localStorage.setItem('soundEnabled', String(v)); } catch {}
+      if (v) {
+        enableSound();
+        primeReadySound();
+      }
     };
-    const onNotNow = () => {
-      try { localStorage.setItem('mx_sound_prompted', '1'); } catch {}
-    };
+    const pushEnabled = typeof window !== 'undefined' ? localStorage.getItem('pushEnabled') : null;
+    const pushEnabledTime = typeof window !== 'undefined' ? localStorage.getItem('pushEnabledTime') : null;
+    const oneDay = 24 * 60 * 60 * 1000;
+    const shouldAsk = !pushEnabled || Date.now() - Number(pushEnabledTime) > oneDay;
     return (
       <div className="w-full h-full bg-white flex items-center justify-center">
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold">Order Confirmed</h1>
           <p className="text-gray-600">Your Number</p>
           <div className="text-5xl font-extrabold tracking-tight">#{confirmed.number}</div>
           <p className="text-gray-500">Estimated Time: ~{confirmed.eta} minutes</p>
-          {showSoundPrompt && (
-            <div className="mt-3 p-3 border rounded-lg text-sm">
-              <div className="mb-2">Enable sound alerts when your order is READY?</div>
-              <div className="flex items-center gap-2 justify-center">
-                <button onClick={onEnableSound} className="px-3 py-2 rounded bg-black text-white">Enable</button>
-                <button onClick={onNotNow} className="px-3 py-2 rounded border">Not now</button>
-              </div>
-            </div>
-          )}
-          <div className="mt-3 p-3 border rounded-lg text-sm">
-            <div className="mb-2">Enable Order Notifications 🔔</div>
-            <div className="flex items-center gap-2 justify-center">
-              <button
-                onClick={enableNotification}
-                className="px-3 py-2 rounded bg-black text-white"
-              >
-                Enable Order Notifications
+          {shouldAsk && (
+            <div className="p-3 border rounded-lg text-sm">
+              <div className="mb-2">Enable Order Notifications 🔔</div>
+              <button onClick={enableNotification} className="px-3 py-2 rounded bg-black text-white">
+                Enable Notifications
               </button>
             </div>
+          )}
+          <div className="p-3 border rounded-lg text-sm">
+            <div className="mb-2">Sound Alert</div>
+            <button onClick={toggleSound} className="px-3 py-2 rounded border">
+              {soundEnabled ? 'ON' : 'OFF'}
+            </button>
           </div>
           <button
             onClick={() => navigate(`/customer/event/${slug}`)}
@@ -250,13 +187,6 @@ export function CustomerOrderPage() {
           >
             Back to Map
           </button>
-        </div>
-        {/* Responsive orders UI */}
-        <div className="lg:hidden">
-          <MobileOrdersSidebar eventSlug={String(slug)} />
-        </div>
-        <div className="hidden lg:block">
-          <CustomerSidebar eventSlug={String(slug)} />
         </div>
       </div>
     );
@@ -313,7 +243,7 @@ export function CustomerOrderPage() {
         )}
       </div>
 
-      <div className="p-6 border-t">
+      <div className="p-6 border-t hidden md:block">
         <div className="flex justify-between mb-4">
           <span className="font-semibold">Total</span>
           <span className="font-bold">${total.toFixed(2)}</span>
@@ -326,11 +256,18 @@ export function CustomerOrderPage() {
           {isPlacing ? 'Placing...' : 'Place Order'}
         </button>
       </div>
-      <div className="lg:hidden">
-        <MobileOrdersSidebar eventSlug={String(slug || '')} />
-      </div>
-      <div className="hidden lg:block">
-        <CustomerSidebar eventSlug={String(slug)} />
+      <div className="fixed bottom-4 left-4 right-4 z-50 md:hidden">
+        <div className="flex justify-between mb-2">
+          <span className="font-semibold">Total</span>
+          <span className="font-bold">${total.toFixed(2)}</span>
+        </div>
+        <button
+          onClick={placeOrder}
+          disabled={items.length === 0 || isPlacing}
+          className="w-full bg-black text-white py-4 rounded-xl text-lg font-semibold shadow-xl disabled:opacity-50 active:scale-95 transition"
+        >
+          {isPlacing ? 'Placing...' : 'Place Order'}
+        </button>
       </div>
     </div>
   );
