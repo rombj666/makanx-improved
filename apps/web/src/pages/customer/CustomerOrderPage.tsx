@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { enableSound, primeReadySound } from '../../lib/alerts';
 
 interface MenuItem {
   id: string;
@@ -30,25 +29,8 @@ export function CustomerOrderPage() {
   const [booth, setBooth] = useState<Booth | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isPlacing, setIsPlacing] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ number: string; eta: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { addOrUpdate } = useCustomerOrders(slug || '');
-  const enableNotification = async () => {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        alert('Notification permission denied');
-        return;
-      }
-      try {
-        localStorage.setItem('pushEnabled', 'true');
-        localStorage.setItem('pushEnabledTime', String(Date.now()));
-      } catch {}
-      navigate(`/customer/event/${slug}`);
-    } catch (error) {
-      alert('Failed to enable notifications.');
-    }
-  };
 
   useEffect(() => {
     const run = async () => {
@@ -121,7 +103,6 @@ export function CustomerOrderPage() {
           raw !== null && raw !== undefined && `${raw}`.trim() !== ''
             ? String(raw).toUpperCase()
             : String(order.id || '').slice(-4).toUpperCase();
-        setConfirmed({ number: displayNumber, eta: estimatedMinutes });
         addOrUpdate({
           orderId: order.id,
           vendorId: order.vendorId,
@@ -133,6 +114,14 @@ export function CustomerOrderPage() {
           displayNumber,
         });
         try { localStorage.setItem('mx_center_map', '1'); } catch {}
+        navigate('/customer/order-confirmed', {
+          state: {
+            orderId: order.id,
+            orderNumber: displayNumber,
+            eta: estimatedMinutes,
+            eventSlug: slug,
+          },
+        });
       } else {
         setError('Order failed');
       } 
@@ -142,55 +131,6 @@ export function CustomerOrderPage() {
       setIsPlacing(false);
     }
   };
-
-  if (confirmed) {
-    const [soundEnabled, setSoundEnabled] = useState(
-      (typeof window !== 'undefined' && localStorage.getItem('soundEnabled') === 'true') || false
-    );
-    const toggleSound = () => {
-      const v = !soundEnabled;
-      setSoundEnabled(v);
-      try { localStorage.setItem('soundEnabled', String(v)); } catch {}
-      if (v) {
-        enableSound();
-        primeReadySound();
-      }
-    };
-    const pushEnabled = typeof window !== 'undefined' ? localStorage.getItem('pushEnabled') : null;
-    const pushEnabledTime = typeof window !== 'undefined' ? localStorage.getItem('pushEnabledTime') : null;
-    const oneDay = 24 * 60 * 60 * 1000;
-    const shouldAsk = !pushEnabled || Date.now() - Number(pushEnabledTime) > oneDay;
-    return (
-      <div className="w-full h-full bg-white flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold">Order Confirmed</h1>
-          <p className="text-gray-600">Your Number</p>
-          <div className="text-5xl font-extrabold tracking-tight">#{confirmed.number}</div>
-          <p className="text-gray-500">Estimated Time: ~{confirmed.eta} minutes</p>
-          {shouldAsk && (
-            <div className="p-3 border rounded-lg text-sm">
-              <div className="mb-2">Enable Order Notifications 🔔</div>
-              <button onClick={enableNotification} className="px-3 py-2 rounded bg-black text-white">
-                Enable Notifications
-              </button>
-            </div>
-          )}
-          <div className="p-3 border rounded-lg text-sm">
-            <div className="mb-2">Sound Alert</div>
-            <button onClick={toggleSound} className="px-3 py-2 rounded border">
-              {soundEnabled ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          <button
-            onClick={() => navigate(`/customer/event/${slug}`)}
-            className="mt-4 px-4 py-2 rounded-lg bg-black text-white"
-          >
-            Back to Map
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (!booth) {
     return (
