@@ -57,6 +57,8 @@ export const sendReadyNotification = async (order: {
   id: string;
   customerId: string;
   vendor?: { businessName?: string | null } | null;
+  booth?: { name?: string | null } | null;
+  event?: { slug?: string | null } | null;
 }) => {
   if (!publicKey || !privateKey || !subject) {
     return;
@@ -69,12 +71,18 @@ export const sendReadyNotification = async (order: {
   if (!subs.length) return;
   console.log("Found subscriptions:", subs.length);
 
-  const title = 'MakanX Order Ready';
+  const boothName = order.booth?.name || order.vendor?.businessName || 'Booth';
   const displayNumber = order.id.slice(-4).toUpperCase();
-  const body = `Order #${displayNumber} is READY. Please collect your food.`;
-  const url = `/customer/orders?orderId=${order.id}`;
+  const eventSlug = order.event?.slug || '';
 
-  const payload = JSON.stringify({ title, body, url });
+  const payload = JSON.stringify({
+    title: "Order Ready 🍽️",
+    body: `Booth ${boothName} – Order #${displayNumber} is ready for pickup!`,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `order-${displayNumber}`,
+    url: `/customer/event/${eventSlug}`,
+  });
 
   await Promise.all(
     subs.map(async (sub) => {
