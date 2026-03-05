@@ -13,8 +13,12 @@
     "build:web": "npm run build -w apps/web"
   },
   "dependencies": {
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.577.0",
+    "numeral": "^2.0.6",
     "push": "^0.1.1",
     "qrcode.react": "^4.2.0",
+    "recharts": "^3.7.0",
     "web": "^0.0.2"
   }
 }

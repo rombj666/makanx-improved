@@ -14,12 +14,14 @@ import { CustomerOrders } from './pages/customer/Orders';
 import { VendorDashboard } from './pages/vendor/Dashboard';
 import { VendorMenu } from './pages/vendor/Menu';
 import { VendorMap } from './pages/vendor/Map';
+import { VendorSales } from './pages/vendor/VendorSales';
 import { OrganizerDashboard as OrganizerLegacyDashboard } from './pages/organizer/Dashboard';
 import { OrganizerDashboard } from './pages/organizer/OrganizerDashboard';
 import { MapEditor } from './pages/organizer/MapEditor';
 import { OrganizerApplicationsPage } from './pages/organizer/OrganizerApplicationsPage';
 import { OrganizerVendorsPage } from './pages/organizer/OrganizerVendorsPage';
 import { OrganizerSalesPlaceholder } from './pages/organizer/OrganizerSalesPlaceholder';
+import { OrganizerVendorSales } from './pages/organizer/OrganizerVendorSales';
 import { Role } from '@makanx/shared';
 import { Toaster } from 'react-hot-toast';
 
@@ -111,6 +113,7 @@ function App() {
                 <Route path="applications" element={<OrganizerApplicationsPage />} />
                 <Route path="vendors" element={<OrganizerVendorsPage />} />
                 <Route path="sales" element={<OrganizerSalesPlaceholder />} />
+                <Route path="sales/:vendorId" element={<OrganizerVendorSales />} />
               </Route>
 
               {/* Vendor Routes */}
@@ -123,6 +126,7 @@ function App() {
                 }
               >
                 <Route index element={<VendorDashboard />} />
+                <Route path="sales" element={<VendorSales />} />
                 <Route path="menu" element={<VendorMenu />} />
                 <Route path="map" element={<VendorMap />} />
               </Route>

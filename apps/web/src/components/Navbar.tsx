@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/Button';
 import { Role } from '@makanx/shared';
+import { BarChart3 } from 'lucide-react';
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -43,6 +44,15 @@ export function Navbar() {
                     }
                   >
                     Dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/vendor/sales"
+                    className={({ isActive }) =>
+                      `text-sm font-medium transition-colors ${isActive ? 'text-orange-600' : 'text-gray-700 hover:text-orange-600'} flex items-center gap-1`
+                    }
+                  >
+                    <BarChart3 size={16} />
+                    View Sales
                   </NavLink>
                   <NavLink
                     to="/vendor/menu"
