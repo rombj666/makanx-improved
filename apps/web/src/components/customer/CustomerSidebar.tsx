@@ -1,24 +1,19 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 
-export function CustomerSidebar({ eventSlug }: { eventSlug: string }) {
+export function CustomerSidebar({
+  eventSlug,
+  open,
+  onClose,
+}: { eventSlug: string; open: boolean; onClose: () => void }) {
   const { orders } = useCustomerOrders(eventSlug);
-  const [open, setOpen] = useState(false);
 
-  const count = orders.length;
+  const count = useMemo(() => orders.length, [orders]);
 
   return (
     <>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="fixed top-1/2 left-0 -translate-y-1/2 bg-black text-white p-2 rounded-r-md z-50 hidden md:block"
-        aria-label="Toggle Orders Sidebar"
-      >
-        {open ? '←' : '→'}
-      </button>
-
       <div
-        className={`fixed top-0 left-0 h-full w-80 bg-white shadow-xl transition-transform duration-300 ${
+        className={`fixed top-0 left-0 h-full w-[80%] md:w-80 bg-white shadow-xl transition-transform duration-300 z-50 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -26,7 +21,7 @@ export function CustomerSidebar({ eventSlug }: { eventSlug: string }) {
           <div className="font-semibold">My Orders ({count})</div>
           <button
             aria-label="Close"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
             className="w-8 h-8 rounded-full border flex items-center justify-center"
           >
             ✕
