@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { formatCurrency } from '../../lib/utils';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../lib/api';
 import { format } from 'date-fns';
@@ -134,15 +135,15 @@ export function OrganizerSalesPlaceholder() {
       </div>
 
       <div className="grid grid-cols-4 gap-6">
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${(summary?.totalRevenue ?? 0).toFixed(2)}</div>
+            <div className="text-3xl font-bold">{formatCurrency(summary?.totalRevenue ?? 0)}</div>
           </CardContent>
         </Card>
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Total Orders</CardTitle>
           </CardHeader>
@@ -150,7 +151,7 @@ export function OrganizerSalesPlaceholder() {
             <div className="text-3xl font-bold">{summary?.totalOrders ?? 0}</div>
           </CardContent>
         </Card>
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Total Vendors</CardTitle>
           </CardHeader>
@@ -158,17 +159,17 @@ export function OrganizerSalesPlaceholder() {
             <div className="text-3xl font-bold">{summary?.totalVendors ?? 0}</div>
           </CardContent>
         </Card>
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Average Order Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${(summary?.avgOrder ?? 0).toFixed(2)}</div>
+            <div className="text-3xl font-bold">{formatCurrency(summary?.avgOrder ?? 0)}</div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Revenue Trend</CardTitle>
         </CardHeader>
@@ -177,7 +178,7 @@ export function OrganizerSalesPlaceholder() {
             <LineChart data={trendData}>
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip />
+              <Tooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
               <Legend />
               <Line type="monotone" dataKey="revenue" stroke="#ff7f50" strokeWidth={2} />
             </LineChart>
@@ -186,7 +187,7 @@ export function OrganizerSalesPlaceholder() {
       </Card>
 
       <div className="grid grid-cols-2 gap-6">
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Vendor Revenue</CardTitle>
           </CardHeader>
@@ -195,7 +196,7 @@ export function OrganizerSalesPlaceholder() {
               <BarChart data={vendorBarData}>
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
                 <Legend />
                 <Bar dataKey="revenue" fill="#6495ed" />
               </BarChart>
@@ -203,7 +204,7 @@ export function OrganizerSalesPlaceholder() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Top Products</CardTitle>
           </CardHeader>
@@ -223,7 +224,7 @@ export function OrganizerSalesPlaceholder() {
         </Card>
       </div>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Vendor Revenue Table</CardTitle>
         </CardHeader>
@@ -240,12 +241,12 @@ export function OrganizerSalesPlaceholder() {
               {vendors.map((v) => (
                 <tr
                   key={v.vendorId}
-                  className="border-b hover:bg-gray-50 cursor-pointer"
+                  className="border-b hover:bg-gray-50 cursor-pointer transition-colors"
                   onClick={() => navigate(`/organizer/sales/${v.vendorId}`)}
                 >
                   <td className="p-2">{v.vendorName}</td>
                   <td className="p-2">{v.orderCount}</td>
-                  <td className="p-2">${v.revenue.toFixed(2)}</td>
+                  <td className="p-2">{formatCurrency(v.revenue)}</td>
                 </tr>
               ))}
             </tbody>

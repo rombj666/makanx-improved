@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
+import { formatCurrency } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -90,16 +91,16 @@ export function VendorSales() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-4 gap-6">
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+      <div className="grid grid-cols-3 gap-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${(summary?.revenue ?? 0).toFixed(2)}</div>
+            <div className="text-3xl font-bold">{formatCurrency(summary?.revenue ?? 0)}</div>
           </CardContent>
         </Card>
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Orders</CardTitle>
           </CardHeader>
@@ -107,17 +108,17 @@ export function VendorSales() {
             <div className="text-3xl font-bold">{summary?.orders ?? 0}</div>
           </CardContent>
         </Card>
-        <Card className="bg-white rounded-xl shadow-sm p-6">
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
             <CardTitle>Average Order Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${(summary?.avgOrder ?? 0).toFixed(2)}</div>
+            <div className="text-3xl font-bold">{formatCurrency(summary?.avgOrder ?? 0)}</div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Revenue Trend</CardTitle>
         </CardHeader>
@@ -126,7 +127,7 @@ export function VendorSales() {
             <LineChart data={formattedTrend}>
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip />
+              <Tooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
               <Legend />
               <Line type="monotone" dataKey="revenue" stroke="#ff7f50" strokeWidth={2} />
             </LineChart>
@@ -134,7 +135,7 @@ export function VendorSales() {
         </CardContent>
       </Card>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Top Products</CardTitle>
         </CardHeader>
@@ -153,7 +154,7 @@ export function VendorSales() {
         </CardContent>
       </Card>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Product Breakdown</CardTitle>
         </CardHeader>
@@ -171,7 +172,7 @@ export function VendorSales() {
                 <tr key={idx} className="border-b">
                   <td className="p-2">{p.productName}</td>
                   <td className="p-2">{p.qtySold}</td>
-                  <td className="p-2">${p.revenue.toFixed(2)}</td>
+                  <td className="p-2">{formatCurrency(p.revenue)}</td>
                 </tr>
               ))}
             </tbody>
@@ -179,7 +180,7 @@ export function VendorSales() {
         </CardContent>
       </Card>
 
-      <Card className="bg-white rounded-xl shadow-sm p-6">
+      <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <CardHeader>
           <CardTitle>Completed Orders</CardTitle>
         </CardHeader>
@@ -197,13 +198,13 @@ export function VendorSales() {
               {orders.map((o, idx) => (
                 <tr key={idx} className="border-b align-top">
                   <td className="p-2">#{o.orderNumber}</td>
-                  <td className="p-2">${o.totalAmount.toFixed(2)}</td>
+                  <td className="p-2">{formatCurrency(o.totalAmount)}</td>
                   <td className="p-2">{new Date(o.createdAt).toLocaleTimeString()}</td>
                   <td className="p-2">
                     <ul>
                       {o.items.map((it, i) => (
                         <li key={i}>
-                          {it.qty}x {it.productName} (${it.price})
+                          {it.qty}x {it.productName} ({formatCurrency(it.price)})
                         </li>
                       ))}
                     </ul>
