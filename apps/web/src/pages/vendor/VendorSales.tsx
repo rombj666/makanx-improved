@@ -46,6 +46,8 @@ export function VendorSales() {
 
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
 
+  const renderPieLabel = ({ value }: { value: number }) => value;
+
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -142,7 +144,16 @@ export function VendorSales() {
         <CardContent className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={products} dataKey="qtySold" nameKey="productName" outerRadius={120} label>
+              <Pie
+                data={products}
+                dataKey="qtySold"
+                nameKey="productName"
+                cx="50%"
+                cy="50%"
+                outerRadius={140}
+                labelLine={false}
+                label={renderPieLabel}
+              >
                 {products.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}

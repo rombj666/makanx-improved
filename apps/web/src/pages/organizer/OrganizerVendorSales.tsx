@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -15,6 +15,7 @@ interface VendorAgg {
 
 export function OrganizerVendorSales() {
   const { vendorId } = useParams();
+  const navigate = useNavigate();
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [eventId, setEventId] = useState<string>('');
   const [vendor, setVendor] = useState<VendorAgg | null>(null);
@@ -59,6 +60,12 @@ export function OrganizerVendorSales() {
 
   return (
     <div className="p-6 space-y-6">
+      <button
+        onClick={() => navigate('/organizer/sales')}
+        className="mb-4 text-sm text-orange-600 hover:underline"
+      >
+        ← Back to Sales Dashboard
+      </button>
       <h1 className="text-2xl font-bold">{title}</h1>
 
       <div className="flex items-end gap-4">
