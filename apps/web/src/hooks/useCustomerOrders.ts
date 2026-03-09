@@ -98,7 +98,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
             }
           });
           const merged = Array.from(map.values()).filter(
-            (o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED'
+            (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
           );
           localStorage.setItem(key, JSON.stringify(merged));
           return merged;
@@ -138,13 +138,13 @@ export function useCustomerOrders(eventSlug: string | undefined) {
             becameReady = true;
             displayNum = merged.displayNumber;
           }
-          if (merged.status === 'COMPLETED' || merged.status === 'CANCELLED') {
+          if (merged.status === 'CANCELLED' || merged.status === 'COMPLETED' || merged.status === 'PENDING') {
             next.splice(idx, 1);
           } else {
             next[idx] = merged;
           }
         } else {
-          if (upd.orderId && upd.status !== 'COMPLETED' && upd.status !== 'CANCELLED') {
+          if (upd.orderId && upd.status !== 'CANCELLED' && upd.status !== 'PENDING' && upd.status !== 'COMPLETED') {
             const newEntry = {
               orderId: upd.orderId!,
               vendorId: upd.vendorId || '',
@@ -182,10 +182,22 @@ export function useCustomerOrders(eventSlug: string | undefined) {
       setOrders((prev) => {
         const next = prev.slice();
         const idx = next.findIndex((o) => o.orderId === order.orderId);
-        if (idx >= 0) {
-          next[idx] = { ...next[idx], ...order };
+        
+        const shouldRemove =
+          order.status === 'COMPLETED' ||
+          order.status === 'CANCELLED' ||
+          order.status === 'PENDING';
+
+        if (shouldRemove) {
+          if (idx >= 0) {
+            next.splice(idx, 1);
+          }
         } else {
-          next.unshift(order);
+          if (idx >= 0) {
+            next[idx] = { ...next[idx], ...order };
+          } else {
+            next.unshift(order);
+          }
         }
         localStorage.setItem(key, JSON.stringify(next));
         return next;

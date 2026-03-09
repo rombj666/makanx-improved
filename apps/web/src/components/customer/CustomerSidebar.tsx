@@ -8,7 +8,13 @@ export function CustomerSidebar({
 }: { eventSlug: string; open: boolean; onClose: () => void }) {
   const { orders } = useCustomerOrders(eventSlug);
 
-  const count = useMemo(() => orders.length, [orders]);
+  // Filter for only active orders (PREPARING or READY)
+  const activeOrders = useMemo(() => 
+    orders.filter(o => o.status === 'PREPARING' || o.status === 'READY'), 
+    [orders]
+  );
+
+  const count = activeOrders.length;
 
   return (
     <>
@@ -29,11 +35,11 @@ export function CustomerSidebar({
         </div>
 
         <div className="h-[calc(100%-56px)] overflow-y-auto">
-          {orders.length === 0 ? (
+          {activeOrders.length === 0 ? (
             <div className="p-4 text-sm text-gray-500">No active orders</div>
           ) : (
             <ul className="divide-y">
-              {orders.map((o) => (
+              {activeOrders.map((o) => (
                 <li key={o.orderId} className="p-4 space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="font-bold">#{o.displayNumber}</div>

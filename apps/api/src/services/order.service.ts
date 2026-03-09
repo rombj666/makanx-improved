@@ -190,7 +190,7 @@ export const getCustomerOrders = async (customerId: string) => {
   return prisma.order.findMany({
     where: { 
       customerId,
-      status: { in: ['PREPARING', 'READY'] }
+      status: { in: ['PREPARING', 'READY', 'COMPLETED'] }
     },
     include: {
       items: { include: { menuItem: true } },

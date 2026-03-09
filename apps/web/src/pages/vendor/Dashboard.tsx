@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../context/SocketContext';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -34,7 +34,33 @@ export function VendorDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [viewMode, setViewMode] = useState<'kitchen' | 'fulfillment'>('kitchen');
   const [groupByWindow, setGroupByWindow] = useState(false);
-  const [productionData, setProductionData] = useState<any[]>([]);
+  const [groupMinutes, setGroupMinutes] = useState(2);
+  const [productionOrders, setProductionOrders] = useState<Order[]>([]);
+
+  const groupedProduction = useMemo(() => {
+    const windowMs = groupMinutes * 60 * 1000;
+    const grouped = new Map<number, Order[]>();
+
+    for (const order of productionOrders) {
+      const orderTime = new Date(order.createdAt).getTime();
+      const bucket = Math.floor(orderTime / windowMs);
+      const windowStart = bucket * windowMs;
+      const existing = grouped.get(windowStart);
+      if (existing) {
+        existing.push(order);
+      } else {
+        grouped.set(windowStart, [order]);
+      }
+    }
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([windowStart, ordersInWindow]) => ({
+        windowStart,
+        windowEnd: windowStart + windowMs,
+        orders: ordersInWindow,
+      }));
+  }, [productionOrders, groupMinutes]);
 
   useEffect(() => {
     fetchOrders();
@@ -114,10 +140,9 @@ export function VendorDashboard() {
 
   const fetchProductionBatch = async () => {
     try {
-      console.log("Fetching production batch. Group:", groupByWindow);
-      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=${groupByWindow}`);
+      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
       if (res.data.success) {
-        setProductionData(res.data.data);
+        setProductionOrders(res.data.data);
       }
     } catch (err) {
       console.error("Production fetch error:", err);
@@ -132,11 +157,18 @@ export function VendorDashboard() {
     await fetchProductionBatch();
   };
 
-  const GroupedProduction = ({ data }: { data: any[] }) => (
+  const GroupedProduction = ({
+    data,
+  }: {
+    data: { windowStart: number; windowEnd: number; orders: Order[] }[];
+  }) => (
     <>
-      {data.map((block: any) => (
-        <div key={block.window} className="mb-6">
-          <h4 className="font-bold text-lg mb-2">{new Date(block.window).toLocaleTimeString()}</h4>
+      {data.map((block) => (
+        <div key={block.windowStart} className="mb-6">
+          <h4 className="font-bold text-lg mb-2">
+            {new Date(block.windowStart).toLocaleTimeString()} -{' '}
+            {new Date(block.windowEnd).toLocaleTimeString()}
+          </h4>
           <div className="space-y-2">
             {block.orders.map((order: any) => (
               <OrderCard key={order.id} order={order} />
@@ -207,9 +239,9 @@ export function VendorDashboard() {
     fetchProductionBatch();
   }, [groupByWindow]);
 
-  const SingleOrderList = ({ data }: { data: any[] }) => (
+  const SingleOrderList = ({ data }: { data: Order[] }) => (
     <>
-      {data.map((order: any) => (
+      {data.map((order) => (
         <OrderCard key={order.id} order={order} />
       ))}
     </>
@@ -236,6 +268,15 @@ export function VendorDashboard() {
               Order Fulfillment
             </Button>
           </div>
+          <select
+            value={groupMinutes}
+            onChange={(e) => setGroupMinutes(Number(e.target.value))}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value={1}>1 min</option>
+            <option value={2}>2 min</option>
+            <option value={5}>5 min</option>
+          </select>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -243,7 +284,7 @@ export function VendorDashboard() {
               checked={groupByWindow}
               onChange={(e) => setGroupByWindow(e.target.checked)}
             />
-            Group by 5-min window
+            Group production by {groupMinutes}-minute windows
           </label>
           <Button
             variant="outline"
@@ -258,17 +299,17 @@ export function VendorDashboard() {
       </div>
       {viewMode === "kitchen" && (
         <div className="mt-4">
-          {groupByWindow && productionData?.length === 0 && (
+          {groupByWindow && groupedProduction.length === 0 && (
             <p>No grouped production data.</p>
           )}
-          {!groupByWindow && productionData?.length === 0 && (
+          {!groupByWindow && productionOrders.length === 0 && (
             <p>No live orders.</p>
           )}
           {groupByWindow && (
-            <GroupedProduction data={productionData} />
+            <GroupedProduction data={groupedProduction} />
           )}
           {!groupByWindow && (
-            <SingleOrderList data={productionData} />
+            <SingleOrderList data={productionOrders} />
           )}
         </div>
       )}

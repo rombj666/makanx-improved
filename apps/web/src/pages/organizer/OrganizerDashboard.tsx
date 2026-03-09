@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -28,6 +28,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Plus, MapPin, Calendar } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
+import * as htmlToImage from 'html-to-image';
 
 export function OrganizerDashboard() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -39,6 +40,8 @@ export function OrganizerDashboard() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isDownloadingQr, setIsDownloadingQr] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [newEventName, setNewEventName] = useState('');
@@ -148,6 +151,23 @@ export function OrganizerDashboard() {
   };
 
   const selectedEvent = events.find(e => e.id === selectedEventId);
+  const eventUrl = selectedEvent ? `${window.location.origin}/customer/${selectedEvent.slug}` : '';
+
+  const downloadQR = async () => {
+    if (!qrRef.current || !selectedEvent) return;
+    setIsDownloadingQr(true);
+    try {
+      const dataUrl = await htmlToImage.toPng(qrRef.current, { cacheBust: true, pixelRatio: 2 });
+      const link = document.createElement('a');
+      link.download = `makanx-event-${selectedEvent.slug}-qr.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch {
+      toast.error('Failed to download QR code');
+    } finally {
+      setIsDownloadingQr(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-gray-50">
@@ -278,14 +298,19 @@ export function OrganizerDashboard() {
           title="Event QR Code"
         >
           <div className="flex flex-col items-center gap-4">
-            <QRCodeCanvas
-              value={`${window.location.origin}/customer/${selectedEvent.slug}`}
-              size={256}
-              includeMargin
-            />
-            <div className="text-xs break-all bg-gray-100 p-2 rounded border">
-              {`${window.location.origin}/customer/${selectedEvent.slug}`}
+            <div ref={qrRef} className="bg-white p-2 rounded">
+              <QRCodeCanvas value={eventUrl} size={256} includeMargin />
             </div>
+            <div className="text-xs break-all bg-gray-100 p-2 rounded border">
+              {eventUrl}
+            </div>
+            <Button
+              onClick={downloadQR}
+              disabled={isDownloadingQr}
+              className="w-full bg-black text-white hover:bg-gray-900"
+            >
+              Download QR Code
+            </Button>
           </div>
         </Modal>
       )}
