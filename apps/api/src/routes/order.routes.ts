@@ -23,6 +23,12 @@ router.post(
   requireRole([Role.VENDOR]),
   orderController.markBatchItemsReady
 );
+router.post(
+  '/:id/items/mark-ready',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  orderController.markOrderItemsReady
+);
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
 router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
 

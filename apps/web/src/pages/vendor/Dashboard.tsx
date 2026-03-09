@@ -107,36 +107,6 @@ export function VendorDashboard() {
     return orders.filter(o => o.status === status);
   };
 
-  const OrderCard = ({ order }: { order: any }) => (
-    <Card className="p-4 mb-2">
-      <div className="flex justify-between items-start">
-        <div>
-          <h5 className="font-semibold">Order #{order.orderNumber}</h5>
-          <p className="text-sm text-gray-600">{new Date(order.createdAt).toLocaleTimeString()}</p>
-        </div>
-        <span className={`px-2 py-1 rounded text-xs ${
-          order.status === 'PREPARING' ? 'bg-yellow-100 text-yellow-800' :
-          order.status === 'READY' ? 'bg-green-100 text-green-800' :
-          'bg-gray-100 text-gray-800'
-        }`}>
-          {order.status}
-        </span>
-      </div>
-      <div className="mt-2">
-        {order.items.map((item: any, idx: number) => (
-          <div key={idx} className="flex justify-between items-center text-sm">
-            <span>
-              {item.quantity}x {item.menuItem.name}
-            </span>
-            <span className="text-xs">
-              {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-            </span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-
   const fetchProductionBatch = async () => {
     try {
       const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
@@ -147,9 +117,16 @@ export function VendorDashboard() {
       console.error("Production fetch error:", err);
     }
   };
+  const refetchAll = async () => {
+    await Promise.all([fetchOrders(), fetchProductionBatch()]);
+  };
   const markComplete = async (id: string) => {
     await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
-    await fetchProductionBatch();
+    await refetchAll();
+  };
+  const markOrderReady = async (id: string) => {
+    await api.post(`/orders/${id}/items/mark-ready`);
+    await refetchAll();
   };
 
   const GroupedProduction = ({
@@ -203,7 +180,7 @@ export function VendorDashboard() {
                             windowEnd: windowEndISO,
                           });
                           toast.success(`${it.name} marked ready for this window`);
-                          await fetchProductionBatch();
+                          await refetchAll();
                         } catch (e: any) {
                           toast.error(e?.response?.data?.error || 'Failed to mark ready');
                         }
@@ -265,15 +242,21 @@ export function VendorDashboard() {
                       <div className="mt-2">
                         <Button
                           onClick={() => markComplete(order.id)}
-                          disabled={!order.items || !order.items.every((it: any) => it.status === 'READY')}
+                          disabled={
+                            order.status === 'COMPLETED' ||
+                            !order.items ||
+                            !order.items.every((it: any) => it.status === 'READY')
+                          }
                           className="bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                           title={
-                            !order.items || !order.items.every((it: any) => it.status === 'READY')
-                              ? 'Waiting for remaining items'
-                              : 'Hand to Customer'
+                            order.status === 'COMPLETED'
+                              ? 'Completed'
+                              : !order.items || !order.items.every((it: any) => it.status === 'READY')
+                                ? 'Waiting for remaining items'
+                                : 'Hand to Customer'
                           }
                         >
-                          Complete
+                          {order.status === 'COMPLETED' ? 'Completed' : 'Complete'}
                         </Button>
                       </div>
                     </CardContent>
@@ -294,7 +277,50 @@ export function VendorDashboard() {
   const SingleOrderList = ({ data }: { data: Order[] }) => (
     <>
       {data.map((order) => (
-        <OrderCard key={order.id} order={order} />
+        <Card key={order.id} className="p-4 mb-2">
+          <div className="flex justify-between items-start">
+            <div>
+              <h5 className="font-semibold">Order #{order.id.slice(-4)}</h5>
+              <p className="text-sm text-gray-600">{new Date(order.createdAt).toLocaleTimeString()}</p>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${
+              order.status === 'PREPARING' ? 'bg-yellow-100 text-yellow-800' :
+              order.status === 'READY' ? 'bg-green-100 text-green-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {order.status}
+            </span>
+          </div>
+          <div className="mt-2">
+            {order.items.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between items-center text-sm">
+                <span>
+                  {item.quantity}x {item.menuItem.name}
+                </span>
+                <span className="text-xs">
+                  {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                </span>
+              </div>
+            ))}
+          </div>
+          {order.status !== 'COMPLETED' && (
+            <div className="mt-3">
+              <Button
+                onClick={async () => {
+                  try {
+                    await markOrderReady(order.id);
+                    toast.success('Order items marked ready');
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                  }
+                }}
+                className="bg-green-600 text-white px-3 py-1 rounded"
+              >
+                Mark Ready
+              </Button>
+            </div>
+          )}
+        </Card>
       ))}
     </>
   );

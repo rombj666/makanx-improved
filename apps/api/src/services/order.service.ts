@@ -302,8 +302,31 @@ export const markBatchItemsReady = async (
     },
   });
 
-  // Notify vendor channel so dashboards can refresh if listening
   const io = getIO();
+
+  for (const o of affectedOrders) {
+    const allReady = o.items.every((it: any) => it.status === 'READY');
+    const nextStatus: OrderStatus = allReady ? OrderStatus.READY : OrderStatus.PREPARING;
+    if (o.status !== nextStatus) {
+      const updatedOrder = await prisma.order.update({
+        where: { id: o.id },
+        data: { status: nextStatus, ...(nextStatus === OrderStatus.READY ? { readyAt: new Date() } : {}) },
+        include: {
+          items: { include: { menuItem: true } },
+          vendor: { select: { businessName: true } },
+        },
+      });
+      io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
+      io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
+      if (nextStatus === OrderStatus.READY) {
+        await sendReadyNotification(updatedOrder);
+      }
+    } else {
+      io.to(`vendor:${o.vendorId}`).emit('order_updated', o);
+    }
+  }
+
+  // Notify vendor channel so dashboards can refresh if listening
   io.to(`vendor:${vendorProfile.id}`).emit('orders_items_ready', {
     menuItemId,
     windowStart: windowStart.toISOString(),
@@ -313,6 +336,52 @@ export const markBatchItemsReady = async (
   });
 
   return { updatedCount: result.count ?? 0 };
+};
+
+/**
+ * Mark all items for an order as READY (ungrouped kitchen)
+ */
+export const markOrderItemsReady = async (userId: string, orderId: string) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+  });
+  if (!order) throw new Error('Order not found');
+
+  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendorProfile || vendorProfile.id !== order.vendorId) throw new Error('Unauthorized');
+
+  await (prisma as any).orderItem.updateMany({
+    where: { orderId, status: 'PREPARING' },
+    data: { status: 'READY' },
+  });
+
+  const refreshed = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+  });
+  if (!refreshed) throw new Error('Order not found');
+
+  const allReady = refreshed.items.every((it: any) => it.status === 'READY');
+  const nextStatus: OrderStatus = allReady ? OrderStatus.READY : OrderStatus.PREPARING;
+
+  const updatedOrder =
+    refreshed.status === nextStatus
+      ? refreshed
+      : await prisma.order.update({
+          where: { id: orderId },
+          data: { status: nextStatus, ...(nextStatus === OrderStatus.READY ? { readyAt: new Date() } : {}) },
+          include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+        });
+
+  const io = getIO();
+  io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
+  io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
+  if (nextStatus === OrderStatus.READY) {
+    await sendReadyNotification(updatedOrder);
+  }
+
+  return updatedOrder;
 };
 /**
  * Bulk status update (vendor only)
