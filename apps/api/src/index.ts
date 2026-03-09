@@ -31,32 +31,15 @@ initSocket(httpServer);
 app.set('trust proxy', 1); // Trust first proxy (Render/Vercel)
 configureSecurity(app);
 
-const normalize = (s: string) => s.trim().replace(/\/$/, "");
-
-const allowedOrigins = new Set(
-  [
+app.use(cors({
+  origin: [
     "https://makanx-improved-web.vercel.app",
-    "http://localhost:5173"
-  ].map(normalize)
-);
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      const cleaned = normalize(origin);
-
-      if (allowedOrigins.has(cleaned)) {
-        return callback(null, true);
-      }
-
-      console.log("CORS BLOCKED:", origin);
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
+    "http://localhost:5173",
+  ],
+  credentials: true,
+  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"],
+}));
 
 app.options("*", cors());
 
