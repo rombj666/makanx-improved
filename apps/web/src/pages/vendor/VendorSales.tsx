@@ -49,11 +49,11 @@ export function VendorSales() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const params = { date };
+      const params = { eventId: '', date };
       const [s, t, p, o] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
         api.get('/analytics/vendor/trend', { params }),
-        api.get('/analytics/vendor/products', { params }),
+        api.get('/analytics/products', { params }),
         api.get('/analytics/vendor/orders', { params }),
       ]);
       setSummary(s.data.data);

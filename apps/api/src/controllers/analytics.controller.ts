@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Role } from '@makanx/shared';
 import prisma from '../utils/prisma';
 
 const parseDateRange = (dateStr?: string) => {
@@ -119,6 +120,21 @@ export const organizerProductPerformance = async (req: Request, res: Response) =
 
     const data = Object.values(byProduct);
     res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const productPerformance = async (req: Request, res: Response) => {
+  try {
+    const role = (req as any).user?.role as Role | undefined;
+    if (role === Role.VENDOR) {
+      return vendorProductPerformance(req, res);
+    }
+    if (role === Role.ORGANIZER) {
+      return organizerProductPerformance(req, res);
+    }
+    return res.status(403).json({ success: false, error: 'Forbidden' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -251,7 +251,7 @@ export function OrganizerSalesPlaceholder() {
                 <tr
                   key={v.vendorId}
                   className="border-b hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/organizer/sales/${v.vendorId}`)}
+                  onClick={() => navigate(`/organizer/sales/${v.vendorId}?eventId=${eventId}&date=${date}`)}
                 >
                   <td className="p-2">{v.vendorName}</td>
                   <td className="p-2">{v.orderCount}</td>

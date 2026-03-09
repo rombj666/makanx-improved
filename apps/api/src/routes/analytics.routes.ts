@@ -6,6 +6,13 @@ import * as analyticsController from '../controllers/analytics.controller';
 const router = Router();
 
 router.get(
+  '/products',
+  requireAuth,
+  requireRole([Role.ORGANIZER, Role.VENDOR]),
+  analyticsController.productPerformance
+);
+
+router.get(
   '/organizer/summary',
   requireAuth,
   requireRole([Role.ORGANIZER]),

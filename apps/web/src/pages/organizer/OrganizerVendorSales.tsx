@@ -61,7 +61,7 @@ export function OrganizerVendorSales() {
   return (
     <div className="p-6 space-y-6">
       <button
-        onClick={() => navigate('/organizer/sales')}
+        onClick={() => navigate(`/organizer/sales?eventId=${eventId}&date=${date}`)}
         className="mb-4 text-sm text-orange-600 hover:underline"
       >
         ← Back to Sales Dashboard
