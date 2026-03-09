@@ -46,8 +46,6 @@ export function VendorSales() {
 
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
 
-  const renderPieLabel = ({ value }: { value: number }) => value;
-
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -150,9 +148,9 @@ export function VendorSales() {
                 nameKey="productName"
                 cx="50%"
                 cy="50%"
-                outerRadius={140}
+                outerRadius={120}
+                label={false}
                 labelLine={false}
-                label={renderPieLabel}
               >
                 {products.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

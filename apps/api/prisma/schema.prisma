@@ -135,6 +135,7 @@ model OrderItem {
   menuItemId String
   quantity   Int
   price      Decimal
+  status     OrderItemStatus @default(PREPARING)
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   order      Order    @relation(fields: [orderId], references: [id])
 }
@@ -183,6 +184,11 @@ enum OrderStatus {
   PREPARING
   READY
   COMPLETED
+}
+
+enum OrderItemStatus {
+  PREPARING
+  READY
 }
 
 enum PaymentMode {

@@ -206,12 +206,19 @@ export const getCustomerOrders = async (customerId: string) => {
 export const updateOrderStatus = async (orderId: string, userId: string, status: OrderStatus) => {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { vendor: true },
+    include: { vendor: true, items: true },
   });
   if (!order) throw new Error('Order not found');
 
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
   if (!vendorProfile || vendorProfile.id !== order.vendorId) throw new Error('Unauthorized');
+
+  if (status === OrderStatus.COMPLETED) {
+    const allReady = Array.isArray(order.items) && order.items.every((it: any) => it.status === 'READY');
+    if (!allReady) {
+      throw new Error('Order cannot be completed because some items are not ready.');
+    }
+  }
 
   const now = new Date();
   const data: Prisma.OrderUpdateInput = { status };
@@ -252,6 +259,61 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   return updatedOrder;
 };
 
+/**
+ * Mark all items for a menuItem as READY within a vendor time window
+ */
+export const markBatchItemsReady = async (
+  userId: string,
+  menuItemId: string,
+  windowStartISO: string,
+  windowEndISO: string
+) => {
+  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendorProfile) throw new Error('Vendor profile not found');
+
+  const windowStart = new Date(windowStartISO);
+  const windowEnd = new Date(windowEndISO);
+
+  // Update order items matching the criteria
+  const result = await (prisma as any).orderItem.updateMany({
+    where: {
+      menuItemId,
+      status: 'PREPARING',
+      order: {
+        vendorId: vendorProfile.id,
+        status: 'PREPARING',
+        createdAt: { gte: windowStart, lt: windowEnd },
+      },
+    },
+    data: { status: 'READY' },
+  });
+
+  // Optionally fetch affected orders and notify
+  const affectedOrders = await prisma.order.findMany({
+    where: {
+      vendorId: vendorProfile.id,
+      status: 'PREPARING',
+      createdAt: { gte: windowStart, lt: windowEnd },
+      items: { some: { menuItemId } },
+    },
+    include: {
+      items: { include: { menuItem: true } },
+      vendor: { select: { businessName: true } },
+    },
+  });
+
+  // Notify vendor channel so dashboards can refresh if listening
+  const io = getIO();
+  io.to(`vendor:${vendorProfile.id}`).emit('orders_items_ready', {
+    menuItemId,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    affectedOrderIds: affectedOrders.map((o) => o.id),
+    updatedCount: result.count ?? 0,
+  });
+
+  return { updatedCount: result.count ?? 0 };
+};
 /**
  * Bulk status update (vendor only)
  */

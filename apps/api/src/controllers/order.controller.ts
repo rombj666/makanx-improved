@@ -119,3 +119,22 @@ export const bulkStatusUpdate = async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
+
+export const markBatchItemsReady = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const { menuItemId, windowStart, windowEnd } = req.body;
+    if (!menuItemId || !windowStart || !windowEnd) {
+      return res.status(400).json({ success: false, error: 'Missing fields' });
+    }
+    const result = await orderService.markBatchItemsReady(
+      req.user.userId,
+      String(menuItemId),
+      String(windowStart),
+      String(windowEnd)
+    );
+    return res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+  }
+};

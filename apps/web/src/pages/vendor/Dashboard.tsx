@@ -9,7 +9,9 @@ import { toast } from 'react-hot-toast';
 
 interface OrderItem {
   quantity: number;
+  status?: 'PREPARING' | 'READY';
   menuItem: {
+    id: string;
     name: string;
   };
 }
@@ -121,20 +123,17 @@ export function VendorDashboard() {
         </span>
       </div>
       <div className="mt-2">
-        {order.items.map((item: any) => (
-          <div key={item.id} className="flex justify-between text-sm">
-            <span>{item.quantity}x {item.menuItem.name}</span>
-            <span>${item.price}</span>
+        {order.items.map((item: any, idx: number) => (
+          <div key={idx} className="flex justify-between items-center text-sm">
+            <span>
+              {item.quantity}x {item.menuItem.name}
+            </span>
+            <span className="text-xs">
+              {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+            </span>
           </div>
         ))}
       </div>
-      {order.status === 'PREPARING' && (
-        <div className="mt-3">
-          <Button onClick={() => markReady(order.id)} className="bg-green-500 text-white px-3 py-1 rounded">
-            Mark Ready
-          </Button>
-        </div>
-      )}
     </Card>
   );
 
@@ -148,10 +147,6 @@ export function VendorDashboard() {
       console.error("Production fetch error:", err);
     }
   };
-  const markReady = async (id: string) => {
-    await api.patch(`/orders/${id}/status`, { status: 'READY' });
-    await fetchProductionBatch();
-  };
   const markComplete = async (id: string) => {
     await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
     await fetchProductionBatch();
@@ -162,54 +157,63 @@ export function VendorDashboard() {
   }: {
     data: { windowStart: number; windowEnd: number; orders: Order[] }[];
   }) => {
-    const [expanded, setExpanded] = useState<Record<number, boolean>>({});
     return (
       <>
         {data.map((block) => {
-          const map = new Map<string, number>();
+          const byProduct = new Map<string, { name: string; qty: number }>();
           for (const o of block.orders) {
             for (const it of o.items) {
+              const id = it.menuItem.id;
               const name = it.menuItem.name;
-              map.set(name, (map.get(name) || 0) + Number(it.quantity || 0));
+              const node = byProduct.get(id);
+              if (node) {
+                node.qty += Number(it.quantity || 0);
+              } else {
+                byProduct.set(id, { name, qty: Number(it.quantity || 0) });
+              }
             }
           }
-          const aggregated = Array.from(map.entries()).map(([name, quantity]) => ({
-            name,
-            quantity,
+          const aggregated = Array.from(byProduct.entries()).map(([menuItemId, v]) => ({
+            menuItemId,
+            name: v.name,
+            quantity: v.qty,
           }));
-          const isOpen = !!expanded[block.windowStart];
+          const windowStartISO = new Date(block.windowStart).toISOString();
+          const windowEndISO = new Date(block.windowEnd).toISOString();
           return (
             <div key={block.windowStart} className="mb-6">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-lg mb-2">
-                  {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
-                  {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                </h4>
-                <Button
-                  variant="outline"
-                  className="text-xs px-2 py-1"
-                  onClick={() =>
-                    setExpanded((s) => ({ ...s, [block.windowStart]: !s[block.windowStart] }))
-                  }
-                >
-                  {isOpen ? 'Hide Orders' : 'Show Orders'}
-                </Button>
-              </div>
+              <h4 className="font-bold text-lg mb-2">
+                {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
+                {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </h4>
               <ul className="space-y-2">
-                {aggregated.map((it, idx) => (
-                  <li key={idx} className="flex justify-between rounded border p-2 bg-white">
-                    <span className="font-medium">{it.name}</span>
-                    <span className="font-semibold">x{it.quantity}</span>
+                {aggregated.map((it) => (
+                  <li key={it.menuItemId} className="flex items-center justify-between rounded border p-2 bg-white">
+                    <div>
+                      <span className="font-medium">{it.name}</span>{' '}
+                      <span className="font-semibold">x{it.quantity}</span>
+                    </div>
+                    <Button
+                      className="bg-green-600 text-white"
+                      onClick={async () => {
+                        try {
+                          await api.post('/orders/vendor/production/mark-ready', {
+                            menuItemId: it.menuItemId,
+                            windowStart: windowStartISO,
+                            windowEnd: windowEndISO,
+                          });
+                          toast.success(`${it.name} marked ready for this window`);
+                          await fetchProductionBatch();
+                        } catch (e: any) {
+                          toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                        }
+                      }}
+                    >
+                      Mark Ready
+                    </Button>
                   </li>
                 ))}
               </ul>
-              {isOpen && (
-                <div className="mt-3 space-y-2">
-                  {block.orders.map((order) => (
-                    <OrderCard key={order.id} order={order} />
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
@@ -252,16 +256,26 @@ export function VendorDashboard() {
                             <span>
                               {item.quantity}x {item.menuItem.name}
                             </span>
+                            <span className="text-xs">
+                              {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                            </span>
                           </li>
                         ))}
                       </ul>
-                      {order.status === 'READY' && (
-                        <div className="mt-2">
-                          <Button onClick={() => markComplete(order.id)} className="bg-blue-500 text-white px-3 py-1 rounded">
-                            Complete
-                          </Button>
-                        </div>
-                      )}
+                      <div className="mt-2">
+                        <Button
+                          onClick={() => markComplete(order.id)}
+                          disabled={!order.items || !order.items.every((it: any) => it.status === 'READY')}
+                          className="bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={
+                            !order.items || !order.items.every((it: any) => it.status === 'READY')
+                              ? 'Waiting for remaining items'
+                              : 'Hand to Customer'
+                          }
+                        >
+                          Complete
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
