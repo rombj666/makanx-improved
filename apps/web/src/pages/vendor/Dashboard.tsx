@@ -161,23 +161,61 @@ export function VendorDashboard() {
     data,
   }: {
     data: { windowStart: number; windowEnd: number; orders: Order[] }[];
-  }) => (
-    <>
-      {data.map((block) => (
-        <div key={block.windowStart} className="mb-6">
-          <h4 className="font-bold text-lg mb-2">
-            {new Date(block.windowStart).toLocaleTimeString()} -{' '}
-            {new Date(block.windowEnd).toLocaleTimeString()}
-          </h4>
-          <div className="space-y-2">
-            {block.orders.map((order: any) => (
-              <OrderCard key={order.id} order={order} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </>
-  );
+  }) => {
+    const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+    return (
+      <>
+        {data.map((block) => {
+          const map = new Map<string, number>();
+          for (const o of block.orders) {
+            for (const it of o.items) {
+              const name = it.menuItem.name;
+              map.set(name, (map.get(name) || 0) + Number(it.quantity || 0));
+            }
+          }
+          const aggregated = Array.from(map.entries()).map(([name, quantity]) => ({
+            name,
+            quantity,
+          }));
+          const isOpen = !!expanded[block.windowStart];
+          return (
+            <div key={block.windowStart} className="mb-6">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-lg mb-2">
+                  {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
+                  {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </h4>
+                <Button
+                  variant="outline"
+                  className="text-xs px-2 py-1"
+                  onClick={() =>
+                    setExpanded((s) => ({ ...s, [block.windowStart]: !s[block.windowStart] }))
+                  }
+                >
+                  {isOpen ? 'Hide Orders' : 'Show Orders'}
+                </Button>
+              </div>
+              <ul className="space-y-2">
+                {aggregated.map((it, idx) => (
+                  <li key={idx} className="flex justify-between rounded border p-2 bg-white">
+                    <span className="font-medium">{it.name}</span>
+                    <span className="font-semibold">x{it.quantity}</span>
+                  </li>
+                ))}
+              </ul>
+              {isOpen && (
+                <div className="mt-3 space-y-2">
+                  {block.orders.map((order) => (
+                    <OrderCard key={order.id} order={order} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  };
 
   const FulfillmentBoardView = ({
     orders,
