@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
-import { CustomerSidebar } from '../../components/customer/CustomerSidebar';
+import { OrderTrackingDrawer } from '../../components/customer/OrderTrackingDrawer';
 import { BoothInfo } from '../../components/BoothInfo';
 
 interface EventMapProps {
@@ -56,13 +56,13 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
 
       <button
         onClick={() => setOrdersOpen((v) => !v)}
-        className="fixed top-1/2 left-0 -translate-y-1/2 bg-black text-white p-2 rounded-r-md z-50"
+        className="fixed top-1/2 left-0 -translate-y-1/2 bg-black text-white w-11 h-11 rounded-r-2xl z-50 shadow-xl flex items-center justify-center active:scale-95 transition"
         aria-label="Toggle Orders Sidebar"
       >
         {ordersOpen ? '←' : '→'}
       </button>
 
-      <CustomerSidebar
+      <OrderTrackingDrawer
         eventSlug={String(slug)}
         open={ordersOpen}
         onClose={() => setOrdersOpen(false)}

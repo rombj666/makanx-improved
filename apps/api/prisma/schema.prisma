@@ -135,6 +135,7 @@ model OrderItem {
   menuItemId String
   quantity   Int
   price      Decimal
+  remark     String?
   status     OrderItemStatus @default(PREPARING)
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   order      Order    @relation(fields: [orderId], references: [id])

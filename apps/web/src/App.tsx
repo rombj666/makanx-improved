@@ -29,6 +29,8 @@ import { DebugStatic } from './pages/DebugStatic';
 import { CustomerOrderPage } from './pages/customer/CustomerOrderPage';
 import { OrderConfirmationPage } from './pages/customer/OrderConfirmationPage';
 import { CustomerLayout } from './layouts/CustomerLayout';
+import { CartPage } from './pages/customer/CartPage';
+import { VendorsPage } from './pages/customer/VendorsPage';
 
 function ProtectedRoute({ children, roles }: { children: ReactNode; roles?: Role[] }) {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -74,6 +76,8 @@ function App() {
               <Route path="/customer/:slug" element={<CustomerHome />} />
               <Route path="/customer/event/:slug" element={<EventMap />} />
               <Route path="/customer/event/:slug/order/:vendorId" element={<CustomerOrderPage />} />
+              <Route path="/customer/event/:slug/order/:vendorId/cart" element={<CartPage />} />
+              <Route path="/customer/event/:slug/vendors" element={<VendorsPage />} />
               <Route path="/customer/order-confirmed" element={<OrderConfirmationPage />} />
             </Route>
 

@@ -2,18 +2,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { getOrCreateGuestId } from '../../lib/guest';
-import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import BoothHeader from '../../components/customer/BoothHeader';
 import MenuCard from '../../components/customer/MenuCard';
 import CartBar from '../../components/customer/CartBar';
+import { useCustomerCart } from '../../hooks/useCustomerCart';
+import { toast } from 'react-hot-toast';
 
 interface MenuItem {
   id: string;
   name: string;
   description?: string;
   price: number;
-  imageUrl?: string;
+  imageUrl: string;
 }
 
 interface Booth {
@@ -31,10 +31,7 @@ export function CustomerOrderPage() {
   const { slug, vendorId } = useParams();
   const navigate = useNavigate();
   const [booth, setBooth] = useState<Booth | null>(null);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addOrUpdate } = useCustomerOrders(slug || '');
 
   useEffect(() => {
     const run = async () => {
@@ -62,77 +59,17 @@ export function CustomerOrderPage() {
     }));
   }, [booth]);
 
-  const add = (id: string) => {
-    setQuantities((q) => ({ ...q, [id]: (q[id] || 0) + 1 }));
-  };
+  const cart = useCustomerCart({
+    eventSlug: String(slug || ''),
+    vendorId: String(vendorId || ''),
+    vendorName: booth?.vendor?.businessName || booth?.name || '',
+    boothName: booth?.name || '',
+  });
 
-  const items = useMemo(
-    () => Object.entries(quantities).filter(([, qty]) => qty > 0).map(([menuItemId, quantity]) => ({ menuItemId, quantity })),
-    [quantities]
-  );
-
-  const total = useMemo(() => {
-    return items.reduce((sum, it) => {
-      const m = menu.find((mi) => mi.id === it.menuItemId);
-      return sum + (m ? m.price * it.quantity : 0);
-    }, 0);
-  }, [items, menu]);
-
-  const totalItems = useMemo(() => items.reduce((sum, it) => sum + it.quantity, 0), [items]);
-
-  const placeOrder = async () => {
-    if (!vendorId || items.length === 0) return;
-    setIsPlacing(true);
-    setError(null);
-    try {
-      const guestId = getOrCreateGuestId();
-
-      const res = await api.post('/orders', {
-        vendorId,
-        items,
-        paymentMode: 'PAY_AT_BOOTH',
-        guestId,
-      });
-      if (res.data?.success) {
-        const { order, estimatedMinutes } = res.data.data;
-        const raw =
-          order?.boothOrderNumber ??
-          order?.displayNumber ??
-          order?.orderNumber ??
-          order?.sequence ??
-          null;
-        const displayNumber =
-          raw !== null && raw !== undefined && `${raw}`.trim() !== ''
-            ? String(raw).toUpperCase()
-            : String(order.id || '').slice(-4).toUpperCase();
-        addOrUpdate({
-          orderId: order.id,
-          vendorId: order.vendorId,
-          vendorName: booth?.vendor?.businessName || '',
-          status: order.status,
-          estimatedMinutes: Math.max(Number(estimatedMinutes ?? 0), 0),
-          createdAt: order.createdAt,
-          updatedAt: order.updatedAt,
-          displayNumber,
-        });
-        try { localStorage.setItem('mx_center_map', '1'); } catch {}
-        navigate('/customer/order-confirmed', {
-          state: {
-            orderId: order.id,
-            orderNumber: displayNumber,
-            eta: estimatedMinutes,
-            eventSlug: slug,
-          },
-        });
-      } else {
-        setError('Order failed');
-      } 
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Order failed');
-    } finally {
-      setIsPlacing(false);
-    }
-  };
+  const heroImageUrl = useMemo(() => {
+    const byMenu = menu.find((m) => (m.imageUrl || '').trim() !== '')?.imageUrl || '';
+    return byMenu && byMenu.trim() !== '' ? byMenu : null;
+  }, [menu]);
 
   if (!booth) {
     return (
@@ -145,13 +82,16 @@ export function CustomerOrderPage() {
   }
 
   return (
-    <div className="w-full h-full bg-white flex flex-col">
+    <div className="w-full h-full bg-[#FAF7F0] flex flex-col">
       <BoothHeader
         boothName={booth.name}
         boothNumber={booth.name}
         vendorName={booth.vendor?.businessName || null}
+        description={booth.vendor?.description || null}
+        heroImageUrl={heroImageUrl}
         rating={null}
-        prepTimeMinutes={null}
+        prepTimeMinutes={5}
+        onBack={() => navigate(`/customer/event/${slug}`)}
       />
 
       <div className="flex-1 overflow-y-auto p-4 pb-28">
@@ -167,7 +107,17 @@ export function CustomerOrderPage() {
                 price={item.price}
                 image={item.imageUrl}
                 description={item.description}
-                onAdd={() => add(item.id)}
+                onAdd={({ quantity, remark }) => {
+                  cart.addLine({
+                    menuItemId: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity,
+                    remark,
+                    imageUrl: item.imageUrl || '',
+                  });
+                  toast.success('Added to cart');
+                }}
               />
             ))}
           </div>
@@ -175,9 +125,9 @@ export function CustomerOrderPage() {
       </div>
 
       <CartBar
-        totalItems={totalItems}
-        totalPrice={total}
-        onViewCart={placeOrder}
+        totalItems={cart.totalItems}
+        totalPrice={cart.total}
+        onViewCart={() => navigate(`/customer/event/${slug}/order/${vendorId}/cart`)}
       />
     </div>
   );

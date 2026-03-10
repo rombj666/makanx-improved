@@ -14,8 +14,10 @@ export function CartBar({ totalItems, totalPrice, onViewCart }: Props) {
             <div className="flex items-center gap-3">
               <div className="text-2xl">🛒</div>
               <div className="text-sm text-gray-700">
-                <div className="font-semibold">{totalItems} {totalItems === 1 ? 'item' : 'items'}</div>
-                <div className="text-gray-500">${totalPrice.toFixed(2)}</div>
+                <div className="font-semibold">
+                  {totalItems} {totalItems === 1 ? 'item' : 'items'} <span className="text-gray-300 mx-2">•</span>{' '}
+                  <span className="text-gray-900">${totalPrice.toFixed(2)}</span>
+                </div>
               </div>
             </div>
             <button

@@ -19,6 +19,7 @@ const createOrderSchema = z.object({
     z.object({
       menuItemId: z.string().uuid(),
       quantity: z.number().min(1),
+      remark: z.string().max(500).optional(),
     })
   ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
@@ -38,11 +39,7 @@ export const createOrder = async (
   // Build order items + total
   let totalAmountNumber = 0;
 
-  const orderItemsData: {
-    menuItemId: string;
-    quantity: number;
-    price: Prisma.Decimal;
-  }[] = [];
+  const orderItemsData: any[] = [];
 
   for (const item of items) {
     const menuItem = await prisma.menuItem.findUnique({ where: { id: item.menuItemId } });
@@ -56,6 +53,7 @@ export const createOrder = async (
       menuItemId: item.menuItemId,
       quantity: item.quantity,
       price: menuItem.price, // snapshot
+      remark: item.remark ? String(item.remark).trim() : null,
     });
   }
 
@@ -82,7 +80,7 @@ export const createOrder = async (
         status: OrderStatus.PREPARING,
         paymentMode,
         paymentStatus,
-        items: { create: orderItemsData },
+        items: { create: orderItemsData as any },
       },
       include: {
         items: { include: { menuItem: true } },

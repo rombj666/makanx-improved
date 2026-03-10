@@ -163,6 +163,7 @@ model OrderItem {
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   quantity   Int
   price      Decimal
+  remark     String?
 }
 
 model InviteToken {

@@ -9,6 +9,7 @@ const createOrderSchema = z.object({
   items: z.array(z.object({
     menuItemId: z.string().uuid(),
     quantity: z.number().min(1),
+    remark: z.string().max(500).optional(),
   })),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
 });
@@ -33,6 +34,7 @@ export const createOrder = async (customerId: string, input: z.infer<typeof crea
       menuItemId: item.menuItemId,
       quantity: item.quantity,
       price: menuItem.price, // Store snapshot price
+      remark: item.remark ? String(item.remark).trim() : null,
     });
   }
 
@@ -47,7 +49,7 @@ export const createOrder = async (customerId: string, input: z.infer<typeof crea
       paymentMode,
       paymentStatus,
       items: {
-        create: orderItemsData,
+        create: orderItemsData as any,
       },
     },
     include: {

@@ -14,7 +14,7 @@ export type ActiveOrder = {
   createdAt: string;
   updatedAt: string;
   displayNumber: string;
-  items?: { name: string; quantity: number }[];
+  items?: { name: string; quantity: number; remark?: string }[];
 };
 
 function storageKey(slug: string) {
@@ -84,6 +84,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
             ? o.items.map((it: any) => ({
                 name: it?.menuItem?.name || '',
                 quantity: Number(it?.quantity ?? 0),
+                remark: it?.remark || '',
               }))
             : undefined,
         }));
