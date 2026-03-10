@@ -4,12 +4,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
+import BoothHeader from '../../components/customer/BoothHeader';
+import MenuCard from '../../components/customer/MenuCard';
+import CartBar from '../../components/customer/CartBar';
 
 interface MenuItem {
   id: string;
   name: string;
   description?: string;
   price: number;
+  imageUrl?: string;
 }
 
 interface Booth {
@@ -28,7 +32,7 @@ export function CustomerOrderPage() {
   const navigate = useNavigate();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [isPlacing, setIsPlacing] = useState(false);
+  const [, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addOrUpdate } = useCustomerOrders(slug || '');
 
@@ -51,19 +55,15 @@ export function CustomerOrderPage() {
 
   const menu: MenuItem[] = useMemo(() => {
     if (!booth?.vendor?.menuItems) return [];
-    return booth.vendor.menuItems.map((m: any) => ({ ...m, price: Number(m.price) }));
+    return booth.vendor.menuItems.map((m: any) => ({
+      ...m,
+      price: Number(m.price),
+      imageUrl: m.imageUrl || '',
+    }));
   }, [booth]);
 
   const add = (id: string) => {
     setQuantities((q) => ({ ...q, [id]: (q[id] || 0) + 1 }));
-  };
-  const sub = (id: string) => {
-    setQuantities((q) => {
-      const n = Math.max(0, (q[id] || 0) - 1);
-      const next = { ...q, [id]: n };
-      if (n === 0) delete next[id];
-      return next;
-    });
   };
 
   const items = useMemo(
@@ -77,6 +77,8 @@ export function CustomerOrderPage() {
       return sum + (m ? m.price * it.quantity : 0);
     }, 0);
   }, [items, menu]);
+
+  const totalItems = useMemo(() => items.reduce((sum, it) => sum + it.quantity, 0), [items]);
 
   const placeOrder = async () => {
     if (!vendorId || items.length === 0) return;
@@ -144,71 +146,39 @@ export function CustomerOrderPage() {
 
   return (
     <div className="w-full h-full bg-white flex flex-col">
-      <div className="p-6 border-b">
-        <h1 className="text-2xl font-bold">{booth.vendor?.businessName || booth.name}</h1>
-        <p className="text-sm text-gray-500">Booth {booth.name}</p>
-        {booth.vendor?.description && (
-          <p className="text-gray-600 mt-1">{booth.vendor.description}</p>
-        )}
-      </div>
+      <BoothHeader
+        boothName={booth.name}
+        boothNumber={booth.name}
+        vendorName={booth.vendor?.businessName || null}
+        rating={null}
+        prepTimeMinutes={null}
+      />
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {error && <div className="text-red-600 text-sm">{error}</div>}
+      <div className="flex-1 overflow-y-auto p-4 pb-28">
+        {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
         {menu.length === 0 ? (
           <p className="text-gray-500">No menu items.</p>
         ) : (
-          menu.map((item) => (
-            <div key={item.id} className="flex items-center justify-between border rounded-lg p-4">
-              <div>
-                <div className="font-medium">{item.name}</div>
-                <div className="text-sm text-gray-500">${item.price.toFixed(2)}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => sub(item.id)}
-                  className="w-9 h-9 rounded-full border text-lg leading-none"
-                >
-                  -
-                </button>
-                <div className="w-8 text-center">{quantities[item.id] || 0}</div>
-                <button
-                  onClick={() => add(item.id)}
-                  className="w-9 h-9 rounded-full border text-lg leading-none"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          ))
+          <div className="grid grid-cols-1 gap-4">
+            {menu.map((item) => (
+              <MenuCard
+                key={item.id}
+                name={item.name}
+                price={item.price}
+                image={item.imageUrl}
+                description={item.description}
+                onAdd={() => add(item.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
-      <div className="p-6 border-t hidden md:block">
-        <div className="flex justify-between mb-4">
-          <span className="font-semibold">Total</span>
-          <span className="font-bold">${total.toFixed(2)}</span>
-        </div>
-        <button
-          onClick={placeOrder}
-          disabled={items.length === 0 || isPlacing}
-          className="w-full bg-black text-white py-3 rounded-xl disabled:opacity-50"
-        >
-          {isPlacing ? 'Placing...' : 'Place Order'}
-        </button>
-      </div>
-      <div className="fixed bottom-4 left-4 right-4 z-50 md:hidden">
-        <div className="flex justify-between mb-2">
-          <span className="font-semibold">Total</span>
-          <span className="font-bold">${total.toFixed(2)}</span>
-        </div>
-        <button
-          onClick={placeOrder}
-          disabled={items.length === 0 || isPlacing}
-          className="w-full bg-black text-white py-4 rounded-xl text-lg font-semibold shadow-xl disabled:opacity-50 active:scale-95 transition"
-        >
-          {isPlacing ? 'Placing...' : 'Place Order'}
-        </button>
-      </div>
+      <CartBar
+        totalItems={totalItems}
+        totalPrice={total}
+        onViewCart={placeOrder}
+      />
     </div>
   );
 }
