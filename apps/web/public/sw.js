@@ -1,43 +1,39 @@
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", function (event) {
-  if (!event.data) return;
+  event.waitUntil((async () => {
+    let payload = {};
 
-  let payload = {};
-  try {
-    payload = event.data.json();
-  } catch (e) {
-    payload = {
-      title: "MakanX",
-      body: event.data.text()
-    };
-  }
-
-  const title = payload.title || "MakanX";
-  const body = payload.body || "Your order is ready!";
-  const icon = payload.icon || "/icons/icon-192.png";
-  const url = payload.url || "/";
-  const tag = payload.tag || "makanx-order";
-
-  const options = {
-    body: body,
-    icon: icon,
-    badge: "/icons/icon-192.png",
-
-    // Makes notification appear in phone notification bar
-    requireInteraction: true,
-
-    // vibration pattern
-    vibrate: [200, 100, 200],
-
-    tag: tag,
-
-    data: {
-      url: url
+    if (event.data) {
+      try {
+        payload = event.data.json();
+      } catch (e) {
+        payload = { body: event.data.text() };
+      }
     }
-  };
 
-  event.waitUntil(
-    self.registration.showNotification(title, options)
-  );
+    const title = payload.title || "MakanX";
+
+    const options = {
+      body: payload.body || "Order update",
+      icon: payload.icon || "/icons/icon-192.png",
+      badge: payload.badge || "/icons/icon-192.png",
+      requireInteraction: true,
+      vibrate: [200, 100, 200],
+      tag: payload.tag || "makanx-order",
+      data: {
+        url: payload.url || "/",
+      },
+    };
+
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 
@@ -48,18 +44,10 @@ self.addEventListener("notificationclick", function (event) {
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true })
-      .then(function (clientList) {
-
-        for (let client of clientList) {
-
+      .then((clientList) => {
+        for (const client of clientList) {
           if (client.url.includes(url) && "focus" in client) {
             return client.focus();
-          }
-
-          if (client.url.includes("/customer") && "navigate" in client) {
-            client.focus();
-            client.navigate(url);
-            return;
           }
         }
 

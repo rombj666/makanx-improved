@@ -56,9 +56,8 @@ export const saveSubscription = async (
 export const sendReadyNotification = async (order: {
   id: string;
   customerId: string;
+  vendorId: string;
   vendor?: { businessName?: string | null } | null;
-  booth?: { name?: string | null } | null;
-  event?: { slug?: string | null } | null;
 }) => {
   if (!publicKey || !privateKey || !subject) {
     return;
@@ -71,9 +70,20 @@ export const sendReadyNotification = async (order: {
   if (!subs.length) return;
   console.log("Found subscriptions:", subs.length);
 
-  const boothName = order.booth?.name || order.vendor?.businessName || 'Booth';
   const displayNumber = order.id.slice(-4).toUpperCase();
-  const eventSlug = order.event?.slug || '';
+  const vendorName = order.vendor?.businessName || 'Booth';
+
+  const booth = await prisma.booth.findFirst({
+    where: { vendorId: order.vendorId },
+    select: {
+      name: true,
+      event: { select: { slug: true } },
+    },
+  });
+
+  const boothName = booth?.name || vendorName;
+  const eventSlug = booth?.event?.slug || '';
+  const url = eventSlug ? `/customer/event/${eventSlug}` : '/';
 
   const payload = JSON.stringify({
     title: "Order Ready 🍽️",
@@ -81,7 +91,7 @@ export const sendReadyNotification = async (order: {
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: `order-${displayNumber}`,
-    url: `/customer/event/${eventSlug}`,
+    url,
   });
 
   await Promise.all(
