@@ -21,9 +21,11 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [centerRequestKey, setCenterRequestKey] = useState(0);
 
   useEffect(() => {
-    if (initialEvent) {
-      return;
-    }
+    const hasBooths =
+      initialEvent &&
+      Array.isArray((initialEvent as any).booths) &&
+      (initialEvent as any).booths.length > 0;
+    if (initialEvent && hasBooths) return;
     const fetchEvent = async () => {
       try {
         const { data } = await api.get(`/events/${slug}`);
@@ -41,6 +43,27 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
 
   const booths = event?.booths || [];
   const eventName = event?.name || 'Event';
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const normalized = booths.slice(0, 5).map((b: any) => ({
+      id: b?.id,
+      name: b?.name,
+      x: b?.x,
+      y: b?.y,
+      width: b?.width,
+      height: b?.height,
+    }));
+    const invalid = booths.filter((b: any) => {
+      const nums = [b?.x, b?.y, b?.width, b?.height].map((v) => Number(v));
+      return nums.some((n) => !Number.isFinite(n)) || Number(nums[2]) <= 0 || Number(nums[3]) <= 0;
+    });
+    if (invalid.length > 0) {
+      console.warn('[EventMap] invalid booth geometry', { invalidCount: invalid.length, sample: normalized });
+    } else {
+      console.debug('[EventMap] booths', { count: booths.length, sample: normalized });
+    }
+  }, [booths]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();

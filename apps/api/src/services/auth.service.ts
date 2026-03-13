@@ -127,7 +127,18 @@ export const getMe = async (userId: string) => {
 
 export const customerQrLoginBySlug = async (slug: string) => {
   const event = await prisma.event.findUnique({
-    where: { slug }
+    where: { slug },
+    include: {
+      booths: {
+        include: {
+          vendor: {
+            include: {
+              menuItems: true,
+            },
+          },
+        },
+      },
+    },
   });
   if (!event) {
     throw new Error('Invalid event');
