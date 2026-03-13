@@ -17,12 +17,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
     // For now assuming payload matches schema or is transformed before calling service.
     // Example expectation: { eventId, applicantName, applicantEmail, businessName, ... }
     
-  // find event by slug
- const event = await prisma.event.findFirst({
-  where: {
-    name: req.body.eventName
-  }
-});
+  const incomingEventId = typeof req.body.eventId === 'string' ? req.body.eventId : null;
+  const incomingEventSlug = typeof req.body.eventSlug === 'string' ? req.body.eventSlug : null;
+
+  const event = incomingEventId
+    ? await prisma.event.findUnique({ where: { id: incomingEventId } })
+    : incomingEventSlug
+      ? await prisma.event.findUnique({ where: { slug: incomingEventSlug } })
+      : await prisma.event.findFirst({
+          where: {
+            name: req.body.eventName,
+          },
+        });
 
   if (!event) {
     return res.status(400).json({ success: false, error: 'Invalid event' });
@@ -53,7 +59,9 @@ export const handleWebhook = async (req: Request, res: Response) => {
 export const getApplications = async (req: Request, res: Response) => {
   try {
     if (!req.user) throw new Error('Unauthorized');
-    const result = await applicationService.getApplications(req.user.userId);
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const result = await applicationService.getApplications(req.user.userId, { eventId, status });
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });

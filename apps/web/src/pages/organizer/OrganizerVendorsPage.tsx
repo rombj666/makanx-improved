@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { toast } from 'react-hot-toast';
 import { Ban, CheckCircle, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Modal } from '../../components/ui/Modal';
+import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
 
 interface Vendor {
   id: string;
@@ -23,26 +24,61 @@ interface Vendor {
 }
 
 export function OrganizerVendorsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryEventId = searchParams.get('eventId') || '';
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDisabled, setShowDisabled] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [eventName, setEventName] = useState<string>('');
+
+  const effectiveEventId = useMemo(() => {
+    const stored = getOrganizerSelectedEvent();
+    return queryEventId || stored?.eventId || '';
+  }, [queryEventId]);
 
   useEffect(() => {
     fetchVendors();
-  }, [showDisabled]);
+  }, [showDisabled, effectiveEventId]);
+
+  useEffect(() => {
+    if (!effectiveEventId) return;
+    if (queryEventId !== effectiveEventId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('eventId', effectiveEventId);
+        return next;
+      });
+    }
+    setOrganizerSelectedEvent({ eventId: effectiveEventId });
+  }, [effectiveEventId, queryEventId, setSearchParams]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!effectiveEventId) return;
+      try {
+        const { data } = await api.get('/events');
+        if (data.success) {
+          const found = (data.data || []).find((e: any) => e.id === effectiveEventId);
+          setEventName(found?.name || '');
+        }
+      } catch {
+        setEventName('');
+      }
+    };
+    run();
+  }, [effectiveEventId]);
 
   const fetchVendors = async () => {
     setIsLoading(true);
     try {
-      // If showDisabled is true, we want ALL vendors (active=all? or just separate lists?)
-      // Backend supports ?active=true|false. 
-      // If we want to toggle "Show Disabled", maybe we want to see disabled ones.
-      // Let's assume toggle switches between "Active Only" and "All" or "Disabled".
-      // Requirement: "Default shows only active vendors. Toggle: Show Disabled"
-      // Let's query based on toggle.
-      const query = showDisabled ? '' : '?active=true'; 
-      const { data } = await api.get(`/organizer/vendors${query}`);
+      if (!effectiveEventId) {
+        setVendors([]);
+        return;
+      }
+      const params: any = { eventId: effectiveEventId };
+      if (!showDisabled) params.active = true;
+      const { data } = await api.get('/organizer/vendors', { params });
       if (data.success) {
         setVendors(data.data);
       }
@@ -71,9 +107,11 @@ export function OrganizerVendorsPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Registered Vendors</h1>
-          <p className="text-gray-500 text-sm">Manage vendor access and accounts</p>
+          <p className="text-gray-500 text-sm">
+            {eventName ? `Vendors for: ${eventName}` : 'Manage vendor access and accounts'}
+          </p>
         </div>
-        <Link to="/organizer">
+        <Link to={`/organizer?eventId=${effectiveEventId}`}>
           <Button variant="outline">Back to Dashboard</Button>
         </Link>
       </div>
@@ -100,6 +138,8 @@ export function OrganizerVendorsPage() {
             <div className="p-12 flex justify-center">
               <Loader2 className="animate-spin text-orange-500" size={32} />
             </div>
+          ) : !effectiveEventId ? (
+            <div className="p-12 text-center text-gray-500">Select an event first.</div>
           ) : vendors.length === 0 ? (
             <div className="p-12 text-center text-gray-500">No vendors found.</div>
           ) : (

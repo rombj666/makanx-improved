@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { toast } from 'react-hot-toast';
 import { Check, X, Search, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
 
 interface Application {
   id: string;
@@ -18,19 +19,61 @@ interface Application {
 }
 
 export function OrganizerApplicationsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryEventId = searchParams.get('eventId') || '';
   const [applications, setApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('PENDING');
+  const [eventName, setEventName] = useState<string>('');
 
   useEffect(() => {
     fetchApplications();
-  }, []);
+  }, [filter, queryEventId]);
+
+  const effectiveEventId = useMemo(() => {
+    const stored = getOrganizerSelectedEvent();
+    return queryEventId || stored?.eventId || '';
+  }, [queryEventId]);
+
+  useEffect(() => {
+    if (!effectiveEventId) return;
+    if (queryEventId !== effectiveEventId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('eventId', effectiveEventId);
+        return next;
+      });
+    }
+    setOrganizerSelectedEvent({ eventId: effectiveEventId });
+  }, [effectiveEventId, queryEventId, setSearchParams]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!effectiveEventId) return;
+      try {
+        const { data } = await api.get('/events');
+        if (data.success) {
+          const found = (data.data || []).find((e: any) => e.id === effectiveEventId);
+          setEventName(found?.name || '');
+        }
+      } catch {
+        setEventName('');
+      }
+    };
+    run();
+  }, [effectiveEventId]);
 
   const fetchApplications = async () => {
     setIsLoading(true);
     try {
-      const { data } = await api.get('/applications');
+      if (!effectiveEventId) {
+        setApplications([]);
+        return;
+      }
+      const params: any = { eventId: effectiveEventId };
+      if (filter !== 'ALL') params.status = filter;
+      const { data } = await api.get('/applications', { params });
       if (data.success) {
         setApplications(data.data);
       }
@@ -58,9 +101,7 @@ export function OrganizerApplicationsPage() {
       app.businessName.toLowerCase().includes(search.toLowerCase()) ||
       app.applicantEmail.toLowerCase().includes(search.toLowerCase());
     
-    const matchesFilter = filter === 'ALL' || app.status === filter;
-    
-    return matchesSearch && matchesFilter;
+    return matchesSearch;
   });
 
   return (
@@ -68,9 +109,11 @@ export function OrganizerApplicationsPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Vendor Applications</h1>
-          <p className="text-gray-500 text-sm">Manage incoming vendor requests</p>
+          <p className="text-gray-500 text-sm">
+            {eventName ? `Applications for: ${eventName}` : 'Manage incoming vendor requests'}
+          </p>
         </div>
-        <Link to="/organizer">
+        <Link to={`/organizer?eventId=${effectiveEventId}`}>
           <Button variant="outline">Back to Dashboard</Button>
         </Link>
       </div>
@@ -107,6 +150,8 @@ export function OrganizerApplicationsPage() {
             <div className="p-12 flex justify-center">
               <Loader2 className="animate-spin text-orange-500" size={32} />
             </div>
+          ) : !effectiveEventId ? (
+            <div className="p-12 text-center text-gray-500">Select an event first.</div>
           ) : filteredApps.length === 0 ? (
             <div className="p-12 text-center text-gray-500">No applications found.</div>
           ) : (

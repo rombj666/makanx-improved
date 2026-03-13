@@ -8,7 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { toast } from 'react-hot-toast';
 import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const statusSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -26,6 +26,8 @@ interface StatusResult {
 }
 
 export default function ApplicationStatusPage() {
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('eventId') || undefined;
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<StatusResult | null>(null);
 
@@ -37,7 +39,7 @@ export default function ApplicationStatusPage() {
     setIsLoading(true);
     setResult(null);
     try {
-      const response = await api.post('/applications/status', data);
+      const response = await api.post('/applications/status', { ...data, eventId });
       if (response.data.success) {
         setResult(response.data.data);
       } else {

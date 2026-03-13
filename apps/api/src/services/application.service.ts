@@ -30,15 +30,25 @@ export const createApplication = async (data: any) => {
   });
 };
 
-export const getApplications = async (organizerId: string) => {
+export const getApplications = async (organizerId: string, params?: { eventId?: string; status?: string }) => {
   // Verify organizer owns the events? 
   // For simplicity, find applications for events owned by this organizer
-  return prisma.vendorApplication.findMany({
-    where: {
-      event: {
-        organizerId: organizerId,
-      },
+  const where: any = {
+    event: {
+      organizerId: organizerId,
     },
+  };
+
+  if (params?.eventId) {
+    where.eventId = params.eventId;
+  }
+
+  if (params?.status && params.status !== 'ALL') {
+    where.status = params.status;
+  }
+
+  return prisma.vendorApplication.findMany({
+    where,
     include: {
       event: true,
     },

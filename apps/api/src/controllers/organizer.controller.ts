@@ -4,7 +4,8 @@ import * as organizerService from '../services/organizer.service';
 export const getVendors = async (req: Request, res: Response) => {
   try {
     const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
-    const result = await organizerService.getVendors(active);
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId : undefined;
+    const result = await organizerService.getVendors(active, eventId);
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

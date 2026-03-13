@@ -225,13 +225,13 @@ export function OrganizerDashboard() {
         </div>
         
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar relative">
-          <Link to="/organizer/applications">
+          <Link to={selectedEvent ? `/organizer/applications?eventId=${selectedEvent.id}` : '/organizer/applications'}>
             <Button variant="outline" size="sm" className="whitespace-nowrap">
               <FileText size={16} className="mr-2" />
               Apps
             </Button>
           </Link>
-          <Link to="/organizer/vendors">
+          <Link to={selectedEvent ? `/organizer/vendors?eventId=${selectedEvent.id}` : '/organizer/vendors'}>
             <Button variant="outline" size="sm" className="whitespace-nowrap">
               <Users size={16} className="mr-2" />
               Vendors

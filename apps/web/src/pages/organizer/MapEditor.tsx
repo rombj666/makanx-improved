@@ -161,7 +161,7 @@ export function MapEditor() {
 
   const fetchVendors = async () => {
     try {
-      const { data } = await api.get('/organizer/vendors?active=true');
+      const { data } = await api.get('/organizer/vendors', { params: { active: true, eventId } });
       if (data.success) {
         setVendors(data.data);
       }
