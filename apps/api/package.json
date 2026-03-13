@@ -6,6 +6,8 @@
     "build":"npx prisma generate && tsc",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",
+    "db:seed": "npx prisma db seed",
+    "db:reset:test": "ts-node-dev prisma/scripts/resetTestData.ts",
     "start": "node dist/index.js",
     "dev": "ts-node-dev src/index.ts",
     "test": "vitest",

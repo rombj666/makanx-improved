@@ -1,84 +1,31 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../src/utils/password';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding database...');
+  const email = 'organizer@makanx.test';
+  const name = 'sample organizer';
+  const password = await hashPassword('password');
 
-  // Clean up
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.menuItem.deleteMany();
-  await prisma.booth.deleteMany();
-  await prisma.vendorApplication.deleteMany();
-  await prisma.event.deleteMany();
-  await prisma.vendorProfile.deleteMany();
-  await prisma.user.deleteMany();
-
-  // Create Users
-  
-  const password = await bcrypt.hash('password123', 10);
-
-  const organizer = await prisma.user.create({
-    data: {
-      email: 'organizer@makanx.com',
+  const user = await prisma.user.upsert({
+    where: { email },
+    create: {
+      email,
+      name,
       password,
-      name: 'Organizer One',
       role: 'ORGANIZER',
+      isActive: true,
     },
-  });
-
-  const vendorUser = await prisma.user.create({
-    data: {
-      email: 'vendor@makanx.com',
+    update: {
+      name,
       password,
-      name: 'Vendor One',
-      role: 'VENDOR',
+      role: 'ORGANIZER',
+      isActive: true,
     },
   });
 
-  const customer = await prisma.user.create({
-    data: {
-      email: 'customer@makanx.com',
-      password,
-      name: 'Customer One',
-      role: 'CUSTOMER',
-    },
-  });
-
-  // Create Vendor Profile
-  await prisma.vendorProfile.create({
-    data: {
-      userId: vendorUser.id,
-      businessName: 'Satay Bros',
-      description: 'Best Satay in town',
-    },
-  });
-
-  // Create Event
-  const event = await prisma.event.create({
-    data: {
-      organizerId: organizer.id,
-      name: 'Singapore Food Festival 2026',
-      slug: 'sg-food-fest-2026',
-      description: 'The biggest food event of the year',
-      startDate: new Date('2026-08-01'),
-      endDate: new Date('2026-08-10'),
-      location: 'Bayfront Event Space',
-    },
-  });
-
-  // Create Booths
-  await prisma.booth.createMany({
-    data: [
-      { eventId: event.id, name: 'A01', status: 'AVAILABLE' },
-      { eventId: event.id, name: 'A02', status: 'AVAILABLE' },
-      { eventId: event.id, name: 'B01', status: 'OCCUPIED' },
-    ],
-  });
-
-  console.log('Seeding completed.');
+  console.log(`Seeded organizer: ${user.email}`);
 }
 
 main()
