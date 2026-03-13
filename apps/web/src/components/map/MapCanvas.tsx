@@ -64,6 +64,7 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [roTransition, setRoTransition] = useState<string>('none');
+  const roUserInteractedRef = useRef(false);
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchDistanceRef = useRef<number | null>(null);
   const lastPinchMidRef = useRef<{ x: number; y: number } | null>(null);
@@ -100,6 +101,37 @@ export function MapCanvas({
     },
     [clamp, naturalSize.height, naturalSize.width]
   );
+
+  const fitToViewRO = useCallback(() => {
+    if (!readOnly) return;
+    if (!containerRef.current) return;
+    if (naturalSize.width === 0 || naturalSize.height === 0) return;
+    const { clientWidth: vw, clientHeight: vh } = containerRef.current;
+    const rawFit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+    const fit = Math.min(rawFit, 1) * 0.92;
+    fitScaleRef.current = fit;
+    const newX = (vw - naturalSize.width * fit) / 2;
+    const newY = (vh - naturalSize.height * fit) / 2;
+    setScale(fit);
+    setPosition(clampPositionRO({ x: newX, y: newY }, fit));
+  }, [clampPositionRO, naturalSize, readOnly]);
+
+  const animateFitToViewRO = useCallback(() => {
+    if (!readOnly) return;
+    if (!containerRef.current) return;
+    if (naturalSize.width === 0 || naturalSize.height === 0) return;
+    const { clientWidth: vw, clientHeight: vh } = containerRef.current;
+    const rawFit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+    const fit = Math.min(rawFit, 1) * 0.92;
+    fitScaleRef.current = fit;
+    const newX = (vw - naturalSize.width * fit) / 2;
+    const newY = (vh - naturalSize.height * fit) / 2;
+    setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
+    setScale(fit);
+    setPosition(clampPositionRO({ x: newX, y: newY }, fit));
+    const t = setTimeout(() => setRoTransition('none'), 450);
+    return () => clearTimeout(t);
+  }, [clampPositionRO, naturalSize, readOnly]);
   
   // Reset natural size when map URL changes to ensure fitToView triggers on new load
   useEffect(() => {
@@ -186,24 +218,18 @@ export function MapCanvas({
     // fitToView will trigger via useEffect [naturalSize]
   };
 
-  const hasCenteredInitialRO = useRef(false);
   useEffect(() => {
     if (!readOnly) return;
-    if (hasCenteredInitialRO.current) return;
-    if (!containerRef.current) return;
     if (naturalSize.width === 0 || naturalSize.height === 0) return;
-    const { clientWidth, clientHeight } = containerRef.current;
-    const scaleFit = Math.min(
-      clientWidth / naturalSize.width,
-      clientHeight / naturalSize.height
-    );
-    const newX = (clientWidth - naturalSize.width * scaleFit) / 2;
-    const newY = (clientHeight - naturalSize.height * scaleFit) / 2;
-    setScale(scaleFit);
-    fitScaleRef.current = scaleFit;
-    setPosition({ x: newX, y: newY });
-    hasCenteredInitialRO.current = true;
-  }, [naturalSize, readOnly]);
+    fitToViewRO();
+  }, [fitToViewRO, naturalSize, readOnly]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    if (centerRequestKey <= 0) return;
+    roUserInteractedRef.current = false;
+    animateFitToViewRO();
+  }, [animateFitToViewRO, centerRequestKey, readOnly]);
 
   useEffect(() => {
     if (!readOnly) return;
@@ -212,15 +238,23 @@ export function MapCanvas({
 
     const ro = new ResizeObserver(() => {
       if (!containerRef.current) return;
-      const { clientWidth, clientHeight } = containerRef.current;
-      const fit = Math.min(clientWidth / naturalSize.width, clientHeight / naturalSize.height);
+      if (!selectedBoothId && !roUserInteractedRef.current) {
+        fitToViewRO();
+        return;
+      }
+      const { clientWidth: vw, clientHeight: vh } = containerRef.current;
+      const rawFit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+      const fit = Math.min(rawFit, 1) * 0.92;
       fitScaleRef.current = fit;
-      setScale((prev) => Math.max(prev, fit));
-      setPosition((p) => clampPositionRO(p, Math.max(scale, fit)));
+      setScale((prev) => {
+        const next = clamp(prev, fit * 0.9, fit * 4);
+        setPosition((p) => clampPositionRO(p, next));
+        return next;
+      });
     });
     ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [clampPositionRO, naturalSize, readOnly, scale]);
+  }, [clamp, clampPositionRO, fitToViewRO, naturalSize, readOnly, scale, selectedBoothId]);
 
   useEffect(() => {
     if (!readOnly) return;
@@ -231,7 +265,8 @@ export function MapCanvas({
     const vw = containerRef.current.clientWidth;
     const vh = containerRef.current.clientHeight;
 
-    const fit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+    const rawFit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+    const fit = Math.min(rawFit, 1) * 0.92;
     fitScaleRef.current = fit;
 
     if (!booth) {
@@ -246,7 +281,7 @@ export function MapCanvas({
 
     const centerX = booth.x + booth.width / 2;
     const centerY = booth.y + booth.height / 2;
-    const desiredScale = clamp(fit * 2.25, fit, fit * 3);
+    const desiredScale = clamp(fit * 2.25, fit * 0.9, fit * 4);
     const targetX = vw / 2;
     const targetY = vh * 0.38;
     const nextX = targetX - centerX * desiredScale;
@@ -439,13 +474,14 @@ export function MapCanvas({
   const handleWheel = (e: React.WheelEvent) => {
     if (!readOnly) return;
     e.preventDefault();
+    roUserInteractedRef.current = true;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     const delta = -e.deltaY * 0.0015;
-    const minScale = fitScaleRef.current || 0.5;
-    const maxScale = (fitScaleRef.current || 1) * 3;
+    const minScale = (fitScaleRef.current || 0.5) * 0.9;
+    const maxScale = (fitScaleRef.current || 1) * 4;
     const newScale = clamp(scale * (1 + delta), minScale, maxScale);
 
     const contentX = (mouseX - position.x) / scale;
@@ -459,6 +495,7 @@ export function MapCanvas({
 
   const handlePointerDownRO = (e: React.PointerEvent) => {
     if (!readOnly) return;
+    roUserInteractedRef.current = true;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -490,8 +527,8 @@ export function MapCanvas({
       const dist = Math.hypot(dx, dy);
       if (dist > 0) {
         const factor = dist / lastPinchDistanceRef.current;
-        const minScale = fitScaleRef.current || 0.5;
-        const maxScale = (fitScaleRef.current || 1) * 3;
+        const minScale = (fitScaleRef.current || 0.5) * 0.9;
+        const maxScale = (fitScaleRef.current || 1) * 4;
         const newScale = clamp(scale * factor, minScale, maxScale);
         const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
         const contentX = (mid.x - position.x) / scale;
@@ -547,7 +584,7 @@ export function MapCanvas({
         onPointerMove={handlePointerMoveRO}
         onPointerUp={handlePointerUpRO}
         onPointerCancel={handlePointerUpRO}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', overscrollBehavior: 'none' }}
       >
         <div
           ref={contentRef}

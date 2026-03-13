@@ -18,6 +18,7 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [selectedBooth, setSelectedBooth] = useState<any>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [centerRequestKey, setCenterRequestKey] = useState(0);
 
   useEffect(() => {
     if (initialEvent) {
@@ -76,6 +77,7 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
           mapImageUrl={event.mapImageUrl}
           booths={booths}
           readOnly
+          centerRequestKey={centerRequestKey}
           onBoothClick={(b: any) => {
             setSelectedBooth(b);
             setQuery('');
@@ -97,7 +99,17 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
             ←
           </button>
           <div className="text-sm font-extrabold text-gray-900 pointer-events-none">MakanX</div>
-          <div className="w-11 h-11" />
+          <button
+            onClick={() => {
+              setSelectedBooth(null);
+              setQuery('');
+              setCenterRequestKey((k) => k + 1);
+            }}
+            className="w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center active:scale-95 transition pointer-events-auto"
+            aria-label="Recenter map"
+          >
+            ⤾
+          </button>
         </div>
 
         <div className="flex justify-center pointer-events-none">
