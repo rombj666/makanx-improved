@@ -65,6 +65,9 @@ export function MapCanvas({
   const contentRef = useRef<HTMLDivElement>(null);
   const [roTransition, setRoTransition] = useState<string>('none');
   const roUserInteractedRef = useRef(false);
+  const scaleRef = useRef(1);
+  const positionRef = useRef({ x: 0, y: 0 });
+  const roTransitionRef = useRef<string>('none');
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchDistanceRef = useRef<number | null>(null);
   const lastPinchMidRef = useRef<{ x: number; y: number } | null>(null);
@@ -102,6 +105,38 @@ export function MapCanvas({
     [clamp, naturalSize.height, naturalSize.width]
   );
 
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    roTransitionRef.current = roTransition;
+  }, [roTransition]);
+
+  const setTransitionNoneRO = useCallback(() => {
+    if (roTransitionRef.current === 'none') return;
+    roTransitionRef.current = 'none';
+    setRoTransition('none');
+  }, []);
+
+  const applyROTransform = useCallback(
+    (nextScale: number, nextPos: { x: number; y: number }, interactive: boolean) => {
+      const clamped = clampPositionRO(nextPos, nextScale);
+      scaleRef.current = nextScale;
+      positionRef.current = clamped;
+      if (interactive) {
+        setTransitionNoneRO();
+      }
+      setScale(nextScale);
+      setPosition(clamped);
+    },
+    [clampPositionRO, setTransitionNoneRO]
+  );
+
   const fitToViewRO = useCallback(() => {
     if (!readOnly) return;
     if (!containerRef.current) return;
@@ -112,9 +147,8 @@ export function MapCanvas({
     fitScaleRef.current = fit;
     const newX = (vw - naturalSize.width * fit) / 2;
     const newY = (vh - naturalSize.height * fit) / 2;
-    setScale(fit);
-    setPosition(clampPositionRO({ x: newX, y: newY }, fit));
-  }, [clampPositionRO, naturalSize, readOnly]);
+    applyROTransform(fit, { x: newX, y: newY }, false);
+  }, [applyROTransform, naturalSize, readOnly]);
 
   const animateFitToViewRO = useCallback(() => {
     if (!readOnly) return;
@@ -126,12 +160,12 @@ export function MapCanvas({
     fitScaleRef.current = fit;
     const newX = (vw - naturalSize.width * fit) / 2;
     const newY = (vh - naturalSize.height * fit) / 2;
+    roTransitionRef.current = 'transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)';
     setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
-    setScale(fit);
-    setPosition(clampPositionRO({ x: newX, y: newY }, fit));
+    applyROTransform(fit, { x: newX, y: newY }, false);
     const t = setTimeout(() => setRoTransition('none'), 450);
     return () => clearTimeout(t);
-  }, [clampPositionRO, naturalSize, readOnly]);
+  }, [applyROTransform, clampPositionRO, naturalSize, readOnly]);
   
   // Reset natural size when map URL changes to ensure fitToView triggers on new load
   useEffect(() => {
@@ -246,15 +280,12 @@ export function MapCanvas({
       const rawFit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
       const fit = Math.min(rawFit, 1) * 0.92;
       fitScaleRef.current = fit;
-      setScale((prev) => {
-        const next = clamp(prev, fit * 0.9, fit * 4);
-        setPosition((p) => clampPositionRO(p, next));
-        return next;
-      });
+      const nextScale = clamp(scaleRef.current, fit * 0.9, fit * 4);
+      applyROTransform(nextScale, positionRef.current, false);
     });
     ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [clamp, clampPositionRO, fitToViewRO, naturalSize, readOnly, scale, selectedBoothId]);
+  }, [applyROTransform, clamp, fitToViewRO, naturalSize, readOnly, selectedBoothId]);
 
   useEffect(() => {
     if (!readOnly) return;
@@ -272,10 +303,10 @@ export function MapCanvas({
     if (!booth) {
       const newX = (vw - naturalSize.width * fit) / 2;
       const newY = (vh - naturalSize.height * fit) / 2;
+      roTransitionRef.current = 'transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)';
       setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
-      setScale(fit);
-      setPosition(clampPositionRO({ x: newX, y: newY }, fit));
-      const t = setTimeout(() => setRoTransition('none'), 450);
+      applyROTransform(fit, { x: newX, y: newY }, false);
+      const t = setTimeout(() => setTransitionNoneRO(), 450);
       return () => clearTimeout(t);
     }
 
@@ -287,12 +318,12 @@ export function MapCanvas({
     const nextX = targetX - centerX * desiredScale;
     const nextY = targetY - centerY * desiredScale;
 
+    roTransitionRef.current = 'transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)';
     setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
-    setScale(desiredScale);
-    setPosition(clampPositionRO({ x: nextX, y: nextY }, desiredScale));
-    const t = setTimeout(() => setRoTransition('none'), 450);
+    applyROTransform(desiredScale, { x: nextX, y: nextY }, false);
+    const t = setTimeout(() => setTransitionNoneRO(), 450);
     return () => clearTimeout(t);
-  }, [booths, clamp, clampPositionRO, naturalSize, readOnly, selectedBoothId]);
+  }, [applyROTransform, booths, clamp, naturalSize, readOnly, selectedBoothId, setTransitionNoneRO]);
 
   const hasCenteredRef = useRef(false);
   useEffect(() => {
@@ -471,31 +502,44 @@ export function MapCanvas({
   // =========================
   // Customer (readOnly) Handlers
   // =========================
-  const handleWheel = (e: React.WheelEvent) => {
+  useEffect(() => {
     if (!readOnly) return;
-    e.preventDefault();
-    roUserInteractedRef.current = true;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const delta = -e.deltaY * 0.0015;
-    const minScale = (fitScaleRef.current || 0.5) * 0.9;
-    const maxScale = (fitScaleRef.current || 1) * 4;
-    const newScale = clamp(scale * (1 + delta), minScale, maxScale);
+    const el = containerRef.current;
+    if (!el) return;
 
-    const contentX = (mouseX - position.x) / scale;
-    const contentY = (mouseY - position.y) / scale;
-    const newX = mouseX - contentX * newScale;
-    const newY = mouseY - contentY * newScale;
+    const onWheel = (e: WheelEvent) => {
+      roUserInteractedRef.current = true;
+      setTransitionNoneRO();
+      e.preventDefault();
 
-    setScale(newScale);
-    setPosition(clampPositionRO({ x: newX, y: newY }, newScale));
-  };
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const curScale = scaleRef.current;
+      const curPos = positionRef.current;
+
+      const delta = -e.deltaY * 0.0015;
+      const minScale = (fitScaleRef.current || 0.5) * 0.9;
+      const maxScale = (fitScaleRef.current || 1) * 4;
+      const nextScale = clamp(curScale * (1 + delta), minScale, maxScale);
+
+      const contentX = (mouseX - curPos.x) / curScale;
+      const contentY = (mouseY - curPos.y) / curScale;
+      const nextX = mouseX - contentX * nextScale;
+      const nextY = mouseY - contentY * nextScale;
+
+      applyROTransform(nextScale, { x: nextX, y: nextY }, true);
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel as any);
+  }, [applyROTransform, clamp, readOnly, setTransitionNoneRO]);
 
   const handlePointerDownRO = (e: React.PointerEvent) => {
     if (!readOnly) return;
     roUserInteractedRef.current = true;
+    setTransitionNoneRO();
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -503,7 +547,8 @@ export function MapCanvas({
       roTapRef.current = { x: e.clientX, y: e.clientY, start: Date.now() };
     }
     if (pointersRef.current.size === 1) {
-      dragStartRef.current = { x: e.clientX, y: e.clientY, originX: position.x, originY: position.y };
+      const cur = positionRef.current;
+      dragStartRef.current = { x: e.clientX, y: e.clientY, originX: cur.x, originY: cur.y };
     }
     if (pointersRef.current.size === 2) {
       const pts = Array.from(pointersRef.current.values());
@@ -529,14 +574,15 @@ export function MapCanvas({
         const factor = dist / lastPinchDistanceRef.current;
         const minScale = (fitScaleRef.current || 0.5) * 0.9;
         const maxScale = (fitScaleRef.current || 1) * 4;
-        const newScale = clamp(scale * factor, minScale, maxScale);
+        const curScale = scaleRef.current;
+        const curPos = positionRef.current;
+        const nextScale = clamp(curScale * factor, minScale, maxScale);
         const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
-        const contentX = (mid.x - position.x) / scale;
-        const contentY = (mid.y - position.y) / scale;
-        const newX = mid.x - contentX * newScale;
-        const newY = mid.y - contentY * newScale;
-        setScale(newScale);
-        setPosition(clampPositionRO({ x: newX, y: newY }, newScale));
+        const contentX = (mid.x - curPos.x) / curScale;
+        const contentY = (mid.y - curPos.y) / curScale;
+        const nextX = mid.x - contentX * nextScale;
+        const nextY = mid.y - contentY * nextScale;
+        applyROTransform(nextScale, { x: nextX, y: nextY }, true);
         lastPinchDistanceRef.current = dist;
         lastPinchMidRef.current = mid;
       }
@@ -546,7 +592,7 @@ export function MapCanvas({
     if (pts.length === 1 && dragStartRef.current) {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
-      setPosition(clampPositionRO({ x: dragStartRef.current.originX + dx, y: dragStartRef.current.originY + dy }, scale));
+      applyROTransform(scaleRef.current, { x: dragStartRef.current.originX + dx, y: dragStartRef.current.originY + dy }, true);
     }
   };
 
@@ -579,7 +625,6 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className="w-full h-full relative overflow-hidden select-none touch-none"
-        onWheel={handleWheel}
         onPointerDown={handlePointerDownRO}
         onPointerMove={handlePointerMoveRO}
         onPointerUp={handlePointerUpRO}
@@ -665,15 +710,16 @@ export function MapCanvas({
                       height: booth.height
                   }}
                   className={[
-                    'absolute rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none',
-                    'transition-all duration-300',
+                    'absolute rounded-2xl flex flex-col items-center justify-center cursor-pointer select-none touch-none',
+                    'transition-all duration-200',
+                    'border border-black/25 shadow-lg backdrop-blur-sm',
                     booth.id === selectedBoothId
-                      ? 'z-30 scale-[1.08] ring-4 ring-yellow-400 shadow-2xl bg-white/85 backdrop-blur-sm'
+                      ? 'z-30 scale-[1.08] ring-4 ring-yellow-400 bg-white/95 shadow-2xl'
                       : booth.id === myBoothId
-                        ? 'z-20 scale-105 ring-4 ring-amber-400 shadow-2xl animate-pulse bg-white/70 backdrop-blur-sm'
+                        ? 'z-20 scale-105 ring-4 ring-amber-400 bg-white/95 shadow-2xl animate-pulse'
                         : selectedBoothId
-                          ? 'opacity-35 bg-white/60'
-                          : 'opacity-70 bg-white/70'
+                          ? 'opacity-65 bg-white/90'
+                          : 'opacity-85 bg-white/90 hover:opacity-95 hover:shadow-xl'
                   ].join(' ')}
                   onPointerDown={(e) => handleBoothPointerDown(e, booth)}
                 >
@@ -689,13 +735,13 @@ export function MapCanvas({
                     </div>
                   )}
                   <div className="relative z-0 pointer-events-none flex flex-col items-center justify-center w-full h-full p-1">
-                      <span className="font-bold text-xs select-none truncate w-full text-center">
-                      {booth.name}
+                      <span className="font-extrabold text-[11px] select-none truncate max-w-full text-center bg-black/70 text-white px-1.5 py-0.5 rounded-md">
+                        {booth.name}
                       </span>
                       {booth.vendor && (
-                      <span className="text-[10px] bg-white/80 px-1 rounded truncate max-w-full">
-                          {booth.vendor.businessName}
-                      </span>
+                        <span className="text-[10px] bg-white/90 text-gray-900 px-1.5 py-0.5 rounded-md truncate max-w-full mt-1">
+                            {booth.vendor.businessName}
+                        </span>
                       )}
                   </div>
                 </div>
