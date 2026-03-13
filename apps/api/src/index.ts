@@ -29,19 +29,21 @@ initSocket(httpServer);
 
 // Security Middleware
 app.set('trust proxy', 1); // Trust first proxy (Render/Vercel)
-configureSecurity(app);
 
-app.use(cors({
+const corsOptions: cors.CorsOptions = {
   origin: [
-    "https://makanx-improved-web.vercel.app",
-    "http://localhost:5173",
+    'https://makanx-improved-web.vercel.app',
+    'http://localhost:5173',
   ],
   credentials: true,
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"],
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
 
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+configureSecurity(app);
 
 app.use(express.json());
 

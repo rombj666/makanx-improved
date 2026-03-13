@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { enableSound, primeReadySound } from '../../lib/alerts';
 
@@ -15,14 +15,10 @@ export function OrderConfirmationPage() {
   const navigate = useNavigate();
   const order = (location.state || null) as OrderState | null;
 
-  if (!order) {
-    navigate('/');
-    return null;
-  }
-
-  const orderNumber = order.orderNumber || 'Unknown';
-  const eta = order.eta ?? 5;
-  const items = Array.isArray(order.items) ? order.items : [];
+  const orderNumber = order?.orderNumber || 'Unknown';
+  const eta = order?.eta ?? 5;
+  const eventSlug = order?.eventSlug || '';
+  const items = useMemo(() => (Array.isArray(order?.items) ? order!.items! : []), [order]);
 
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -69,6 +65,19 @@ export function OrderConfirmationPage() {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    if (order) return;
+    navigate('/', { replace: true });
+  }, [navigate, order]);
+
+  if (!order) {
+    return (
+      <div className="w-full h-full bg-[#FAF7F0] flex items-center justify-center">
+        <div className="text-sm text-gray-600">Returning to home…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full bg-[#FAF7F0]">
@@ -143,7 +152,7 @@ export function OrderConfirmationPage() {
             </div>
 
             <button
-              onClick={() => navigate(`/customer/event/${order.eventSlug}`)}
+              onClick={() => navigate(`/customer/event/${eventSlug}`)}
               className="mt-5 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
             >
               Back to Map

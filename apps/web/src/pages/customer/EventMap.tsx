@@ -38,9 +38,7 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
     }
   }, [slug, initialEvent]);
 
-  if (!event) return <div className="flex h-screen items-center justify-center">Loading event...</div>;
-
-  const booths = event.booths || [];
+  const booths = event?.booths || [];
   const eventName = event?.name || 'Event';
 
   const results = useMemo(() => {
@@ -68,6 +66,8 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
     }
     return list.slice(0, 6);
   }, [booths, query]);
+
+  if (!event) return <div className="flex h-screen items-center justify-center">Loading event...</div>;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#FAF7F0]">
