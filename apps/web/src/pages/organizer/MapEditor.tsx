@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { 
   ArrowLeft, 
@@ -23,6 +23,7 @@ import {
   Map as MapIcon
 } from 'lucide-react';
 import debounce from 'lodash.debounce';
+import { setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
 
 interface Booth {
   id: string;
@@ -57,6 +58,7 @@ interface Vendor {
 export function MapEditor() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [event, setEvent] = useState<Event | null>(null);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -86,6 +88,26 @@ export function MapEditor() {
     fetchEventData();
     fetchVendors();
   }, [eventId]);
+
+  useEffect(() => {
+    if (!eventId) return;
+    setOrganizerSelectedEvent({ eventId });
+  }, [eventId]);
+
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setViewport((prev) => ({
+        ...prev,
+        scale: Math.min(4, Math.max(0.25, prev.scale + delta)),
+      }));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel as any);
+  }, []);
 
   // Debounced Save for auto-save
   const debouncedSaveBooth = useCallback(
@@ -155,7 +177,7 @@ export function MapEditor() {
   const handleZoom = (delta: number) => {
     setViewport(prev => ({
         ...prev,
-        scale: Math.min(3, Math.max(0.25, prev.scale + delta))
+        scale: Math.min(4, Math.max(0.25, prev.scale + delta))
     }));
   };
 
@@ -290,7 +312,7 @@ export function MapEditor() {
 
   const handleBack = () => {
     toast.success('Layout saved');
-    navigate('/organizer');
+    navigate(`/organizer?eventId=${eventId || searchParams.get('eventId') || ''}`);
   };
 
   const selectedBooth = booths.find(b => b.id === selectedBoothId);
@@ -477,12 +499,20 @@ export function MapEditor() {
         {/* Canvas Container */}
         <div 
           ref={mapContainerRef}
-          className="flex-1 overflow-hidden relative h-full bg-gray-100"
-          onWheel={(e) => {
-             e.preventDefault();
-             handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
-          }}
+          className="flex-1 min-w-0 overflow-hidden relative h-full bg-gray-100"
         >
+          <div className="absolute top-4 right-4 z-30 bg-white/95 backdrop-blur-md shadow-lg rounded-xl p-1 flex items-center">
+            <button onClick={() => handleZoom(-0.1)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Zoom out">
+              <ZoomOut size={16} />
+            </button>
+            <div className="text-xs font-semibold w-14 text-center text-gray-900">{Math.round(viewport.scale * 100)}%</div>
+            <button onClick={() => handleZoom(0.1)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Zoom in">
+              <ZoomIn size={16} />
+            </button>
+            <button onClick={handleCenterMap} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Fit to screen">
+              <Maximize size={14} />
+            </button>
+          </div>
           {/* Removed pointer-events-none wrapper */}
           <div className="absolute inset-0">
              <MapCanvas 

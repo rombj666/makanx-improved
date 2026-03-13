@@ -5,9 +5,10 @@ import { formatCurrency } from '../../lib/utils';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../lib/api';
 import { format } from 'date-fns';
-import { BarChart3 } from 'lucide-react';
+import { ArrowLeft, BarChart3 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
 
 interface EventOption {
   id: string;
@@ -41,6 +42,8 @@ interface ProductPerf {
 
 export function OrganizerSalesPlaceholder() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryEventId = searchParams.get('eventId') || '';
   const [events, setEvents] = useState<EventOption[]>([]);
   const [eventId, setEventId] = useState<string>('');
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
@@ -58,7 +61,26 @@ export function OrganizerSalesPlaceholder() {
       if (data.success) {
         const opts = data.data.map((e: any) => ({ id: e.id, name: e.name }));
         setEvents(opts);
-        if (!eventId && opts.length) setEventId(opts[0].id);
+        const stored = getOrganizerSelectedEvent();
+        const preferred = [queryEventId, stored?.eventId, eventId].filter(Boolean) as string[];
+        const found = preferred.find((id) => opts.find((o: any) => o.id === id));
+        if (found) {
+          setEventId(found);
+          if (queryEventId !== found) {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('eventId', found);
+              return next;
+            });
+          }
+        } else if (opts.length) {
+          setEventId(opts[0].id);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('eventId', opts[0].id);
+            return next;
+          });
+        }
       }
     } catch {}
   };
@@ -88,6 +110,17 @@ export function OrganizerSalesPlaceholder() {
   }, []);
 
   useEffect(() => {
+    if (!eventId) return;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('eventId', eventId);
+      next.set('date', date);
+      return next;
+    });
+    setOrganizerSelectedEvent({ eventId });
+  }, [date, eventId, setSearchParams]);
+
+  useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, date]);
@@ -104,10 +137,19 @@ export function OrganizerSalesPlaceholder() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <BarChart3 size={24} />
-          Organizer Sales Analytics
-        </h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(`/organizer?eventId=${eventId || queryEventId || ''}`)}
+          >
+            <ArrowLeft size={16} className="mr-2" />
+            Back
+          </Button>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <BarChart3 size={24} />
+            Organizer Sales Analytics
+          </h1>
+        </div>
       </div>
 
       <div className="flex items-end gap-4">

@@ -4,6 +4,8 @@ import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { OrderTrackingDrawer } from '../../components/customer/OrderTrackingDrawer';
 import VendorBottomSheet from '../../components/customer/VendorBottomSheet';
+import { useCustomerOrders } from '../../hooks/useCustomerOrders';
+import { Receipt } from 'lucide-react';
 
 interface EventMapProps {
   event?: any;
@@ -19,6 +21,7 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [centerRequestKey, setCenterRequestKey] = useState(0);
+  const { orders } = useCustomerOrders(String(slug || ''));
 
   useEffect(() => {
     const hasBooths =
@@ -43,6 +46,11 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
 
   const booths = event?.booths || [];
   const eventName = event?.name || 'Event';
+
+  const activeOrderCount = useMemo(
+    () => orders.filter((o) => o.status === 'PREPARING' || o.status === 'READY').length,
+    [orders]
+  );
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -195,10 +203,20 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
 
       <button
         onClick={() => setOrdersOpen((v) => !v)}
-        className="fixed top-1/2 left-0 -translate-y-1/2 bg-black text-white w-11 h-11 rounded-r-2xl z-50 shadow-xl flex items-center justify-center active:scale-95 transition"
+        className={[
+          'fixed left-3 z-50 shadow-xl bg-black text-white rounded-full',
+          'px-3 py-2 flex items-center gap-2 active:scale-95 transition',
+          selectedBooth ? 'top-24 sm:top-6' : 'top-1/2 -translate-y-1/2',
+        ].join(' ')}
         aria-label="Toggle Orders Sidebar"
       >
-        {ordersOpen ? '←' : '→'}
+        <Receipt size={18} />
+        <span className="text-sm font-semibold">Orders</span>
+        {activeOrderCount > 0 ? (
+          <span className="ml-1 bg-white text-black text-xs font-extrabold rounded-full px-2 py-0.5">
+            {activeOrderCount}
+          </span>
+        ) : null}
       </button>
 
       <OrderTrackingDrawer

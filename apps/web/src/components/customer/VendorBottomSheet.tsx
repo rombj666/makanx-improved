@@ -20,16 +20,16 @@ export function VendorBottomSheet({ booth, open, onClose, onPlaceOrder }: Props)
   return (
     <div className="fixed inset-x-0 bottom-0 z-40">
       <div className="mx-0">
-        <div className="bg-white rounded-t-3xl shadow-2xl border-t border-gray-100">
+        <div className="bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 max-h-[60vh] sm:max-h-[52vh] overflow-hidden">
           <div className="px-4 pt-3 pb-2">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto" />
           </div>
 
-          <div className="px-4 pb-4">
+          <div className="overflow-y-auto px-4 pb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-gray-500">Booth {boothCode}</div>
-                <div className="text-2xl font-extrabold text-gray-900 truncate">{vendorName}</div>
+                <div className="text-xl sm:text-lg font-extrabold text-gray-900 truncate">{vendorName}</div>
               </div>
               <button
                 onClick={onClose}
@@ -57,22 +57,22 @@ export function VendorBottomSheet({ booth, open, onClose, onPlaceOrder }: Props)
             ) : null}
 
             {description ? (
-              <div className="mt-3 text-sm text-gray-600 line-clamp-3">{description}</div>
+              <div className="mt-2 text-sm text-gray-600 line-clamp-3">{description}</div>
             ) : null}
 
             {preview.length > 0 ? (
-              <div className="mt-4">
+              <div className="mt-3">
                 <div className="text-xs font-semibold text-gray-500 mb-2">Popular items</div>
                 <div className="flex gap-3 overflow-x-auto pb-1">
                   {preview.map((m: any) => (
                     <div
                       key={m.id}
-                      className="min-w-[180px] rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden"
+                      className="min-w-[160px] rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden"
                     >
                       {m.imageUrl ? (
-                        <img src={m.imageUrl} alt={m.name} className="w-full h-20 object-cover" loading="lazy" />
+                        <img src={m.imageUrl} alt={m.name} className="w-full h-16 object-cover" loading="lazy" />
                       ) : (
-                        <div className="w-full h-20 bg-gradient-to-br from-gray-100 to-gray-200" />
+                        <div className="w-full h-16 bg-gradient-to-br from-gray-100 to-gray-200" />
                       )}
                       <div className="p-3">
                         <div className="text-sm font-semibold text-gray-900 truncate">{m.name}</div>
@@ -87,7 +87,7 @@ export function VendorBottomSheet({ booth, open, onClose, onPlaceOrder }: Props)
             <button
               onClick={onPlaceOrder}
               disabled={!vendor}
-              className="mt-5 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
+              className="mt-4 w-full bg-black text-white rounded-2xl py-3 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
             >
               Place Order
             </button>
@@ -101,4 +101,3 @@ export function VendorBottomSheet({ booth, open, onClose, onPlaceOrder }: Props)
 }
 
 export default VendorBottomSheet;
-

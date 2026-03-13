@@ -48,7 +48,7 @@ export function BoothHeader({
             <img
               src={heroImageUrl}
               alt={title}
-              className="w-full h-44 object-cover"
+              className="w-full h-[22vh] max-h-[200px] sm:h-[20vh] sm:max-h-[180px] object-cover"
               loading="lazy"
             />
           </div>

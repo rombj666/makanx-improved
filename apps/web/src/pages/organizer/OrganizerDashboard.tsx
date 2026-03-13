@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
 import { toast } from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { 
   LayoutDashboard, 
@@ -29,8 +29,11 @@ import { Input } from '../../components/ui/Input';
 import { Plus, MapPin, Calendar } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import * as htmlToImage from 'html-to-image';
+import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
 
 export function OrganizerDashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryEventId = searchParams.get('eventId');
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -66,11 +69,27 @@ export function OrganizerDashboard() {
       const { data } = await api.get(`/events?status=${activeTab}`);
       if (data.success) {
         setEvents(data.data);
-        if (data.data.length > 0 && !selectedEventId) {
-          // Only auto-select if we don't have one (or if refreshed list doesn't have it)
-          if (!selectedEventId || !data.data.find((e: any) => e.id === selectedEventId)) {
-             setSelectedEventId(data.data[0].id);
+        const stored = getOrganizerSelectedEvent();
+        const candidates = [queryEventId, stored?.eventId, selectedEventId].filter(Boolean) as string[];
+        const found = candidates.find((id) => data.data.find((e: any) => e.id === id));
+        if (found) {
+          setSelectedEventId(found);
+          if (queryEventId !== found) {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('eventId', found);
+              return next;
+            });
           }
+        } else if (data.data.length > 0) {
+          setSelectedEventId(data.data[0].id);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('eventId', data.data[0].id);
+            return next;
+          });
+        } else {
+          setSelectedEventId(null);
         }
       }
     } catch (error) {
@@ -150,8 +169,22 @@ export function OrganizerDashboard() {
     }
   };
 
-  const selectedEvent = events.find(e => e.id === selectedEventId);
+  const selectedEvent = useMemo(() => events.find(e => e.id === selectedEventId), [events, selectedEventId]);
   const eventUrl = selectedEvent ? `${window.location.origin}/customer/${selectedEvent.slug}` : '';
+
+  useEffect(() => {
+    if (!queryEventId) return;
+    if (!events.length) return;
+    if (!events.find((e) => e.id === queryEventId)) return;
+    if (selectedEventId === queryEventId) return;
+    setSelectedEventId(queryEventId);
+  }, [events, queryEventId, selectedEventId]);
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const ev = events.find((e) => e.id === selectedEventId);
+    setOrganizerSelectedEvent({ eventId: selectedEventId, slug: ev?.slug });
+  }, [events, selectedEventId]);
 
   const downloadQR = async () => {
     if (!qrRef.current || !selectedEvent) return;
@@ -204,7 +237,7 @@ export function OrganizerDashboard() {
               Vendors
             </Button>
           </Link>
-          <Link to="/organizer/sales">
+          <Link to={selectedEvent ? `/organizer/sales?eventId=${selectedEvent.id}` : '/organizer/sales'}>
             <Button variant="outline" size="sm" className="whitespace-nowrap">
               <BarChart3 size={16} className="mr-2" />
               Sales
@@ -229,7 +262,7 @@ export function OrganizerDashboard() {
             Create Event
           </Button>
           {selectedEvent && (
-            <Link to={`/organizer/map/${selectedEvent.id}`}>
+            <Link to={`/organizer/map/${selectedEvent.id}?eventId=${selectedEvent.id}`}>
               <Button size="sm" variant="outline" className="whitespace-nowrap">
                 <Settings size={16} className="mr-2" />
                 Manage Booths
@@ -353,7 +386,16 @@ export function OrganizerDashboard() {
                 {events.map(event => (
                   <div 
                     key={event.id}
-                    onClick={() => { setSelectedEventId(event.id); setIsSidebarOpen(false); }}
+                    onClick={() => { 
+                      setSelectedEventId(event.id); 
+                      setIsSidebarOpen(false); 
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set('eventId', event.id);
+                        return next;
+                      });
+                      setOrganizerSelectedEvent({ eventId: event.id, slug: event.slug });
+                    }}
                     className={`p-4 cursor-pointer hover:bg-orange-50 transition-colors group ${
                       selectedEventId === event.id ? 'bg-orange-50 border-l-4 border-orange-500' : 'border-l-4 border-transparent'
                     }`}
