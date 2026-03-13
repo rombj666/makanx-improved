@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { MapCanvas } from '../../components/map/MapCanvas';
 import { OrderTrackingDrawer } from '../../components/customer/OrderTrackingDrawer';
-import { BoothInfo } from '../../components/BoothInfo';
+import VendorBottomSheet from '../../components/customer/VendorBottomSheet';
 
 interface EventMapProps {
   event?: any;
@@ -17,6 +17,7 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   const [event, setEvent] = useState<any>(initialEvent || null);
   const [selectedBooth, setSelectedBooth] = useState<any>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (initialEvent) {
@@ -40,19 +41,122 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
   if (!event) return <div className="flex h-screen items-center justify-center">Loading event...</div>;
 
   const booths = event.booths || [];
+  const eventName = event?.name || 'Event';
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const list: any[] = [];
+    for (const b of booths) {
+      const vendor = b?.vendor;
+      if (!vendor) continue;
+      const vendorName = String(vendor.businessName || '').toLowerCase();
+      const boothName = String(b.name || '').toLowerCase();
+      const menu = Array.isArray(vendor.menuItems) ? vendor.menuItems : [];
+      const menuMatch = menu.find((m: any) => String(m?.name || '').toLowerCase().includes(q));
+      const vendorMatch = vendorName.includes(q) || boothName.includes(q);
+      if (vendorMatch || menuMatch) {
+        list.push({
+          boothId: b.id,
+          boothName: b.name,
+          vendorId: vendor.id,
+          vendorName: vendor.businessName,
+          hit: vendorMatch ? 'vendor' : 'item',
+          itemName: vendorMatch ? null : menuMatch?.name || null,
+        });
+      }
+    }
+    return list.slice(0, 6);
+  }, [booths, query]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-gray-100">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#FAF7F0]">
       <div className="absolute inset-0 z-0">
         <MapCanvas
           mapImageUrl={event.mapImageUrl}
           booths={booths}
           readOnly
-          onBoothClick={(b: any) => setSelectedBooth(b)}
+          onBoothClick={(b: any) => {
+            setSelectedBooth(b);
+            setQuery('');
+          }}
           selectedBoothId={selectedBooth?.id || null}
-          onBackgroundClick={() => setSelectedBooth(null)}
+          onBackgroundClick={() => {
+            setSelectedBooth(null);
+          }}
         />
       </div>
+
+      <div className="fixed top-0 left-0 right-0 z-40 px-4 pt-4 space-y-3 pointer-events-none">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-11 h-11 rounded-full bg-white shadow-md flex items-center justify-center active:scale-95 transition pointer-events-auto"
+            aria-label="Back"
+          >
+            ←
+          </button>
+          <div className="text-sm font-extrabold text-gray-900 pointer-events-none">MakanX</div>
+          <div className="w-11 h-11" />
+        </div>
+
+        <div className="flex justify-center pointer-events-none">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/90 backdrop-blur-md shadow-md px-4 py-2">
+            <div className="text-xs font-semibold text-gray-500">Event</div>
+            <div className="text-sm font-semibold text-gray-900">{eventName}</div>
+          </div>
+        </div>
+
+        <div className="relative pointer-events-auto">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search food or vendor..."
+            className="w-full rounded-2xl px-4 py-3 bg-white/95 backdrop-blur-md shadow-xl border border-gray-100 outline-none focus:ring-2 focus:ring-yellow-400"
+          />
+          {results.length > 0 ? (
+            <div className="absolute left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+              {results.map((r) => (
+                <button
+                  key={r.boothId + String(r.itemName || '')}
+                  onClick={() => {
+                    const booth = booths.find((b: any) => b.id === r.boothId) || null;
+                    if (booth) setSelectedBooth(booth);
+                    setQuery('');
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-[#FAF7F0] active:bg-[#FAF7F0]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {r.vendorName}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Booth {r.boothName}
+                        {r.hit === 'item' && r.itemName ? (
+                          <span className="text-gray-300 mx-2">•</span>
+                        ) : null}
+                        {r.hit === 'item' && r.itemName ? (
+                          <span className="text-gray-600">“{r.itemName}”</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold text-gray-500">→</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {!selectedBooth && !query ? (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="bg-white/90 backdrop-blur-md rounded-full px-4 py-2 shadow-md text-xs font-semibold text-gray-700">
+            Tap a booth to explore
+          </div>
+        </div>
+      ) : null}
 
       <button
         onClick={() => setOrdersOpen((v) => !v)}
@@ -68,19 +172,16 @@ export function EventMap({ event: initialEvent, slug: propSlug }: EventMapProps)
         onClose={() => setOrdersOpen(false)}
       />
 
-      {selectedBooth && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl p-4 z-40">
-          <BoothInfo
-            booth={selectedBooth}
-            onClose={() => setSelectedBooth(null)}
-            onPlaceOrder={() => {
-              if (selectedBooth?.vendor?.id) {
-                navigate(`/customer/event/${slug}/order/${selectedBooth.vendor.id}`);
-              }
-            }}
-          />
-        </div>
-      )}
+      <VendorBottomSheet
+        booth={selectedBooth}
+        open={!!selectedBooth}
+        onClose={() => setSelectedBooth(null)}
+        onPlaceOrder={() => {
+          if (selectedBooth?.vendor?.id) {
+            navigate(`/customer/event/${slug}/order/${selectedBooth.vendor.id}`);
+          }
+        }}
+      />
     </div>
   );
 }

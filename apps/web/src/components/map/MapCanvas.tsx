@@ -63,11 +63,43 @@ export function MapCanvas({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [roTransition, setRoTransition] = useState<string>('none');
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchDistanceRef = useRef<number | null>(null);
   const lastPinchMidRef = useRef<{ x: number; y: number } | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const fitScaleRef = useRef(1);
+  const roTapRef = useRef<{ x: number; y: number; start: number } | null>(null);
+
+  const clampPositionRO = useCallback(
+    (next: { x: number; y: number }, nextScale: number) => {
+      if (!containerRef.current || naturalSize.width === 0 || naturalSize.height === 0) {
+        return next;
+      }
+      const { clientWidth: vw, clientHeight: vh } = containerRef.current;
+      const scaledW = naturalSize.width * nextScale;
+      const scaledH = naturalSize.height * nextScale;
+
+      let x = next.x;
+      let y = next.y;
+
+      if (scaledW <= vw) {
+        x = (vw - scaledW) / 2;
+      } else {
+        x = clamp(x, vw - scaledW, 0);
+      }
+
+      if (scaledH <= vh) {
+        y = (vh - scaledH) / 2;
+      } else {
+        y = clamp(y, vh - scaledH, 0);
+      }
+
+      return { x, y };
+    },
+    [clamp, naturalSize.height, naturalSize.width]
+  );
   
   // Reset natural size when map URL changes to ensure fitToView triggers on new load
   useEffect(() => {
@@ -168,9 +200,64 @@ export function MapCanvas({
     const newX = (clientWidth - naturalSize.width * scaleFit) / 2;
     const newY = (clientHeight - naturalSize.height * scaleFit) / 2;
     setScale(scaleFit);
+    fitScaleRef.current = scaleFit;
     setPosition({ x: newX, y: newY });
     hasCenteredInitialRO.current = true;
   }, [naturalSize, readOnly]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    if (!containerRef.current) return;
+    if (naturalSize.width === 0 || naturalSize.height === 0) return;
+
+    const ro = new ResizeObserver(() => {
+      if (!containerRef.current) return;
+      const { clientWidth, clientHeight } = containerRef.current;
+      const fit = Math.min(clientWidth / naturalSize.width, clientHeight / naturalSize.height);
+      fitScaleRef.current = fit;
+      setScale((prev) => Math.max(prev, fit));
+      setPosition((p) => clampPositionRO(p, Math.max(scale, fit)));
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [clampPositionRO, naturalSize, readOnly, scale]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    if (!containerRef.current) return;
+    if (naturalSize.width === 0 || naturalSize.height === 0) return;
+
+    const booth = selectedBoothId ? booths.find((b) => b.id === selectedBoothId) : null;
+    const vw = containerRef.current.clientWidth;
+    const vh = containerRef.current.clientHeight;
+
+    const fit = Math.min(vw / naturalSize.width, vh / naturalSize.height);
+    fitScaleRef.current = fit;
+
+    if (!booth) {
+      const newX = (vw - naturalSize.width * fit) / 2;
+      const newY = (vh - naturalSize.height * fit) / 2;
+      setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
+      setScale(fit);
+      setPosition(clampPositionRO({ x: newX, y: newY }, fit));
+      const t = setTimeout(() => setRoTransition('none'), 450);
+      return () => clearTimeout(t);
+    }
+
+    const centerX = booth.x + booth.width / 2;
+    const centerY = booth.y + booth.height / 2;
+    const desiredScale = clamp(fit * 2.25, fit, fit * 3);
+    const targetX = vw / 2;
+    const targetY = vh * 0.38;
+    const nextX = targetX - centerX * desiredScale;
+    const nextY = targetY - centerY * desiredScale;
+
+    setRoTransition('transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1)');
+    setScale(desiredScale);
+    setPosition(clampPositionRO({ x: nextX, y: nextY }, desiredScale));
+    const t = setTimeout(() => setRoTransition('none'), 450);
+    return () => clearTimeout(t);
+  }, [booths, clamp, clampPositionRO, naturalSize, readOnly, selectedBoothId]);
 
   const hasCenteredRef = useRef(false);
   useEffect(() => {
@@ -357,7 +444,9 @@ export function MapCanvas({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     const delta = -e.deltaY * 0.0015;
-    const newScale = clamp(scale * (1 + delta), 0.5, 3);
+    const minScale = fitScaleRef.current || 0.5;
+    const maxScale = (fitScaleRef.current || 1) * 3;
+    const newScale = clamp(scale * (1 + delta), minScale, maxScale);
 
     const contentX = (mouseX - position.x) / scale;
     const contentY = (mouseY - position.y) / scale;
@@ -365,7 +454,7 @@ export function MapCanvas({
     const newY = mouseY - contentY * newScale;
 
     setScale(newScale);
-    setPosition({ x: newX, y: newY });
+    setPosition(clampPositionRO({ x: newX, y: newY }, newScale));
   };
 
   const handlePointerDownRO = (e: React.PointerEvent) => {
@@ -373,6 +462,9 @@ export function MapCanvas({
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 1) {
+      roTapRef.current = { x: e.clientX, y: e.clientY, start: Date.now() };
+    }
     if (pointersRef.current.size === 1) {
       dragStartRef.current = { x: e.clientX, y: e.clientY, originX: position.x, originY: position.y };
     }
@@ -398,14 +490,16 @@ export function MapCanvas({
       const dist = Math.hypot(dx, dy);
       if (dist > 0) {
         const factor = dist / lastPinchDistanceRef.current;
-        const newScale = clamp(scale * factor, 0.5, 3);
+        const minScale = fitScaleRef.current || 0.5;
+        const maxScale = (fitScaleRef.current || 1) * 3;
+        const newScale = clamp(scale * factor, minScale, maxScale);
         const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
         const contentX = (mid.x - position.x) / scale;
         const contentY = (mid.y - position.y) / scale;
         const newX = mid.x - contentX * newScale;
         const newY = mid.y - contentY * newScale;
         setScale(newScale);
-        setPosition({ x: newX, y: newY });
+        setPosition(clampPositionRO({ x: newX, y: newY }, newScale));
         lastPinchDistanceRef.current = dist;
         lastPinchMidRef.current = mid;
       }
@@ -415,7 +509,7 @@ export function MapCanvas({
     if (pts.length === 1 && dragStartRef.current) {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
-      setPosition({ x: dragStartRef.current.originX + dx, y: dragStartRef.current.originY + dy });
+      setPosition(clampPositionRO({ x: dragStartRef.current.originX + dx, y: dragStartRef.current.originY + dy }, scale));
     }
   };
 
@@ -432,6 +526,14 @@ export function MapCanvas({
     }
     if (pointersRef.current.size === 0) {
       dragStartRef.current = null;
+      if (roTapRef.current) {
+        const dx = Math.abs(e.clientX - roTapRef.current.x);
+        const dy = Math.abs(e.clientY - roTapRef.current.y);
+        if (dx < 5 && dy < 5) {
+          onBackgroundClick?.();
+        }
+      }
+      roTapRef.current = null;
     }
   };
 
@@ -455,7 +557,7 @@ export function MapCanvas({
             transformOrigin: '0 0',
             width: 'fit-content',
             height: 'fit-content',
-            transition: 'none'
+            transition: roTransition
           }}
         >
           <div 
@@ -512,6 +614,9 @@ export function MapCanvas({
                 )}
               </div>
             )}
+            {selectedBoothId ? (
+              <div className="absolute inset-0 bg-black/10 z-[5] pointer-events-none" />
+            ) : null}
             <div className="absolute inset-0 z-10">
               {booths.map(booth => (
                 <div
@@ -525,12 +630,19 @@ export function MapCanvas({
                   className={[
                     'absolute rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none',
                     'transition-all duration-300',
-                    booth.id === myBoothId
-                      ? 'z-20 scale-105 ring-4 ring-amber-400 shadow-2xl animate-pulse bg-white/70 backdrop-blur-sm'
-                      : 'opacity-70 bg-white/70'
+                    booth.id === selectedBoothId
+                      ? 'z-30 scale-[1.08] ring-4 ring-yellow-400 shadow-2xl bg-white/85 backdrop-blur-sm'
+                      : booth.id === myBoothId
+                        ? 'z-20 scale-105 ring-4 ring-amber-400 shadow-2xl animate-pulse bg-white/70 backdrop-blur-sm'
+                        : selectedBoothId
+                          ? 'opacity-35 bg-white/60'
+                          : 'opacity-70 bg-white/70'
                   ].join(' ')}
                   onPointerDown={(e) => handleBoothPointerDown(e, booth)}
                 >
+                  {booth.id === selectedBoothId ? (
+                    <div className="absolute inset-0 rounded-xl bg-yellow-400/20 blur-xl pointer-events-none" />
+                  ) : null}
                   {booth.id === myBoothId && (
                     <div className="absolute inset-0 rounded-xl bg-amber-400/20 blur-xl animate-pulse pointer-events-none" />
                   )}
