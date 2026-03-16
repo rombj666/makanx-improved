@@ -66,18 +66,27 @@ export const approveApplication = async (applicationId: string, organizerId: str
 
   if (!application) throw new Error('Application not found');
   if (application.event.organizerId !== organizerId) throw new Error('Unauthorized');
-  if (application.status === 'APPROVED') throw new Error('Application already approved');
+  if (application.status === 'ACCOUNT_CREATED') throw new Error('Account already created');
+
+  console.log('[applications/approve] approving application', {
+    id: application.id,
+    email: application.applicantEmail,
+    status: application.status,
+    eventId: application.eventId,
+  });
 
   // Transaction: Update status and create invite token
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.vendorApplication.update({
-      where: { id: applicationId },
-      data: { 
-        status: 'APPROVED',
-        approvedAt: new Date(),
-        approvedByUserId: organizerId
-      },
-    });
+    if (application.status !== 'APPROVED') {
+      await tx.vendorApplication.update({
+        where: { id: applicationId },
+        data: {
+          status: 'APPROVED',
+          approvedAt: new Date(),
+          approvedByUserId: organizerId,
+        },
+      });
+    }
 
     // Check if token already exists for this application
     const existingToken = await tx.inviteToken.findUnique({
@@ -88,7 +97,7 @@ export const approveApplication = async (applicationId: string, organizerId: str
        // Extend expiry
        const expiresAt = new Date();
        expiresAt.setDate(expiresAt.getDate() + 7);
-       
+       console.log('[applications/approve] reusing invite token', { id: existingToken.id, token: existingToken.token });
        return tx.inviteToken.update({
          where: { id: existingToken.id },
          data: { expiresAt, isUsed: false }
@@ -99,6 +108,7 @@ export const approveApplication = async (applicationId: string, organizerId: str
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
 
+    console.log('[applications/approve] creating invite token', { token });
     return tx.inviteToken.create({
       data: {
         token,
@@ -114,6 +124,7 @@ export const approveApplication = async (applicationId: string, organizerId: str
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
   const inviteUrl = `${clientUrl}/invite?token=${result.token}`;
 
+  console.log('[applications/approve] generated invite url', { inviteUrl });
   return { ...result, inviteUrl };
 };
 

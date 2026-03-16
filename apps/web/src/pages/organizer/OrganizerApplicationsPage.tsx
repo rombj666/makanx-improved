@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { Check, X, Search, Loader2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
+import { Modal } from '../../components/ui/Modal';
 
 interface Application {
   id: string;
@@ -26,6 +27,9 @@ export function OrganizerApplicationsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('PENDING');
   const [eventName, setEventName] = useState<string>('');
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string>('');
+  const [inviteEmail, setInviteEmail] = useState<string>('');
 
   useEffect(() => {
     fetchApplications();
@@ -87,7 +91,14 @@ export function OrganizerApplicationsPage() {
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
     if (!confirm(`Are you sure you want to ${action} this application?`)) return;
     try {
-      await api.post(`/applications/${id}/${action}`);
+      const res = await api.post(`/applications/${id}/${action}`);
+      const url = res?.data?.data?.inviteUrl || '';
+      if (action === 'approve' && url) {
+        const app = applications.find((a) => a.id === id);
+        setInviteUrl(url);
+        setInviteEmail(app?.applicantEmail || '');
+        setInviteModalOpen(true);
+      }
       toast.success(`Application ${action}ed`);
       fetchApplications();
     } catch (error) {
@@ -218,6 +229,41 @@ export function OrganizerApplicationsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Modal
+        isOpen={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        title="Application approved"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600">
+            Share this link to let the vendor create their account{inviteEmail ? ` (${inviteEmail})` : ''}.
+          </div>
+          <Input value={inviteUrl} readOnly />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(inviteUrl);
+                  toast.success('Invite link copied');
+                } catch {
+                  toast.error('Unable to copy link');
+                }
+              }}
+              disabled={!inviteUrl}
+            >
+              Copy link
+            </Button>
+            <a className="flex-1" href={inviteUrl} target="_blank" rel="noreferrer">
+              <Button className="w-full" disabled={!inviteUrl}>
+                Open link
+              </Button>
+            </a>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
