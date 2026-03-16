@@ -7,6 +7,8 @@ import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MapCanvas } from '../../components/map/MapCanvas';
+import { QRCodeCanvas } from 'qrcode.react';
+import * as htmlToImage from 'html-to-image';
 import { 
   ArrowLeft, 
   ZoomIn, 
@@ -42,6 +44,7 @@ interface Booth {
 interface Event {
   id: string;
   name: string;
+  slug?: string;
   mapImageUrl?: string;
 }
 
@@ -81,8 +84,11 @@ export function MapEditor() {
   const [urlInput, setUrlInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isBoothQrOpen, setIsBoothQrOpen] = useState(false);
+  const [isDownloadingBoothQr, setIsDownloadingBoothQr] = useState(false);
   
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const boothQrRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchEventData();
@@ -316,6 +322,50 @@ export function MapEditor() {
   };
 
   const selectedBooth = booths.find(b => b.id === selectedBoothId);
+
+  const boothUrl = useMemo(() => {
+    if (!event?.slug) return '';
+    if (!selectedBooth?.id) return '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/customer/event/${event.slug}/booth/${selectedBooth.id}`;
+  }, [event?.slug, selectedBooth?.id]);
+
+  const boothQrFilename = useMemo(() => {
+    const slug = String(event?.slug || 'event');
+    const boothLabel = String(selectedBooth?.name || 'booth');
+    const safe = `${slug}-${boothLabel}-qr`
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+    return `${safe || 'booth-qr'}.png`;
+  }, [event?.slug, selectedBooth?.name]);
+
+  const copyBoothLink = async () => {
+    if (!boothUrl) return;
+    try {
+      await navigator.clipboard.writeText(boothUrl);
+      toast.success('Booth link copied');
+    } catch {
+      toast.error('Unable to copy link');
+    }
+  };
+
+  const downloadBoothQr = async () => {
+    if (!boothQrRef.current) return;
+    setIsDownloadingBoothQr(true);
+    try {
+      const dataUrl = await htmlToImage.toPng(boothQrRef.current, { cacheBust: true, pixelRatio: 2 });
+      const link = document.createElement('a');
+      link.download = boothQrFilename;
+      link.href = dataUrl;
+      link.click();
+    } catch {
+      toast.error('Failed to download QR');
+    } finally {
+      setIsDownloadingBoothQr(false);
+    }
+  };
 
   const handleFixMap = async () => {
     setIsUploading(true);
@@ -564,6 +614,23 @@ export function MapEditor() {
                         </select>
                     </div>
 
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase">Booth QR</label>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => setIsBoothQrOpen(true)}
+                          disabled={!boothUrl}
+                        >
+                          Generate Booth QR
+                        </Button>
+                        {!boothUrl ? (
+                          <div className="text-xs text-gray-500">
+                            Event slug is required to generate a booth QR link.
+                          </div>
+                        ) : null}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500">Width</label>
@@ -616,6 +683,30 @@ export function MapEditor() {
             </div>
         )}
       </div>
+
+      <Modal
+        isOpen={isBoothQrOpen}
+        onClose={() => setIsBoothQrOpen(false)}
+        title="Booth QR Code"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-700">
+            {event?.name ? `${event.name} — ` : ''}{selectedBooth?.name || 'Booth'}
+          </div>
+          <Input value={boothUrl || ''} readOnly />
+          <div ref={boothQrRef} className="bg-white p-3 rounded-lg border flex items-center justify-center">
+            {boothUrl ? <QRCodeCanvas value={boothUrl} size={256} includeMargin /> : null}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={copyBoothLink} disabled={!boothUrl}>
+              Copy Link
+            </Button>
+            <Button className="flex-1" onClick={downloadBoothQr} disabled={!boothUrl || isDownloadingBoothQr}>
+              {isDownloadingBoothQr ? 'Downloading…' : 'Download QR'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Upload Modal */}
       <Modal 
