@@ -32,3 +32,13 @@ npm test
 -   **Booths**: Linked to events (Organizer).
 -   **Applications**: Webhook integration, Organizer approval/rejection.
 -   **Invites**: Generated on application approval.
+
+## Vendor Application Event Matching
+
+Vendor applications are matched to events by Event.name.
+
+- The organizer-created Event.name in the database
+- The event name displayed in the organizer UI
+- The Google Form “Select Event” option text
+
+must use the same text. Matching ignores case and trims/collapses extra spaces.

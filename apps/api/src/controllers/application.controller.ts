@@ -13,40 +13,46 @@ export const handleWebhook = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Invalid webhook secret' });
     }
 
-    // Adapt Google Form payload if necessary. 
-    // For now assuming payload matches schema or is transformed before calling service.
-    // Example expectation: { eventId, applicantName, applicantEmail, businessName, ... }
-    
-  const incomingEventId = typeof req.body.eventId === 'string' ? req.body.eventId : null;
-  const incomingEventSlug = typeof req.body.eventSlug === 'string' ? req.body.eventSlug : null;
+    const rawEventName = String(req.body.eventName || '').trim();
+    console.log('[applications/webhook] received eventName:', rawEventName);
 
-  const event = incomingEventId
-    ? await prisma.event.findUnique({ where: { id: incomingEventId } })
-    : incomingEventSlug
-      ? await prisma.event.findUnique({ where: { slug: incomingEventSlug } })
-      : await prisma.event.findFirst({
-          where: {
-            name: req.body.eventName,
-          },
-        });
+    if (!rawEventName) {
+      return res.status(400).json({ success: false, error: 'Missing eventName' });
+    }
 
-  if (!event) {
-    return res.status(400).json({ success: false, error: 'Invalid event' });
-  }
+    const normalizedEventName = rawEventName.replace(/\s+/g, ' ').trim();
+    console.log('[applications/webhook] normalized eventName:', normalizedEventName);
 
-  const transformed = {
-    eventId: event.id,
-    applicantName: req.body.contactName,
-    applicantEmail: req.body.businessEmail,
-    businessName: req.body.vendorName,
-    phoneNumber: req.body.phone,
-    category: req.body.category,
-    description: req.body.description,
-    priceMin: req.body.priceMin,
-    priceMax: req.body.priceMax,
-  };
+    const event = await prisma.event.findFirst({
+      where: {
+        name: {
+          equals: normalizedEventName,
+          mode: 'insensitive',
+        },
+      },
+    });
 
-  const result = await applicationService.createApplication(transformed);
+    if (!event) {
+      console.warn('[applications/webhook] event not found for name:', normalizedEventName);
+      return res.status(400).json({ success: false, error: 'Invalid event' });
+    }
+
+    console.log('[applications/webhook] matched event:', { id: event.id, name: event.name });
+
+    const transformed = {
+      eventId: event.id,
+      vendorName: req.body.vendorName,
+      contactName: req.body.contactName,
+      businessEmail: req.body.businessEmail,
+      phone: req.body.phone,
+      category: req.body.category,
+      eventName: event.name,
+      description: req.body.description,
+      priceMin: req.body.priceMin,
+      priceMax: req.body.priceMax,
+    };
+
+    const result = await applicationService.createApplication(transformed);
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
