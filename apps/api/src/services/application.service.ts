@@ -121,7 +121,7 @@ export const approveApplication = async (applicationId: string, organizerId: str
     });
   });
 
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '');
   const inviteUrl = `${clientUrl}/invite?token=${result.token}`;
 
   console.log('[applications/approve] generated invite url', { inviteUrl });
@@ -219,7 +219,7 @@ export const checkApplicationStatus = async (email: string, phone: string, event
              }
         }
         
-        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+        const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '');
         return { 
             status: 'APPROVED', 
             inviteUrl: `${clientUrl}/invite?token=${token.token}` 

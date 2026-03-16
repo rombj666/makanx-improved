@@ -7,7 +7,6 @@ import { toast } from 'react-hot-toast';
 import { Check, X, Search, Loader2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getOrganizerSelectedEvent, setOrganizerSelectedEvent } from '../../lib/organizerSelectedEvent';
-import { Modal } from '../../components/ui/Modal';
 
 interface Application {
   id: string;
@@ -27,7 +26,6 @@ export function OrganizerApplicationsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('PENDING');
   const [eventName, setEventName] = useState<string>('');
-  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string>('');
   const [inviteEmail, setInviteEmail] = useState<string>('');
 
@@ -92,12 +90,13 @@ export function OrganizerApplicationsPage() {
     if (!confirm(`Are you sure you want to ${action} this application?`)) return;
     try {
       const res = await api.post(`/applications/${id}/${action}`);
+      console.log('[OrganizerApplicationsPage] approve response', res?.data);
       const url = res?.data?.data?.inviteUrl || '';
+      console.log('[OrganizerApplicationsPage] extracted inviteUrl', url);
       if (action === 'approve' && url) {
         const app = applications.find((a) => a.id === id);
         setInviteUrl(url);
         setInviteEmail(app?.applicantEmail || '');
-        setInviteModalOpen(true);
       }
       toast.success(`Application ${action}ed`);
       fetchApplications();
@@ -128,6 +127,48 @@ export function OrganizerApplicationsPage() {
           <Button variant="outline">Back to Dashboard</Button>
         </Link>
       </div>
+
+      {inviteUrl ? (
+        <Card className="border-none shadow-md">
+          <CardHeader className="border-b bg-white rounded-t-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-gray-900">Application approved</div>
+                <div className="text-xs text-gray-500 truncate">
+                  Share this link to let the vendor create their account{inviteEmail ? ` (${inviteEmail})` : ''}.
+                </div>
+              </div>
+              <Button variant="ghost" onClick={() => { setInviteUrl(''); setInviteEmail(''); }}>
+                Close
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="bg-white rounded-b-lg space-y-3">
+            <Input value={inviteUrl} readOnly />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(inviteUrl);
+                    toast.success('Invite link copied');
+                  } catch {
+                    toast.error('Unable to copy link');
+                  }
+                }}
+              >
+                Copy link
+              </Button>
+              <a className="flex-1" href={inviteUrl} target="_blank" rel="noreferrer">
+                <Button className="w-full">
+                  Open link
+                </Button>
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border-none shadow-md">
         <CardHeader className="border-b bg-white rounded-t-lg">
@@ -229,41 +270,6 @@ export function OrganizerApplicationsPage() {
           )}
         </CardContent>
       </Card>
-
-      <Modal
-        isOpen={inviteModalOpen}
-        onClose={() => setInviteModalOpen(false)}
-        title="Application approved"
-      >
-        <div className="space-y-4">
-          <div className="text-sm text-gray-600">
-            Share this link to let the vendor create their account{inviteEmail ? ` (${inviteEmail})` : ''}.
-          </div>
-          <Input value={inviteUrl} readOnly />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(inviteUrl);
-                  toast.success('Invite link copied');
-                } catch {
-                  toast.error('Unable to copy link');
-                }
-              }}
-              disabled={!inviteUrl}
-            >
-              Copy link
-            </Button>
-            <a className="flex-1" href={inviteUrl} target="_blank" rel="noreferrer">
-              <Button className="w-full" disabled={!inviteUrl}>
-                Open link
-              </Button>
-            </a>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
