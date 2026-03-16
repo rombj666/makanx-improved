@@ -19,33 +19,73 @@ function base64ToUint8Array(base64: string) {
   return bytes;
 }
 
-export const subscribeToPush = async (customerId: string) => {
-  if (typeof window === "undefined") return;
-  if (!("Notification" in window)) return;
-  if (!("serviceWorker" in navigator)) return;
-  if (!("PushManager" in window)) return;
+export type PushEnableResult =
+  | { status: "enabled" }
+  | { status: "blocked" }
+  | { status: "not_supported" }
+  | { status: "dismissed" }
+  | { status: "error"; error: string };
 
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
+function isPushSupported() {
+  if (typeof window === "undefined") return false;
+  if (!("Notification" in window)) return false;
+  if (!("serviceWorker" in navigator)) return false;
+  if (!("PushManager" in window)) return false;
+  return true;
+}
 
-  const registration = await registerServiceWorker();
-  if (!registration) return;
+export async function getExistingPushSubscription() {
+  if (!isPushSupported()) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const ready = reg ?? (await navigator.serviceWorker.ready);
+    const sub = await ready.pushManager.getSubscription();
+    return sub;
+  } catch {
+    return null;
+  }
+}
+
+export const subscribeToPush = async (customerId: string): Promise<PushEnableResult> => {
+  if (!isPushSupported()) return { status: "not_supported" };
+
+  if (Notification.permission === "denied") {
+    return { status: "blocked" };
+  }
+
+  if (Notification.permission !== "granted") {
+    const permission = await Notification.requestPermission();
+    if (permission === "denied") return { status: "blocked" };
+    if (permission !== "granted") return { status: "dismissed" };
+  }
 
   const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-  if (!publicKey) return;
+  if (!publicKey) return { status: "error", error: "Missing VAPID public key" };
 
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: base64ToUint8Array(publicKey),
-  });
+  const registration = (await navigator.serviceWorker.getRegistration()) ?? (await registerServiceWorker());
+  const ready = registration ?? (await navigator.serviceWorker.ready);
+
+  let subscription = await ready.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await ready.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64ToUint8Array(publicKey),
+    });
+  }
+
+  const subJson = subscription.toJSON() as any;
+  if (!subJson?.endpoint || !subJson?.keys?.p256dh || !subJson?.keys?.auth) {
+    return { status: "error", error: "Invalid subscription object" };
+  }
 
   try {
     const { api } = await import("./api");
     await api.post("/push/subscribe", {
       customerId,
-      subscription,
+      subscription: { endpoint: subJson.endpoint, keys: subJson.keys },
     });
-  } catch (e) {
-    console.error("Push subscribe error", e);
+    return { status: "enabled" };
+  } catch (e: any) {
+    return { status: "error", error: e?.message || "Failed to save subscription" };
   }
 };

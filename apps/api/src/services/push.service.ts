@@ -3,16 +3,7 @@ import prisma from '../utils/prisma';
 
 const publicKey = process.env.VAPID_PUBLIC_KEY || '';
 const privateKey = process.env.VAPID_PRIVATE_KEY || '';
-const subject = process.env.VAPID_SUBJECT || '';
-
-console.log(
-  "VAPID PUBLIC KEY (first 20):",
-  process.env.VAPID_PUBLIC_KEY?.slice(0, 20)
-);
-
-if (publicKey && privateKey && subject) {
-  webpush.setVapidDetails(subject, publicKey, privateKey);
-}
+const subject = process.env.VAPID_EMAIL || process.env.VAPID_SUBJECT || '';
 
 export const saveSubscription = async (
   customerId: string,
@@ -30,27 +21,23 @@ export const saveSubscription = async (
 
   const existing = await prisma.pushSubscription.findUnique({
     where: { endpoint },
+    select: { id: true, customerId: true },
   });
 
-  if (existing) {
-    return prisma.pushSubscription.update({
-      where: { endpoint },
-      data: {
-        customerId,
-        p256dh,
-        auth,
-      },
-    });
-  }
-
-  return prisma.pushSubscription.create({
-    data: {
-      customerId,
-      endpoint,
-      p256dh,
-      auth,
-    },
+  const result = await prisma.pushSubscription.upsert({
+    where: { endpoint },
+    update: { customerId, p256dh, auth },
+    create: { customerId, endpoint, p256dh, auth },
   });
+
+  console.log('[push] subscription upsert', {
+    action: existing ? 'updated' : 'created',
+    customerId,
+    reassigned: existing ? existing.customerId !== customerId : false,
+    endpointPrefix: endpoint.slice(0, 32),
+  });
+
+  return result;
 };
 
 export const sendReadyNotification = async (order: {
@@ -68,7 +55,7 @@ export const sendReadyNotification = async (order: {
   });
 
   if (!subs.length) return;
-  console.log("Found subscriptions:", subs.length);
+  console.log('[push] ready: subscriptions found', { orderId: order.id, count: subs.length });
 
   const displayNumber = order.id.slice(-4).toUpperCase();
   const vendorName = order.vendor?.businessName || 'Booth';
@@ -83,14 +70,18 @@ export const sendReadyNotification = async (order: {
 
   const boothName = booth?.name || vendorName;
   const eventSlug = booth?.event?.slug || '';
-  const url = eventSlug ? `/customer/event/${eventSlug}` : '/';
+  const url = `/customer/order-confirmed?orderId=${encodeURIComponent(order.id)}${
+    eventSlug ? `&eventSlug=${encodeURIComponent(eventSlug)}` : ''
+  }`;
 
   const payload = JSON.stringify({
-    title: "Order Ready 🍽️",
-    body: `Booth ${boothName} – Order #${displayNumber} is ready for pickup!`,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    tag: `order-${displayNumber}`,
+    title: 'MakanX',
+    body: `Your order #${displayNumber} is ready for pickup at Booth ${boothName}.`,
+    icon: "/images/event-map.jpg",
+    badge: "/images/event-map.jpg",
+    tag: `order-${order.id}`,
+    orderId: order.id,
+    displayNumber,
     url,
   });
 
@@ -107,14 +98,15 @@ export const sendReadyNotification = async (order: {
           } as any,
           payload
         );
-        console.log('Push sent');
+        console.log('[push] ready: sent', { orderId: order.id, endpointPrefix: sub.endpoint.slice(0, 32) });
       } catch (err: any) {
-        console.error('Push error:', err);
+        console.error('[push] ready: error', { orderId: order.id, message: err?.message || err });
         const statusCode = err?.statusCode || err?.statusCode === 0 ? err.statusCode : undefined;
         if (statusCode === 404 || statusCode === 410) {
           await prisma.pushSubscription.delete({
             where: { endpoint: sub.endpoint },
           });
+          console.log('[push] subscription deleted (stale)', { endpointPrefix: sub.endpoint.slice(0, 32) });
         }
       }
     })

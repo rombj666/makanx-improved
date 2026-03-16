@@ -247,11 +247,13 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   getIO().to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
   getIO().to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
 
-  if (status === OrderStatus.READY) {
-    console.log("Order marked READY:", order.id);
-    console.log("Customer ID:", order.customerId);
-    console.log("Attempting to send push...");
-    await sendReadyNotification(updatedOrder);
+  if (order.status !== OrderStatus.READY && status === OrderStatus.READY) {
+    console.log('[push] READY transition', { orderId: order.id, customerId: order.customerId });
+    try {
+      await sendReadyNotification(updatedOrder);
+    } catch (err: any) {
+      console.error('[push] READY send failed', { orderId: order.id, message: err?.message || err });
+    }
   }
 
   return updatedOrder;
@@ -317,7 +319,11 @@ export const markBatchItemsReady = async (
       io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
       io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
       if (nextStatus === OrderStatus.READY) {
-        await sendReadyNotification(updatedOrder);
+        try {
+          await sendReadyNotification(updatedOrder);
+        } catch (err: any) {
+          console.error('[push] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
+        }
       }
     } else {
       io.to(`vendor:${o.vendorId}`).emit('order_updated', o);
@@ -376,7 +382,11 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
   io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
   io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
   if (nextStatus === OrderStatus.READY) {
-    await sendReadyNotification(updatedOrder);
+    try {
+      await sendReadyNotification(updatedOrder);
+    } catch (err: any) {
+      console.error('[push] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
+    }
   }
 
   return updatedOrder;
