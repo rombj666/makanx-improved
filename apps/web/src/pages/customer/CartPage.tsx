@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
@@ -25,8 +25,10 @@ function computeDisplayNumber(order: any): string {
 export function CartPage() {
   const { slug, vendorId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const eventSlug = String(slug || '');
   const vid = String(vendorId || '');
+  const boothId = searchParams.get('boothId') || '';
 
   const cart = useCustomerCart({
     eventSlug,
@@ -116,10 +118,14 @@ export function CartPage() {
         boothNumber={cart.boothName || null}
         vendorName={cart.vendorName || null}
         description={null}
-        heroImageUrl={cart.lines.find((l) => (l.imageUrl || '').trim() !== '')?.imageUrl || null}
+        heroImageUrl={null}
         prepTimeMinutes={null}
         rating={null}
-        onBack={() => navigate(`/customer/event/${eventSlug}/order/${vid}`)}
+        onBack={() =>
+          boothId
+            ? navigate(`/customer/event/${eventSlug}/booth/${boothId}`)
+            : navigate(`/customer/event/${eventSlug}/order/${vid}`)
+        }
       />
 
       <div className="flex-1 overflow-y-auto p-4 pb-40">
@@ -196,4 +202,3 @@ export function CartPage() {
 }
 
 export default CartPage;
-

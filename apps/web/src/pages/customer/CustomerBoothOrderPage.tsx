@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
@@ -22,33 +21,39 @@ interface Booth {
   vendor?: {
     id: string;
     businessName: string;
-    description?: string;
     menuItems?: MenuItem[];
   };
 }
 
-export function CustomerOrderPage() {
-  const { slug, vendorId } = useParams();
+export function CustomerBoothOrderPage() {
+  const { slug, boothId } = useParams();
   const navigate = useNavigate();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
-      if (!slug || !vendorId) return;
+      if (!slug || !boothId) return;
       try {
         const { data } = await api.get(`/events/${slug}`);
         if (data.success) {
           const event = data.data;
-          const found = (event.booths || []).find((b: any) => b.vendor?.id === vendorId) || null;
+          const found = (event.booths || []).find((b: any) => b.id === boothId) || null;
           setBooth(found);
+          if (found && !found.vendor?.id) {
+            setError('This booth is not available for ordering.');
+          } else {
+            setError(null);
+          }
         }
       } catch (e: any) {
-        setError('Failed to load vendor menu');
+        setError('Failed to load booth menu');
       }
     };
     run();
-  }, [slug, vendorId]);
+  }, [boothId, slug]);
+
+  const vendorId = booth?.vendor?.id || '';
 
   const menu: MenuItem[] = useMemo(() => {
     if (!booth?.vendor?.menuItems) return [];
@@ -61,7 +66,7 @@ export function CustomerOrderPage() {
 
   const cart = useCustomerCart({
     eventSlug: String(slug || ''),
-    vendorId: String(vendorId || ''),
+    vendorId,
     vendorName: booth?.vendor?.businessName || booth?.name || '',
     boothName: booth?.name || '',
   });
@@ -90,8 +95,11 @@ export function CustomerOrderPage() {
       />
 
       <div className="flex-1 overflow-y-auto p-4 pb-28">
-        {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-        {menu.length === 0 ? (
+        {error ? (
+          <div className="bg-white rounded-2xl shadow-md p-5 text-gray-700">
+            {error}
+          </div>
+        ) : menu.length === 0 ? (
           <p className="text-gray-500">No menu items.</p>
         ) : (
           <div className="grid grid-cols-1 gap-4">
@@ -122,8 +130,9 @@ export function CustomerOrderPage() {
       <CartBar
         totalItems={cart.totalItems}
         totalPrice={cart.total}
-        onViewCart={() => navigate(`/customer/event/${slug}/order/${vendorId}/cart`)}
+        onViewCart={() => navigate(`/customer/event/${slug}/order/${vendorId}/cart?boothId=${boothId}`)}
       />
     </div>
   );
 }
+
