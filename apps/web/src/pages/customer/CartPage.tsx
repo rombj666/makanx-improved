@@ -128,7 +128,7 @@ export function CartPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 pb-40">
+      <div className="flex-1 overflow-y-auto p-4 pb-32">
         <div className="flex items-center justify-between mb-3">
           <div className="text-lg font-bold text-gray-900">View Cart</div>
           <button
@@ -177,23 +177,8 @@ export function CartPage() {
               disabled={cart.lines.length === 0 || isPlacing}
               className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
             >
-              {isPlacing ? 'Checking out…' : 'Checkout'}
+              {isPlacing ? 'Placing order…' : 'Place Order'}
             </button>
-
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => navigate(`/customer/event/${eventSlug}/vendors`)}
-                className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
-              >
-                View Other Vendors
-              </button>
-              <button
-                onClick={() => navigate(`/customer/event/${eventSlug}`)}
-                className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
-              >
-                Back to Map
-              </button>
-            </div>
           </div>
         </div>
       </div>

@@ -28,7 +28,7 @@ interface Order {
   vendorId: string;
 }
 
-const COLUMNS = ['PREPARING', 'READY', 'COMPLETED'] as const;
+const COLUMNS = ['PREPARING', 'READY'] as const;
 type Column = (typeof COLUMNS)[number];
 
 export function VendorDashboard() {
@@ -69,12 +69,18 @@ export function VendorDashboard() {
 
     if (socket) {
       socket.on('order_created', (newOrder: Order) => {
-        setOrders(prev => [newOrder, ...prev]);
+        if (newOrder.status === 'COMPLETED') return;
+        setOrders((prev) => [newOrder, ...prev]);
         toast.success('New Order Received!');
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
-        setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+        setOrders((prev) => {
+          if (updatedOrder.status === 'COMPLETED') {
+            return prev.filter((o) => o.id !== updatedOrder.id);
+          }
+          return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+        });
       });
     }
 
@@ -90,12 +96,13 @@ export function VendorDashboard() {
     try {
       const { data } = await api.get('/orders/vendor-orders');
       if (data.success) {
-        setOrders(data.data);
+        const list: Order[] = data.data || [];
+        setOrders(list.filter((o) => o.status !== 'COMPLETED'));
         
         // If we have orders, we know the vendorId
-        if (data.data.length > 0 && socket) {
-             const vid = data.data[0].vendorId;
-             socket.emit('join_vendor', vid);
+        if (list.length > 0 && socket) {
+          const vid = list[0].vendorId;
+          socket.emit('join_vendor', vid);
         }
       }
     } catch (error) {
@@ -121,8 +128,19 @@ export function VendorDashboard() {
     await Promise.all([fetchOrders(), fetchProductionBatch()]);
   };
   const markComplete = async (id: string) => {
-    await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
-    await refetchAll();
+    const snapshot = orders.find((o) => o.id === id);
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+    try {
+      await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
+      toast.success('Order completed');
+    } catch (e: any) {
+      if (snapshot) {
+        setOrders((prev) => [snapshot, ...prev]);
+      }
+      toast.error(e?.response?.data?.error || 'Failed to complete order');
+    } finally {
+      await refetchAll();
+    }
   };
   const markOrderReady = async (id: string) => {
     await api.post(`/orders/${id}/items/mark-ready`);
