@@ -254,10 +254,11 @@ export function OrderConfirmationPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#FAF7F0]">
-      <div className="max-w-md mx-auto p-4 pb-10">
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="p-5">
+    <div className="w-full h-full bg-[#FAF7F0] flex flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-md mx-auto p-4 pb-10">
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div className="p-5">
             <div className="text-sm font-semibold text-gray-500">Order Confirmed</div>
             <div className="text-2xl font-extrabold text-gray-900 mt-1">You’re all set</div>
 
@@ -387,6 +388,7 @@ export function OrderConfirmationPage() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
