@@ -60,6 +60,7 @@ export function CartPage() {
   }, [activeOrders, vid]);
 
   const activeStatus = String(activeOrder?.status || '').toUpperCase();
+  const inActiveOrderMode = !!activeOrder;
 
   const checkout = async () => {
     if (!vid || cart.lines.length === 0) return;
@@ -144,7 +145,7 @@ export function CartPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 pb-32">
+      <div className={`flex-1 overflow-y-auto p-4 ${inActiveOrderMode ? 'pb-6' : 'pb-32'}`}>
         <div className="flex items-center justify-between mb-3">
           <div className="text-lg font-bold text-gray-900">View Cart</div>
           <button
@@ -158,26 +159,48 @@ export function CartPage() {
         {error ? <div className="text-red-600 text-sm mb-3">{error}</div> : null}
 
         {activeOrder ? (
-          <div className="mb-4 bg-white rounded-2xl shadow-md p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-extrabold text-gray-900">Current Order</div>
-              <span
-                className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
-                  activeStatus === 'READY'
-                    ? 'bg-green-100 text-green-800'
-                    : activeStatus === 'PREPARING'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-200 text-gray-800'
-                }`}
-              >
-                {activeStatus || '—'}
-              </span>
-            </div>
-            <div className="mt-1 text-sm text-gray-600">Order #{activeOrder.displayNumber}</div>
-          </div>
-        ) : null}
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-extrabold text-gray-900">Current Order</div>
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
+                    activeStatus === 'READY'
+                      ? 'bg-green-100 text-green-800'
+                      : activeStatus === 'PREPARING'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-200 text-gray-800'
+                  }`}
+                >
+                  {activeStatus || '—'}
+                </span>
+              </div>
+              <div className="mt-1 text-sm text-gray-600">Order #{activeOrder.displayNumber}</div>
 
-        {cart.lines.length === 0 ? (
+              <div className="mt-4">
+                <div className="text-sm font-extrabold text-gray-900">Order Details</div>
+                {Array.isArray(activeOrder.items) && activeOrder.items.length > 0 ? (
+                  <div className="mt-3 space-y-3">
+                    {activeOrder.items.map((it, idx) => (
+                      <div key={idx} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                        <div className="text-sm font-semibold text-gray-900">
+                          {it.quantity}x {it.name || 'Item'}
+                        </div>
+                        {it.remark && String(it.remark).trim() !== '' ? (
+                          <div className="mt-1 text-sm text-gray-600">
+                            <span className="text-gray-500">Remark:</span> {String(it.remark)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-sm text-gray-600">Details unavailable.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : cart.lines.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-5 text-gray-600">
             Your cart is empty.
           </div>
@@ -196,28 +219,30 @@ export function CartPage() {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50">
-        <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white overflow-hidden">
-          <div className="p-4">
-            <div className="flex justify-between text-sm text-gray-600">
-              <div>Subtotal</div>
-              <div className="font-semibold text-gray-900">${cart.subtotal.toFixed(2)}</div>
-            </div>
-            <div className="flex justify-between mt-1 text-base">
-              <div className="font-semibold text-gray-900">Total</div>
-              <div className="font-extrabold text-gray-900">${cart.total.toFixed(2)}</div>
-            </div>
+      {!activeOrder ? (
+        <div className="fixed bottom-0 left-0 right-0 z-50">
+          <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white overflow-hidden">
+            <div className="p-4">
+              <div className="flex justify-between text-sm text-gray-600">
+                <div>Subtotal</div>
+                <div className="font-semibold text-gray-900">${cart.subtotal.toFixed(2)}</div>
+              </div>
+              <div className="flex justify-between mt-1 text-base">
+                <div className="font-semibold text-gray-900">Total</div>
+                <div className="font-extrabold text-gray-900">${cart.total.toFixed(2)}</div>
+              </div>
 
-            <button
-              onClick={checkout}
-              disabled={cart.lines.length === 0 || isPlacing}
-              className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
-            >
-              {isPlacing ? 'Placing order…' : 'Place Order'}
-            </button>
+              <button
+                onClick={checkout}
+                disabled={cart.lines.length === 0 || isPlacing}
+                className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
+              >
+                {isPlacing ? 'Placing order…' : 'Place Order'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
