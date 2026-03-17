@@ -115,11 +115,11 @@ export function useCustomerOrders(eventSlug: string | undefined) {
 
   useEffect(() => {
     if (!slug) return;
-    if (isConnected) return;
     if (orders.length === 0) return;
+    const intervalMs = isConnected ? 30000 : 15000;
     const interval = setInterval(() => {
       void fetchAndMerge();
-    }, 15000);
+    }, intervalMs);
     return () => clearInterval(interval);
   }, [fetchAndMerge, isConnected, orders.length, slug]);
 
@@ -141,12 +141,17 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         const next = prev.slice();
         const idx = next.findIndex((o) => o.orderId === upd.orderId);
         let becameReady = false;
+        let becameCompleted = false;
         let displayNum = upd.displayNumber || computeDisplayNumber(updated);
         if (idx >= 0) {
           const old = next[idx];
           const merged = { ...old, ...upd };
           if (old.status !== 'READY' && merged.status === 'READY') {
             becameReady = true;
+            displayNum = merged.displayNumber;
+          }
+          if (old.status !== 'COMPLETED' && merged.status === 'COMPLETED') {
+            becameCompleted = true;
             displayNum = merged.displayNumber;
           }
           if (merged.status === 'CANCELLED' || merged.status === 'COMPLETED' || merged.status === 'PENDING') {
@@ -177,6 +182,9 @@ export function useCustomerOrders(eventSlug: string | undefined) {
           toast.success(`Order #${displayNum} is READY — come collect`);
           playReadySound();
           vibrateReady();
+        }
+        if (becameCompleted) {
+          toast.success(`Order #${displayNum} completed`);
         }
         return next;
       });

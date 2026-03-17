@@ -34,7 +34,7 @@ export function CartPage() {
     eventSlug,
     vendorId: vid,
   });
-  const { addOrUpdate } = useCustomerOrders(eventSlug);
+  const { orders: activeOrders, addOrUpdate } = useCustomerOrders(eventSlug);
 
   const [isPlacing, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +50,16 @@ export function CartPage() {
       })),
     [cart.lines]
   );
+
+  const activeOrder = useMemo(() => {
+    const list = activeOrders.filter((o) => o.vendorId === vid);
+    if (list.length === 0) return null;
+    return list
+      .slice()
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+  }, [activeOrders, vid]);
+
+  const activeStatus = String(activeOrder?.status || '').toUpperCase();
 
   const checkout = async () => {
     if (!vid || cart.lines.length === 0) return;
@@ -146,6 +156,26 @@ export function CartPage() {
         </div>
 
         {error ? <div className="text-red-600 text-sm mb-3">{error}</div> : null}
+
+        {activeOrder ? (
+          <div className="mb-4 bg-white rounded-2xl shadow-md p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-extrabold text-gray-900">Current Order</div>
+              <span
+                className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
+                  activeStatus === 'READY'
+                    ? 'bg-green-100 text-green-800'
+                    : activeStatus === 'PREPARING'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-200 text-gray-800'
+                }`}
+              >
+                {activeStatus || '—'}
+              </span>
+            </div>
+            <div className="mt-1 text-sm text-gray-600">Order #{activeOrder.displayNumber}</div>
+          </div>
+        ) : null}
 
         {cart.lines.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-5 text-gray-600">

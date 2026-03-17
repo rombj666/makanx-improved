@@ -254,8 +254,8 @@ export function OrderConfirmationPage() {
   }
 
   return (
-    <div className="w-full h-full bg-[#FAF7F0]">
-      <div className="max-w-md mx-auto p-4 pb-10">
+    <div className="w-full min-h-screen bg-[#FAF7F0]">
+      <div className="max-w-md mx-auto p-4 pb-44">
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
           <div className="p-5">
             <div className="text-sm font-semibold text-gray-500">Order Confirmed</div>
@@ -347,56 +347,64 @@ export function OrderConfirmationPage() {
                 {soundEnabled ? 'ON' : 'OFF'}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="fixed bottom-0 left-0 right-0 z-50">
+        <div className="max-w-md mx-auto px-4 pb-4">
+          <div className="rounded-3xl shadow-2xl bg-white overflow-hidden">
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    if (!eventSlug) {
+                      navigate('/', { replace: true });
+                      return;
+                    }
+                    if (boothId) {
+                      navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
+                      return;
+                    }
+                    if (vendorId) {
+                      navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
+                      return;
+                    }
+                    navigate(`/customer/event/${eventSlug}`);
+                  }}
+                  className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
+                >
+                  Back to Menu
+                </button>
+                <button
+                  onClick={() => {
+                    if (!eventSlug || !vendorId) {
+                      if (eventSlug) navigate(`/customer/event/${eventSlug}`);
+                      else navigate('/', { replace: true });
+                      return;
+                    }
+                    const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
+                    navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
+                  }}
+                  className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
+                >
+                  View Cart
+                </button>
+              </div>
+
               <button
                 onClick={() => {
-                  if (!eventSlug) {
+                  if (eventSlug) {
+                    navigate(`/customer/event/${eventSlug}`);
+                  } else {
                     navigate('/', { replace: true });
-                    return;
                   }
-                  if (boothId) {
-                    navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
-                    return;
-                  }
-                  if (vendorId) {
-                    navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
-                    return;
-                  }
-                  navigate(`/customer/event/${eventSlug}`);
                 }}
-                className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
+                className="mt-3 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
               >
-                Back to Menu
-              </button>
-              <button
-                onClick={() => {
-                  if (!eventSlug || !vendorId) {
-                    if (eventSlug) navigate(`/customer/event/${eventSlug}`);
-                    else navigate('/', { replace: true });
-                    return;
-                  }
-                  const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
-                  navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
-                }}
-                className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
-              >
-                View Cart
+                Back to Map
               </button>
             </div>
-
-            <button
-              onClick={() => {
-                if (eventSlug) {
-                  navigate(`/customer/event/${eventSlug}`);
-                } else {
-                  navigate('/', { replace: true });
-                }
-              }}
-              className="mt-3 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
-            >
-              Back to Map
-            </button>
           </div>
         </div>
       </div>
