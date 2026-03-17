@@ -346,46 +346,44 @@ export function OrderConfirmationPage() {
               >
                 {soundEnabled ? 'ON' : 'OFF'}
               </button>
-            </div>
-          </div>
-        </div>
 
-        <div className="mt-4 bg-white rounded-3xl shadow-xl p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => {
-                if (!eventSlug) {
-                  navigate('/', { replace: true });
-                  return;
-                }
-                if (boothId) {
-                  navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
-                  return;
-                }
-                if (vendorId) {
-                  navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
-                  return;
-                }
-                navigate(`/customer/event/${eventSlug}`);
-              }}
-              className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
-            >
-              Back to Menu
-            </button>
-            <button
-              onClick={() => {
-                if (!eventSlug || !vendorId) {
-                  if (eventSlug) navigate(`/customer/event/${eventSlug}`);
-                  else navigate('/', { replace: true });
-                  return;
-                }
-                const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
-                navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
-              }}
-              className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
-            >
-              View Cart
-            </button>
+              <div className="mt-4 space-y-3">
+                <button
+                  onClick={() => {
+                    if (!eventSlug) {
+                      navigate('/', { replace: true });
+                      return;
+                    }
+                    if (boothId) {
+                      navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
+                      return;
+                    }
+                    if (vendorId) {
+                      navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
+                      return;
+                    }
+                    navigate(`/customer/event/${eventSlug}`);
+                  }}
+                  className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
+                >
+                  Back to Menu
+                </button>
+                <button
+                  onClick={() => {
+                    if (!eventSlug || !vendorId) {
+                      if (eventSlug) navigate(`/customer/event/${eventSlug}`);
+                      else navigate('/', { replace: true });
+                      return;
+                    }
+                    const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
+                    navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
+                  }}
+                  className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
+                >
+                  View Cart
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
