@@ -93,12 +93,18 @@ export function CartPage() {
         localStorage.setItem('mx_center_map', '1');
       } catch {}
 
-      navigate('/customer/order-confirmed', {
+      const nextUrl =
+        `/customer/order-confirmed?orderId=${encodeURIComponent(order.id)}` +
+        (eventSlug ? `&eventSlug=${encodeURIComponent(eventSlug)}` : '') +
+        (boothId ? `&boothId=${encodeURIComponent(boothId)}` : '');
+      navigate(nextUrl, {
         state: {
           orderId: order.id,
           orderNumber: displayNumber,
           eta: estimatedMinutes,
           eventSlug,
+          vendorId: vid,
+          boothId,
           items: summaryItems,
         },
       });

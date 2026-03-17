@@ -47,7 +47,7 @@ function computeDisplayNumber(order: any): string {
 
 export function useCustomerOrders(eventSlug: string | undefined) {
   const slug = eventSlug || '';
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -60,58 +60,68 @@ export function useCustomerOrders(eventSlug: string | undefined) {
     setOrders(saved);
   }, [key, slug]);
 
-  // Fetch from backend and merge
+  const fetchAndMerge = useCallback(async () => {
+    if (!slug) return;
+    setIsLoading(true);
+    try {
+      const guestId = getOrCreateGuestId();
+      const { data } = await api.get(`/orders/my-orders`, {
+        params: { guestId },
+      });
+      const serverOrders: any[] = data?.data || [];
+      const normalized: ActiveOrder[] = serverOrders.map((o: any) => ({
+        orderId: o.id,
+        vendorId: o.vendorId,
+        vendorName: o.vendor?.businessName || o.vendorName || '',
+        status: o.status,
+        estimatedMinutes: Math.max(Number(o.estimatedMinutes ?? 0), 0),
+        createdAt: o.createdAt,
+        updatedAt: o.updatedAt,
+        displayNumber: computeDisplayNumber(o),
+        items: Array.isArray(o.items)
+          ? o.items.map((it: any) => ({
+              name: it?.menuItem?.name || '',
+              quantity: Number(it?.quantity ?? 0),
+              remark: it?.remark || '',
+            }))
+          : undefined,
+      }));
+      setOrders((prev) => {
+        const map = new Map<string, ActiveOrder>();
+        [...prev, ...normalized].forEach((ord) => {
+          const existing = map.get(ord.orderId);
+          if (!existing) {
+            map.set(ord.orderId, ord);
+          } else {
+            map.set(ord.orderId, { ...existing, ...ord });
+          }
+        });
+        const merged = Array.from(map.values()).filter(
+          (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
+        );
+        localStorage.setItem(key, JSON.stringify(merged));
+        return merged;
+      });
+    } catch {
+      // ignore fetch errors, keep local data
+    } finally {
+      setIsLoading(false);
+    }
+  }, [key, slug]);
+
   useEffect(() => {
-    const fetchAndMerge = async () => {
-      if (!slug) return;
-      setIsLoading(true);
-      try {
-        const guestId = getOrCreateGuestId();
-        const { data } = await api.get(`/orders/my-orders`, {
-          params: { guestId },
-        });
-        const serverOrders: any[] = data?.data || [];
-        const normalized: ActiveOrder[] = serverOrders.map((o: any) => ({
-          orderId: o.id,
-          vendorId: o.vendorId,
-          vendorName: o.vendor?.businessName || o.vendorName || '',
-          status: o.status,
-          estimatedMinutes: Math.max(Number(o.estimatedMinutes ?? 0), 0),
-          createdAt: o.createdAt,
-          updatedAt: o.updatedAt,
-          displayNumber: computeDisplayNumber(o),
-          items: Array.isArray(o.items)
-            ? o.items.map((it: any) => ({
-                name: it?.menuItem?.name || '',
-                quantity: Number(it?.quantity ?? 0),
-                remark: it?.remark || '',
-              }))
-            : undefined,
-        }));
-        setOrders((prev) => {
-          const map = new Map<string, ActiveOrder>();
-          [...prev, ...normalized].forEach((ord) => {
-            const existing = map.get(ord.orderId);
-            if (!existing) {
-              map.set(ord.orderId, ord);
-            } else {
-              map.set(ord.orderId, { ...existing, ...ord });
-            }
-          });
-          const merged = Array.from(map.values()).filter(
-            (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
-          );
-          localStorage.setItem(key, JSON.stringify(merged));
-          return merged;
-        });
-      } catch {
-        // ignore fetch errors, keep local data
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAndMerge();
-  }, [slug, key]);
+    void fetchAndMerge();
+  }, [fetchAndMerge]);
+
+  useEffect(() => {
+    if (!slug) return;
+    if (isConnected) return;
+    if (orders.length === 0) return;
+    const interval = setInterval(() => {
+      void fetchAndMerge();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchAndMerge, isConnected, orders.length, slug]);
 
   // Socket updates
   useEffect(() => {

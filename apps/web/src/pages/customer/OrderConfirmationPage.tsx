@@ -4,30 +4,42 @@ import { enableSound, primeReadySound } from '../../lib/alerts';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
+import { useSocket } from '../../context/SocketContext';
 
 interface OrderState {
   orderId?: string;
   orderNumber?: string;
   eta?: number;
   eventSlug?: string;
+  vendorId?: string;
+  boothId?: string;
+  status?: string;
   items?: { name: string; quantity: number; remark?: string }[];
 }
 
 export function OrderConfirmationPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { socket, isConnected } = useSocket();
   const orderFromState = (location.state || null) as OrderState | null;
 
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const orderIdFromQuery = searchParams.get('orderId') || undefined;
   const eventSlugFromQuery = searchParams.get('eventSlug') || undefined;
+  const boothIdFromQuery = searchParams.get('boothId') || undefined;
 
   const [resolvedOrder, setResolvedOrder] = useState<OrderState | null>(orderFromState);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState<string | null>(orderFromState?.status || null);
 
   useEffect(() => {
     if (orderFromState) {
-      setResolvedOrder(orderFromState);
+      setResolvedOrder((prev) => ({
+        ...(prev || {}),
+        ...(orderFromState || {}),
+        boothId: orderFromState.boothId || boothIdFromQuery,
+      }));
+      if (orderFromState?.status) setLiveStatus(orderFromState.status);
       setLoadError(null);
       return;
     }
@@ -61,13 +73,29 @@ export function OrderConfirmationPage() {
               remark: it?.remark || '',
             }))
           : [];
+        let boothId: string | undefined = boothIdFromQuery;
+        const vendorId = String(found?.vendorId || '');
+        const status = String(found?.status || '');
+        const effectiveSlug = eventSlugFromQuery || '';
+        if (!boothId && effectiveSlug && vendorId) {
+          try {
+            const ev = await api.get(`/events/${effectiveSlug}`);
+            const booths: any[] = ev.data?.data?.booths || [];
+            const booth = booths.find((b) => String(b?.vendor?.id || '') === vendorId) || null;
+            boothId = booth?.id ? String(booth.id) : undefined;
+          } catch {}
+        }
         setResolvedOrder({
           orderId: String(found.id),
           orderNumber,
           eta: Math.max(Number(found?.estimatedMinutes ?? 5), 0),
-          eventSlug: eventSlugFromQuery || '',
+          eventSlug: effectiveSlug,
+          vendorId,
+          boothId,
+          status,
           items,
         });
+        if (status) setLiveStatus(status);
         setLoadError(null);
       } catch (err: any) {
         setLoadError(err?.message || 'Failed to load order.');
@@ -75,13 +103,16 @@ export function OrderConfirmationPage() {
       }
     };
     run();
-  }, [orderFromState, orderIdFromQuery, eventSlugFromQuery]);
+  }, [orderFromState, orderIdFromQuery, eventSlugFromQuery, boothIdFromQuery]);
 
   const order = resolvedOrder;
   const orderId = order?.orderId || orderIdFromQuery;
   const orderNumber = order?.orderNumber || (orderId ? orderId.slice(-4).toUpperCase() : 'Unknown');
   const eta = order?.eta ?? 5;
   const eventSlug = order?.eventSlug || eventSlugFromQuery || '';
+  const vendorId = order?.vendorId || '';
+  const boothId = order?.boothId || boothIdFromQuery || '';
+  const status = (liveStatus || order?.status || 'PREPARING').toUpperCase();
   const items = useMemo(() => (Array.isArray(order?.items) ? order!.items! : []), [order]);
 
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -162,6 +193,50 @@ export function OrderConfirmationPage() {
     navigate('/', { replace: true });
   }, [navigate, order, orderIdFromQuery]);
 
+  useEffect(() => {
+    if (!socket) return;
+    if (!orderId) return;
+
+    const onUpdate = (updated: any) => {
+      if (String(updated?.id || '') !== String(orderId)) return;
+      if (updated?.status) setLiveStatus(String(updated.status));
+      setResolvedOrder((prev) => ({
+        ...(prev || {}),
+        orderId: String(updated?.id || prev?.orderId || ''),
+        vendorId: String(updated?.vendorId || prev?.vendorId || ''),
+        status: String(updated?.status || prev?.status || ''),
+      }));
+    };
+
+    socket.on('order_updated', onUpdate);
+    return () => {
+      socket.off('order_updated', onUpdate);
+    };
+  }, [orderId, socket]);
+
+  useEffect(() => {
+    if (!orderId) return;
+    if (isConnected) return;
+    if (!eventSlug) return;
+    if (status === 'COMPLETED') return;
+    const interval = setInterval(async () => {
+      try {
+        const guestId = getOrCreateGuestId();
+        const { data } = await api.get('/orders/my-orders', { params: { guestId } });
+        const list: any[] = Array.isArray(data?.data) ? data.data : [];
+        const found = list.find((o) => String(o?.id || '') === String(orderId));
+        if (!found?.status) return;
+        setLiveStatus(String(found.status));
+        setResolvedOrder((prev) => ({
+          ...(prev || {}),
+          vendorId: String(found?.vendorId || prev?.vendorId || ''),
+          status: String(found?.status || prev?.status || ''),
+        }));
+      } catch {}
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [eventSlug, isConnected, orderId, status]);
+
   if (!order && orderIdFromQuery) {
     return (
       <div className="w-full h-full bg-[#FAF7F0] flex items-center justify-center">
@@ -193,6 +268,19 @@ export function OrderConfirmationPage() {
               </div>
               <div className="text-sm text-gray-600 mt-2">
                 Estimated prep time: <span className="font-semibold text-gray-900">~{eta} min</span>
+              </div>
+              <div className="mt-3">
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
+                    status === 'READY'
+                      ? 'bg-green-100 text-green-800'
+                      : status === 'COMPLETED'
+                        ? 'bg-gray-200 text-gray-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                  }`}
+                >
+                  {status}
+                </span>
               </div>
             </div>
 
@@ -260,6 +348,43 @@ export function OrderConfirmationPage() {
               </button>
             </div>
 
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  if (!eventSlug) {
+                    navigate('/', { replace: true });
+                    return;
+                  }
+                  if (boothId) {
+                    navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
+                    return;
+                  }
+                  if (vendorId) {
+                    navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
+                    return;
+                  }
+                  navigate(`/customer/event/${eventSlug}`);
+                }}
+                className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
+              >
+                Back to Menu
+              </button>
+              <button
+                onClick={() => {
+                  if (!eventSlug || !vendorId) {
+                    if (eventSlug) navigate(`/customer/event/${eventSlug}`);
+                    else navigate('/', { replace: true });
+                    return;
+                  }
+                  const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
+                  navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
+                }}
+                className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
+              >
+                View Cart
+              </button>
+            </div>
+
             <button
               onClick={() => {
                 if (eventSlug) {
@@ -268,7 +393,7 @@ export function OrderConfirmationPage() {
                   navigate('/', { replace: true });
                 }
               }}
-              className="mt-5 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
+              className="mt-3 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
             >
               Back to Map
             </button>

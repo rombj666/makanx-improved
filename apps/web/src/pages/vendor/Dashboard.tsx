@@ -28,7 +28,7 @@ interface Order {
   vendorId: string;
 }
 
-const COLUMNS = ['PREPARING', 'READY'] as const;
+const COLUMNS = ['PREPARING', 'READY', 'COMPLETED'] as const;
 type Column = (typeof COLUMNS)[number];
 
 export function VendorDashboard() {
@@ -69,17 +69,19 @@ export function VendorDashboard() {
 
     if (socket) {
       socket.on('order_created', (newOrder: Order) => {
-        if (newOrder.status === 'COMPLETED') return;
         setOrders((prev) => [newOrder, ...prev]);
         toast.success('New Order Received!');
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
         setOrders((prev) => {
-          if (updatedOrder.status === 'COMPLETED') {
-            return prev.filter((o) => o.id !== updatedOrder.id);
+          const idx = prev.findIndex((o) => o.id === updatedOrder.id);
+          if (idx >= 0) {
+            const next = prev.slice();
+            next[idx] = updatedOrder;
+            return next;
           }
-          return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+          return [updatedOrder, ...prev];
         });
       });
     }
@@ -97,7 +99,7 @@ export function VendorDashboard() {
       const { data } = await api.get('/orders/vendor-orders');
       if (data.success) {
         const list: Order[] = data.data || [];
-        setOrders(list.filter((o) => o.status !== 'COMPLETED'));
+        setOrders(list);
         
         // If we have orders, we know the vendorId
         if (list.length > 0 && socket) {
@@ -129,13 +131,13 @@ export function VendorDashboard() {
   };
   const markComplete = async (id: string) => {
     const snapshot = orders.find((o) => o.id === id);
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: 'COMPLETED' } : o)));
     try {
       await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
       toast.success('Order completed');
     } catch (e: any) {
       if (snapshot) {
-        setOrders((prev) => [snapshot, ...prev]);
+        setOrders((prev) => prev.map((o) => (o.id === id ? snapshot : o)));
       }
       toast.error(e?.response?.data?.error || 'Failed to complete order');
     } finally {
