@@ -95,6 +95,10 @@ apiRouter.use('/analytics', analyticsRoutes);
 apiRouter.use('/whatsapp', whatsappRoutes);
 app.use('/api', apiRouter);
 
+app.get('/api/whatsapp/webhook-test', (_req, res) => {
+  res.status(200).type('text/plain').send('ok');
+});
+
 app.get('/test-route', (req, res) => {
   res.send('TEST OK');
 });
