@@ -14,6 +14,7 @@ import uploadRoutes from './routes/upload.routes';
 import menuRoutes from './routes/menu.routes';
 import pushRoutes from './routes/push.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import whatsappRoutes from './routes/whatsapp.routes';
 import webpush from 'web-push';
 
 import { configureSecurity } from './middleware/security';
@@ -91,6 +92,7 @@ apiRouter.use('/uploads', uploadRoutes);
 apiRouter.use('/menu-items', menuRoutes);
 apiRouter.use('/push', pushRoutes);
 apiRouter.use('/analytics', analyticsRoutes);
+apiRouter.use('/whatsapp', whatsappRoutes);
 app.use('/api', apiRouter);
 
 app.get('/test-route', (req, res) => {
