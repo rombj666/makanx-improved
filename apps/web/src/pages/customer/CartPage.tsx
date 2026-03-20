@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
@@ -61,31 +61,6 @@ export function CartPage() {
 
   const activeStatus = String(activeOrder?.status || '').toUpperCase();
   const inActiveOrderMode = !!activeOrder;
-  const [hadActiveOrder, setHadActiveOrder] = useState(false);
-  const [forceEmptyCart, setForceEmptyCart] = useState(false);
-
-  useEffect(() => {
-    if (!hadActiveOrder && activeOrder) {
-      setHadActiveOrder(true);
-    }
-  }, [activeOrder, hadActiveOrder]);
-
-  useEffect(() => {
-    if (!hadActiveOrder) return;
-    if (activeOrder) return;
-    setForceEmptyCart(true);
-    try {
-      localStorage.removeItem(`mx_cart_${eventSlug}_${vid}`);
-    } catch {}
-    cart.clear();
-    setHadActiveOrder(false);
-  }, [activeOrder, cart, hadActiveOrder]);
-
-  useEffect(() => {
-    if (!forceEmptyCart) return;
-    if (activeOrder) return;
-    if (cart.lines.length > 0) setForceEmptyCart(false);
-  }, [activeOrder, cart.lines.length, forceEmptyCart]);
 
   const checkout = async () => {
     if (!vid || cart.lines.length === 0) return;
@@ -225,7 +200,7 @@ export function CartPage() {
               </div>
             </div>
           </div>
-        ) : forceEmptyCart || cart.lines.length === 0 ? (
+        ) : cart.lines.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-5 text-gray-600">
             Your cart is empty.
           </div>

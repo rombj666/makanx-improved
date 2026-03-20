@@ -125,8 +125,11 @@ export function useCustomerCart(params: {
   }, []);
 
   const clear = useCallback(() => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
     setState((prev) => ({ ...prev, lines: [] }));
-  }, []);
+  }, [key]);
 
   const subtotal = useMemo(
     () => state.lines.reduce((sum, l) => sum + l.price * l.quantity, 0),
@@ -153,4 +156,3 @@ export function useCustomerCart(params: {
     totalItems,
   };
 }
-

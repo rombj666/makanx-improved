@@ -176,17 +176,20 @@ export function OrderConfirmationPage() {
         setPushUiState('enabled');
       } else if (result.status === 'blocked') {
         setPushUiState('blocked');
+        setPushError('Browser notifications are blocked');
       } else if (result.status === 'not_supported') {
         setPushUiState('not_supported');
+        setPushError('Browser does not support website notifications');
       } else if (result.status === 'dismissed') {
         setPushUiState('available');
+        setPushError('Notification permission was dismissed');
       } else {
         setPushUiState('available');
         setPushError(result.error || 'Failed to enable notifications.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setPushError('Failed to enable notifications.');
+      setPushError(err?.message || 'Failed to enable notifications.');
     }
     setPushBusy(false);
   };

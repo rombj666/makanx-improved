@@ -116,12 +116,30 @@ export function useCustomerOrders(eventSlug: string | undefined) {
   useEffect(() => {
     if (!slug) return;
     if (orders.length === 0) return;
-    const intervalMs = isConnected ? 30000 : 15000;
+    const intervalMs = isConnected ? 10000 : 15000;
     const interval = setInterval(() => {
       void fetchAndMerge();
     }, intervalMs);
     return () => clearInterval(interval);
   }, [fetchAndMerge, isConnected, orders.length, slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    const onFocus = () => {
+      void fetchAndMerge();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchAndMerge();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchAndMerge, slug]);
 
   // Socket updates
   useEffect(() => {

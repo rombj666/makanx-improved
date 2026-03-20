@@ -4,7 +4,8 @@ export const registerServiceWorker = async () => {
   try {
     const registration = await navigator.serviceWorker.register("/sw.js");
     return registration;
-  } catch {
+  } catch (e) {
+    if (import.meta.env.DEV) console.log("[push] service worker register failed", e);
     return null;
   }
 };
@@ -34,6 +35,12 @@ function isPushSupported() {
   return true;
 }
 
+function pushDebug(label: string, data?: any) {
+  if (!import.meta.env.DEV) return;
+  if (data === undefined) console.log(`[push] ${label}`);
+  else console.log(`[push] ${label}`, data);
+}
+
 export async function getExistingPushSubscription() {
   if (!isPushSupported()) return null;
   try {
@@ -47,30 +54,61 @@ export async function getExistingPushSubscription() {
 }
 
 export const subscribeToPush = async (customerId: string): Promise<PushEnableResult> => {
+  pushDebug("enable start", {
+    supported: isPushSupported(),
+    permission: typeof window !== "undefined" ? (Notification as any)?.permission : "n/a",
+    customerIdPresent: !!customerId,
+  });
   if (!isPushSupported()) return { status: "not_supported" };
 
   if (Notification.permission === "denied") {
     return { status: "blocked" };
   }
 
-  if (Notification.permission !== "granted") {
-    const permission = await Notification.requestPermission();
-    if (permission === "denied") return { status: "blocked" };
-    if (permission !== "granted") return { status: "dismissed" };
+  try {
+    if (Notification.permission !== "granted") {
+      const permission = await Notification.requestPermission();
+      pushDebug("permission result", { permission });
+      if (permission === "denied") return { status: "blocked" };
+      if (permission !== "granted") return { status: "dismissed" };
+    }
+  } catch (e: any) {
+    pushDebug("permission request failed", { message: e?.message || String(e) });
+    return { status: "error", error: "Notification permission request failed" };
   }
 
   const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-  if (!publicKey) return { status: "error", error: "Missing VAPID public key" };
+  if (!publicKey) return { status: "error", error: "Missing VAPID public key (VITE_VAPID_PUBLIC_KEY)" };
+  pushDebug("vapid key present", { present: true, length: String(publicKey).length });
 
-  const registration = (await navigator.serviceWorker.getRegistration()) ?? (await registerServiceWorker());
-  const ready = registration ?? (await navigator.serviceWorker.ready);
+  let ready: ServiceWorkerRegistration;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const registration = reg ?? (await registerServiceWorker());
+    if (!registration) {
+      return { status: "error", error: "Service worker registration failed" };
+    }
+    ready = registration ?? (await navigator.serviceWorker.ready);
+    pushDebug("service worker ready", { scope: ready.scope });
+  } catch (e: any) {
+    pushDebug("service worker init failed", { message: e?.message || String(e) });
+    return { status: "error", error: "Service worker registration failed" };
+  }
 
-  let subscription = await ready.pushManager.getSubscription();
-  if (!subscription) {
-    subscription = await ready.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: base64ToUint8Array(publicKey),
-    });
+  let subscription: PushSubscription | null = null;
+  try {
+    subscription = await ready.pushManager.getSubscription();
+    pushDebug("existing subscription", { present: !!subscription });
+    if (!subscription) {
+      subscription = await ready.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64ToUint8Array(publicKey),
+      });
+      pushDebug("push subscribed", { present: !!subscription });
+    }
+  } catch (e: any) {
+    pushDebug("push subscribe failed", { message: e?.message || String(e) });
+    return { status: "error", error: "Push subscription failed" };
   }
 
   const subJson = subscription.toJSON() as any;
@@ -84,8 +122,22 @@ export const subscribeToPush = async (customerId: string): Promise<PushEnableRes
       customerId,
       subscription: { endpoint: subJson.endpoint, keys: subJson.keys },
     });
+    pushDebug("backend subscribe ok");
     return { status: "enabled" };
   } catch (e: any) {
-    return { status: "error", error: e?.message || "Failed to save subscription" };
+    const status = e?.response?.status;
+    const backendError = e?.response?.data?.error;
+    pushDebug("backend subscribe failed", {
+      status,
+      error: backendError || e?.message || String(e),
+    });
+    return {
+      status: "error",
+      error: backendError
+        ? `Unable to save notification subscription: ${backendError}`
+        : status
+          ? `Unable to save notification subscription (HTTP ${status})`
+          : "Unable to save notification subscription",
+    };
   }
 };
