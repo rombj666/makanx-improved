@@ -124,3 +124,145 @@ export function summarizeWhatsAppWebhook(payload: unknown): WhatsAppWebhookSumma
   };
 }
 
+type WhatsAppSendResult =
+  | { ok: true; messageId: string | null }
+  | { ok: false; status: number | null; error: string };
+
+function normalizeWhatsAppPhone(input: unknown): string | null {
+  const raw = asString(input);
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits;
+}
+
+function computeOrderNumber(order: any): string {
+  const raw =
+    order?.boothOrderNumber ??
+    order?.displayNumber ??
+    order?.orderNumber ??
+    order?.sequence ??
+    null;
+  if (raw !== null && raw !== undefined && `${raw}`.trim() !== '') {
+    return String(raw).toUpperCase();
+  }
+  const id = String(order?.id || '');
+  return id ? id.slice(-4).toUpperCase() : '----';
+}
+
+function getVendorName(order: any): string {
+  const name = order?.vendor?.businessName ?? order?.vendorName ?? null;
+  return typeof name === 'string' && name.trim() ? name.trim() : 'MakanX';
+}
+
+function extractCustomerPhone(order: any): string | null {
+  const direct =
+    order?.customerPhone ?? order?.customer?.phoneNumber ?? order?.customer?.phone ?? order?.phone ?? null;
+  const normalizedDirect = normalizeWhatsAppPhone(direct);
+  if (normalizedDirect) return normalizedDirect;
+  return null;
+}
+
+export async function sendTemplateMessage(params: {
+  to: string;
+  templateName: string;
+  bodyParams: string[];
+  languageCode?: string;
+}): Promise<WhatsAppSendResult> {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || '';
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+  const languageCode = params.languageCode || 'en';
+
+  if (!accessToken || !phoneNumberId) {
+    return { ok: false, status: null, error: 'WhatsApp env missing (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID)' };
+  }
+
+  const url = `https://graph.facebook.com/v23.0/${encodeURIComponent(phoneNumberId)}/messages`;
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: params.to,
+    type: 'template',
+    template: {
+      name: params.templateName,
+      language: { code: languageCode },
+      components: [
+        {
+          type: 'body',
+          parameters: params.bodyParams.map((text) => ({ type: 'text', text })),
+        },
+      ],
+    },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const raw = await res.text();
+    if (!res.ok) {
+      let msg = raw;
+      try {
+        const parsed = JSON.parse(raw);
+        msg = JSON.stringify(parsed?.error || parsed);
+      } catch {}
+      return { ok: false, status: res.status, error: msg || `HTTP ${res.status}` };
+    }
+
+    let messageId: string | null = null;
+    try {
+      const parsed = JSON.parse(raw);
+      const mid = parsed?.messages?.[0]?.id;
+      if (typeof mid === 'string') messageId = mid;
+    } catch {}
+
+    return { ok: true, messageId };
+  } catch (e: any) {
+    return { ok: false, status: null, error: e?.message || 'WhatsApp request failed' };
+  }
+}
+
+export async function sendOrderReadyMessage(order: any): Promise<void> {
+  const templateName = process.env.WHATSAPP_TEMPLATE_ORDER_READY || 'order_ready_notice';
+  const to = extractCustomerPhone(order);
+  if (!to) {
+    console.warn('[whatsapp] skip send (missing/invalid phone)', { orderId: String(order?.id || '') });
+    return;
+  }
+
+  const orderNumber = computeOrderNumber(order);
+  const vendorName = getVendorName(order);
+
+  const result = await sendTemplateMessage({
+    to,
+    templateName,
+    bodyParams: [orderNumber, vendorName],
+    languageCode: 'en',
+  });
+
+  if (!result.ok) {
+    console.error('[whatsapp] send failed', {
+      orderId: String(order?.id || ''),
+      orderNumber,
+      to: maskPhone(to),
+      templateName,
+      status: result.status,
+      error: result.error,
+    });
+    return;
+  }
+
+  console.log('[whatsapp] sent', {
+    orderId: String(order?.id || ''),
+    orderNumber,
+    to: maskPhone(to),
+    templateName,
+    messageId: result.messageId,
+  });
+}

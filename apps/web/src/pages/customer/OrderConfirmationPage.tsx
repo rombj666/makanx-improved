@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
 import { useSocket } from '../../context/SocketContext';
+import { toast } from 'react-hot-toast';
 
 interface OrderState {
   orderId?: string;
@@ -137,6 +138,8 @@ export function OrderConfirmationPage() {
   >('checking');
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [whatsappBusy, setWhatsappBusy] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -186,6 +189,21 @@ export function OrderConfirmationPage() {
       setPushError('Failed to enable notifications.');
     }
     setPushBusy(false);
+  };
+
+  const enableWhatsappPlaceholder = async () => {
+    if (whatsappBusy) return;
+    const raw = whatsappPhone.trim();
+    if (!raw) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+    setWhatsappBusy(true);
+    try {
+      toast.success('WhatsApp notification UI coming soon');
+    } finally {
+      setWhatsappBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -310,80 +328,104 @@ export function OrderConfirmationPage() {
             </div>
 
             <div className="mt-5 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="text-sm font-extrabold text-gray-900">Order Notifications</div>
+              <div className="text-sm font-extrabold text-gray-900">Website Notifications</div>
               <div className="text-sm text-gray-600 mt-1">
-                Get a notification when your order is ready.
+                Get a notification on this website when your order is ready.
               </div>
               {pushError ? <div className="text-sm text-red-600 mt-2">{pushError}</div> : null}
+
               <button
                 onClick={enableNotification}
                 disabled={pushBusy || pushUiState !== 'available'}
-                className="mt-4 w-full bg-black text-white rounded-2xl py-3 font-semibold shadow-md active:scale-[0.99] transition disabled:opacity-60"
+                className="mt-4 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition disabled:opacity-60 bg-black text-white"
               >
                 {pushUiState === 'enabled'
-                  ? 'Notifications Enabled'
+                  ? 'Website Notifications Enabled'
                   : pushUiState === 'blocked'
-                    ? 'Notifications Blocked'
+                    ? 'Website Notifications Blocked'
                     : pushUiState === 'not_supported'
-                      ? 'Not Supported'
+                      ? 'Website Notifications Not Supported'
                       : pushBusy
                         ? 'Enabling…'
                         : pushUiState === 'checking'
                           ? 'Checking…'
-                          : 'Enable Notifications'}
+                          : 'Enable Website Notifications'}
               </button>
-            </div>
 
-            <div className="mt-4 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="text-sm font-extrabold text-gray-900">Sound Alert</div>
-              <div className="text-sm text-gray-600 mt-1">
-                Play a sound when your order becomes ready.
-              </div>
               <button
                 onClick={toggleSound}
-                className={`mt-4 w-full rounded-2xl py-3 font-semibold shadow-md active:scale-[0.99] transition ${
+                className={`mt-3 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition ${
                   soundEnabled ? 'bg-yellow-500 text-black' : 'bg-white border border-gray-200 text-gray-900'
                 }`}
               >
-                {soundEnabled ? 'ON' : 'OFF'}
+                {soundEnabled ? 'Sound ON' : 'Sound OFF'}
               </button>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-5 border-t border-gray-100 pt-5">
+                <div className="text-sm font-extrabold text-gray-900">WhatsApp Notifications</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  Get a WhatsApp message when your order is ready.
+                </div>
+
+                <label className="block mt-4">
+                  <div className="text-sm font-semibold text-gray-900">Phone Number</div>
+                  <input
+                    value={whatsappPhone}
+                    onChange={(e) => setWhatsappPhone(e.target.value)}
+                    placeholder="Enter WhatsApp number (e.g. 60123456789)"
+                    className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    inputMode="tel"
+                  />
+                  <div className="mt-2 text-xs text-gray-500">
+                    Include country code, e.g. 60123456789
+                  </div>
+                </label>
+
                 <button
-                  onClick={() => {
-                    if (!eventSlug) {
-                      navigate('/', { replace: true });
-                      return;
-                    }
-                    if (boothId) {
-                      navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
-                      return;
-                    }
-                    if (vendorId) {
-                      navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
-                      return;
-                    }
-                    navigate(`/customer/event/${eventSlug}`);
-                  }}
-                  className="w-full rounded-2xl py-3 bg-white border border-gray-200 text-sm font-semibold text-gray-900 active:scale-[0.99] transition"
+                  onClick={enableWhatsappPlaceholder}
+                  disabled={whatsappBusy}
+                  className="mt-4 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition disabled:opacity-60 bg-black text-white"
                 >
-                  Back to Menu
-                </button>
-                <button
-                  onClick={() => {
-                    if (!eventSlug || !vendorId) {
-                      if (eventSlug) navigate(`/customer/event/${eventSlug}`);
-                      else navigate('/', { replace: true });
-                      return;
-                    }
-                    const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
-                    navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
-                  }}
-                  className="w-full rounded-2xl py-3 bg-yellow-500 text-sm font-semibold text-black shadow-md active:scale-[0.99] transition"
-                >
-                  View Cart
+                  {whatsappBusy ? 'Saving…' : 'Enable WhatsApp Notifications'}
                 </button>
               </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <button
+                onClick={() => {
+                  if (!eventSlug) {
+                    navigate('/', { replace: true });
+                    return;
+                  }
+                  if (boothId) {
+                    navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
+                    return;
+                  }
+                  if (vendorId) {
+                    navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
+                    return;
+                  }
+                  navigate(`/customer/event/${eventSlug}`);
+                }}
+                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-white border border-gray-200 text-gray-900"
+              >
+                Back to Menu
+              </button>
+              <button
+                onClick={() => {
+                  if (!eventSlug || !vendorId) {
+                    if (eventSlug) navigate(`/customer/event/${eventSlug}`);
+                    else navigate('/', { replace: true });
+                    return;
+                  }
+                  const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
+                  navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
+                }}
+                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-yellow-500 text-black"
+              >
+                View Cart
+              </button>
             </div>
           </div>
         </div>
