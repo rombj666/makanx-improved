@@ -115,7 +115,6 @@ model MenuItem {
 model Order {
   id            String        @id @default(uuid())
   customerId    String
-  customerPhone String?
   vendorId      String
   status        OrderStatus   @default(PREPARING)
   paymentMode   PaymentMode   @default(PAY_AT_BOOTH)

@@ -16,7 +16,6 @@ import { sendOrderReadyMessage } from './whatsapp.service';
  */
 const createOrderSchema = z.object({
   vendorId: z.string().uuid(),
-  customerPhone: z.string().optional(),
   items: z.array(
     z.object({
       menuItemId: z.string().uuid(),
@@ -28,30 +27,15 @@ const createOrderSchema = z.object({
   guestId: z.string().optional(),
 });
 
-const normalizeCustomerPhoneForWhatsApp = (input: unknown): string | null => {
-  const raw = typeof input === 'string' ? input : null;
-  if (!raw) return null;
-  const digits = raw.replace(/[^\d]/g, '');
-  if (!digits) return null;
-  if (digits.length < 8 || digits.length > 15) return null;
-  return digits;
-};
-
 export const createOrder = async (
   customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
 ) => {
-  const { vendorId, items, paymentMode, guestId, customerPhone } = createOrderSchema.parse(input);
+  const { vendorId, items, paymentMode, guestId } = createOrderSchema.parse(input);
 
   // Use guestId as customerId if provided and no customerId from JWT
   const finalCustomerId = customerId || guestId;
   if (!finalCustomerId) throw new Error('Customer identity missing');
-
-  let normalizedCustomerPhone: string | null = null;
-  if (customerPhone !== undefined) {
-    normalizedCustomerPhone = normalizeCustomerPhoneForWhatsApp(customerPhone);
-    if (!normalizedCustomerPhone) throw new Error('Invalid customerPhone');
-  }
 
   // Build order items + total
   let totalAmountNumber = 0;
@@ -92,7 +76,6 @@ export const createOrder = async (
     const createdOrder = await tx.order.create({
       data: {
         customerId: finalCustomerId,
-        customerPhone: normalizedCustomerPhone,
         vendorId,
         totalAmount,
         status: OrderStatus.PREPARING,
