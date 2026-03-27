@@ -603,11 +603,22 @@ export function MapEditor() {
             <div className="w-80 bg-white border-l shadow-xl flex flex-col z-30 shrink-0 h-full absolute right-0 md:relative">
                 <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                     <h3 className="font-bold text-gray-900">Booth Details</h3>
-                    <button onClick={() => setSelectedBoothId(null)} className="text-gray-400 hover:text-gray-600">
-                      &times;
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={handleDeleteBooth}
+                      >
+                        <Trash2 size={16} className="mr-2" />
+                        Delete Booth
+                      </Button>
+                      <button onClick={() => setSelectedBoothId(null)} className="text-gray-400 hover:text-gray-600">
+                        &times;
+                      </button>
+                    </div>
                 </div>
-                <div className="p-4 space-y-6 flex-1 overflow-y-auto">
+                <div className="p-4 space-y-4">
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-gray-500 uppercase">Label</label>
                         <Input 
@@ -686,17 +697,6 @@ export function MapEditor() {
                         </div>
                         */}
                     </div>
-                </div>
-                
-                <div className="p-4 border-t bg-gray-50 mt-auto">
-                    <Button 
-                        variant="ghost" 
-                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={handleDeleteBooth}
-                    >
-                        <Trash2 size={16} className="mr-2" />
-                        Delete Booth
-                    </Button>
                 </div>
             </div>
         )}
