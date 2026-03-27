@@ -70,6 +70,7 @@ export function MapEditor() {
   const [mapUrl, setMapUrl] = useState('');
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
   const [centerRequestKey, setCenterRequestKey] = useState(0);
+  const [userInteracted, setUserInteracted] = useState(false);
   
   // UI State
   const [selectedBoothId, setSelectedBoothId] = useState<string | null>(null);
@@ -105,11 +106,20 @@ export function MapEditor() {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setViewport((prev) => ({
-        ...prev,
-        scale: Math.min(4, Math.max(0.25, prev.scale + delta)),
-      }));
+      setUserInteracted(true);
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      setViewport((prev) => {
+        const oldScale = prev.scale;
+        const delta = -e.deltaY * 0.0015;
+        const nextScale = Math.min(4, Math.max(0.25, oldScale * (1 + delta)));
+        const worldX = (centerX - prev.x) / oldScale;
+        const worldY = (centerY - prev.y) / oldScale;
+        const x = centerX - worldX * nextScale;
+        const y = centerY - worldY * nextScale;
+        return { scale: nextScale, x, y };
+      });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel as any);
@@ -177,14 +187,24 @@ export function MapEditor() {
   };
 
   const handleCenterMap = () => {
+    setUserInteracted(false);
     setCenterRequestKey(k => k + 1);
   };
 
   const handleZoom = (delta: number) => {
-    setViewport(prev => ({
-        ...prev,
-        scale: Math.min(4, Math.max(0.25, prev.scale + delta))
-    }));
+    setUserInteracted(true);
+    const el = mapContainerRef.current;
+    const centerX = el ? el.clientWidth / 2 : 0;
+    const centerY = el ? el.clientHeight / 2 : 0;
+    setViewport((prev) => {
+      const oldScale = prev.scale;
+      const nextScale = Math.min(4, Math.max(0.25, oldScale + delta));
+      const worldX = (centerX - prev.x) / oldScale;
+      const worldY = (centerY - prev.y) / oldScale;
+      const x = centerX - worldX * nextScale;
+      const y = centerY - worldY * nextScale;
+      return { scale: nextScale, x, y };
+    });
   };
 
   // Booth Operations
@@ -441,6 +461,14 @@ export function MapEditor() {
                 <MapIcon size={16} className="mr-2" />
                 Map Image
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toast.success('Automate Distribute Booth coming soon')}
+            >
+              Automate Distribute Booth
+            </Button>
             
             <Button size="sm" onClick={handleAddBooth} className="bg-orange-600 hover:bg-orange-700">
                 <Plus size={16} className="mr-2" />
@@ -551,18 +579,6 @@ export function MapEditor() {
           ref={mapContainerRef}
           className="flex-1 min-w-0 overflow-hidden relative h-full bg-gray-100"
         >
-          <div className="absolute top-4 right-4 z-30 bg-white/95 backdrop-blur-md shadow-lg rounded-xl p-1 flex items-center">
-            <button onClick={() => handleZoom(-0.1)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Zoom out">
-              <ZoomOut size={16} />
-            </button>
-            <div className="text-xs font-semibold w-14 text-center text-gray-900">{Math.round(viewport.scale * 100)}%</div>
-            <button onClick={() => handleZoom(0.1)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Zoom in">
-              <ZoomIn size={16} />
-            </button>
-            <button onClick={handleCenterMap} className="p-2 hover:bg-gray-100 rounded-lg text-gray-700" aria-label="Fit to screen">
-              <Maximize size={14} />
-            </button>
-          </div>
           {/* Removed pointer-events-none wrapper */}
           <div className="absolute inset-0">
              <MapCanvas 
@@ -576,6 +592,8 @@ export function MapEditor() {
                onBackgroundClick={() => setSelectedBoothId(null)}
                onFixMap={handleFixMap}
                centerRequestKey={centerRequestKey}
+                userInteracted={userInteracted}
+                onUserInteracted={() => setUserInteracted(true)}
              />
           </div>
         </div>

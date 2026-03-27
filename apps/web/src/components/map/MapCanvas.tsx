@@ -34,6 +34,8 @@ interface MapCanvasProps {
   centerRequestKey?: number;
   onFixMap?: () => void;
   myBoothId?: string | null;
+  userInteracted?: boolean;
+  onUserInteracted?: () => void;
 }
 
 export function MapCanvas({ 
@@ -48,7 +50,9 @@ export function MapCanvas({
   onViewportChange,
   centerRequestKey = 0,
   onFixMap,
-  myBoothId = null
+  myBoothId = null,
+  userInteracted = false,
+  onUserInteracted
 }: MapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -212,20 +216,30 @@ export function MapCanvas({
     captureEl: null
   });
 
+  const hasFitOrganizerRef = useRef(false);
+  useEffect(() => {
+    if (readOnly) return;
+    hasFitOrganizerRef.current = false;
+  }, [mapImageUrl, readOnly]);
+
   // Fit triggers (Organizer only)
   useEffect(() => {
     if (readOnly) return;
-    if (naturalSize.width > 0 && naturalSize.height > 0 && dragging.mode === null) {
+    if (userInteracted) return;
+    if (hasFitOrganizerRef.current) return;
+    if (naturalSize.width > 0 && naturalSize.height > 0) {
       fitToView();
+      hasFitOrganizerRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naturalSize, fitToView, readOnly]);
+  }, [naturalSize, fitToView, readOnly, userInteracted]);
 
   // Center button request (Organizer only)
   useEffect(() => {
     if (readOnly) return;
     if (centerRequestKey > 0) {
       fitToView();
+      hasFitOrganizerRef.current = true;
     }
   }, [centerRequestKey, fitToView, readOnly]);
 
@@ -235,15 +249,13 @@ export function MapCanvas({
     if (!wrapperRef.current) return;
     
     const resizeObserver = new ResizeObserver(() => {
-       // Do not auto-fit while dragging; otherwise fit
-       if (dragging.mode === null) {
-         fitToView();
-       }
+      if (userInteracted) return;
+      fitToView();
     });
     
     resizeObserver.observe(wrapperRef.current);
     return () => resizeObserver.disconnect();
-  }, [fitToView, dragging.mode, readOnly]);
+  }, [fitToView, readOnly, userInteracted]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
@@ -357,6 +369,7 @@ export function MapCanvas({
       startTy: viewport.y,
       captureEl: target
     });
+    onUserInteracted?.();
     e.preventDefault();
   };
 
@@ -391,6 +404,7 @@ export function MapCanvas({
       boothStartY: booth.y,
       captureEl: target
     });
+    onUserInteracted?.();
   };
 
   const handleResizePointerDown = (e: React.PointerEvent, dir: string, booth: Booth) => {
@@ -416,6 +430,7 @@ export function MapCanvas({
         resizeDir: dir,
         captureEl: target
     });
+    onUserInteracted?.();
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
