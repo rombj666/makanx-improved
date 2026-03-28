@@ -46,7 +46,7 @@ export function CartPage() {
       cart.lines.map((l) => ({
         name: l.name,
         quantity: l.quantity,
-        remark: (l.remark || '').trim(),
+        remark: (l as any).remarksEnabled === false ? '' : (l.remark || '').trim(),
         selectedOptions: Array.isArray((l as any).selectedOptions) ? (l as any).selectedOptions : [],
       })),
     [cart.lines]
@@ -72,7 +72,7 @@ export function CartPage() {
         items: cart.lines.map((l) => ({
           menuItemId: l.menuItemId,
           quantity: l.quantity,
-          remark: (l.remark || '').trim(),
+          remark: (l as any).remarksEnabled === false ? '' : (l.remark || '').trim(),
           selectedOptions: Array.isArray((l as any).selectedOptions)
             ? (l as any).selectedOptions.map((s: any) => ({
                 groupId: String(s?.groupId || ''),

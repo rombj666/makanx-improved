@@ -26,6 +26,18 @@ type OptionGroup = {
   choices: OptionChoice[];
 };
 
+function normalizeOptionGroups(groups: OptionGroup[]) {
+  return groups
+    .map((g) => {
+      const title = String(g.title || '').trim();
+      const choices = (Array.isArray(g.choices) ? g.choices : [])
+        .map((c) => ({ ...c, label: String(c.label || '').trim() }))
+        .filter((c) => c.label !== '');
+      return { ...g, title, choices };
+    })
+    .filter((g) => g.title !== '' && Array.isArray(g.choices) && g.choices.length > 0);
+}
+
 function newId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return (crypto as any).randomUUID();
@@ -100,7 +112,7 @@ export function VendorMenu() {
       imageUrl,
       isAvailable: true,
       remarksEnabled: formData.remarksEnabled,
-      optionGroups,
+      optionGroups: normalizeOptionGroups(optionGroups),
     };
 
       if (editingItem) {
@@ -258,7 +270,10 @@ export function VendorMenu() {
               checked={formData.remarksEnabled}
               onChange={(e) => setFormData({ ...formData, remarksEnabled: e.target.checked })}
             />
-            <div className="text-sm text-gray-700">Allow customer remarks</div>
+            <div className="text-sm text-gray-700">Allow typed remarks (customer note box)</div>
+          </div>
+          <div className="text-xs text-gray-500 -mt-2">
+            Controls the free-text remarks field customers can type when ordering.
           </div>
 
           <div className="rounded-lg border border-gray-200 p-3">

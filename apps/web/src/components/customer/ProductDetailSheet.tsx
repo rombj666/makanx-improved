@@ -100,6 +100,10 @@ function ProductDetailSheetBody({
   const dec = () => setQuantity((q) => clamp(q - 1, 1, 99));
   const inc = () => setQuantity((q) => clamp(q + 1, 1, 99));
 
+  React.useEffect(() => {
+    if (!remarksEnabled) setRemark('');
+  }, [remarksEnabled]);
+
   return (
     <div className="max-h-[85vh] overflow-y-auto">
       <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-neutral-100">
@@ -233,7 +237,7 @@ function ProductDetailSheetBody({
               })
               .filter((x) => x.choiceIds.length > 0);
 
-            onAdd({ quantity, remark: remark.trim(), selectedOptions });
+            onAdd({ quantity, remark: remarksEnabled ? remark.trim() : '', selectedOptions });
             setQuantity(1);
             setRemark('');
             setSelected({});

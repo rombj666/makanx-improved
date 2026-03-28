@@ -11,6 +11,7 @@ export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove }: P
   const dec = () => onQuantityChange(Math.max(1, line.quantity - 1));
   const inc = () => onQuantityChange(Math.min(99, line.quantity + 1));
   const src = line.imageUrl && line.imageUrl.trim() !== '' ? line.imageUrl : '';
+  const allowRemarks = (line as any).remarksEnabled !== false;
   const selectedSummary = Array.isArray((line as any).selectedOptions)
     ? (line as any).selectedOptions
         .map((s: any) => {
@@ -76,16 +77,18 @@ export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove }: P
               </div>
             </div>
 
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-neutral-600 mb-2">Remarks</div>
-              <textarea
-                value={line.remark || ''}
-                onChange={(e) => onRemarkChange(e.target.value)}
-                rows={2}
-                placeholder="Add a note for the vendor"
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-black/20 focus:border-neutral-300"
-              />
-            </div>
+            {allowRemarks ? (
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-neutral-600 mb-2">Remarks</div>
+                <textarea
+                  value={line.remark || ''}
+                  onChange={(e) => onRemarkChange(e.target.value)}
+                  rows={2}
+                  placeholder="Add a note for the vendor"
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-black/20 focus:border-neutral-300"
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

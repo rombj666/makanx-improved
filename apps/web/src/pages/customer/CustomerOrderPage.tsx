@@ -135,6 +135,7 @@ export function CustomerOrderPage() {
             remark,
             imageUrl: activeItem.imageUrl || '',
             selectedOptions,
+            remarksEnabled: activeItem?.remarksEnabled !== false,
           });
           toast.success('Added to cart');
         }}

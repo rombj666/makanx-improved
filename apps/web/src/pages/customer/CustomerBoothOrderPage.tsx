@@ -143,6 +143,7 @@ export function CustomerBoothOrderPage() {
             remark,
             imageUrl: activeItem.imageUrl || '',
             selectedOptions,
+            remarksEnabled: activeItem?.remarksEnabled !== false,
           });
           toast.success('Added to cart');
         }}

@@ -8,8 +8,11 @@ import { toast } from 'react-hot-toast';
 
 
 interface OrderItem {
+  id?: string;
   quantity: number;
   status?: 'PREPARING' | 'READY';
+  remark?: string | null;
+  selectedOptions?: any[] | null;
   menuItem: {
     id: string;
     name: string;
@@ -149,6 +152,43 @@ export function VendorDashboard() {
     await refetchAll();
   };
 
+  const formatItemDetails = (it: OrderItem) => {
+    const parts: string[] = [];
+    const opts = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
+    for (const s of opts) {
+      const title = String(s?.title || '');
+      const choices = Array.isArray(s?.choices) ? s.choices : [];
+      const labels = choices.map((c: any) => String(c?.label || '')).filter(Boolean);
+      if (!title || labels.length === 0) continue;
+      parts.push(`${title}: ${labels.join(', ')}`);
+    }
+    const remark = String(it.remark || '').trim();
+    if (remark) parts.push(`Note: ${remark}`);
+    return parts;
+  };
+
+  const preparationKey = (it: OrderItem) => {
+    const remark = String(it.remark || '').trim();
+    const opts = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
+    const normalizedOpts = opts
+      .map((s: any) => {
+        const groupId = String(s?.groupId || '');
+        const title = String(s?.title || '');
+        const choices = Array.isArray(s?.choices) ? s.choices : [];
+        const normalizedChoices = choices
+          .map((c: any) => ({
+            id: String(c?.id || ''),
+            label: String(c?.label || ''),
+          }))
+          .filter((c: any) => c.id || c.label)
+          .sort((a: any, b: any) => (a.id || a.label).localeCompare(b.id || b.label));
+        return { groupId, title, choices: normalizedChoices };
+      })
+      .filter((s: any) => s.groupId || s.title || (Array.isArray(s.choices) && s.choices.length > 0))
+      .sort((a: any, b: any) => (a.groupId || a.title).localeCompare(b.groupId || b.title));
+    return `${it.menuItem.id}::${remark}::${JSON.stringify(normalizedOpts)}`;
+  };
+
   const GroupedProduction = ({
     data,
   }: {
@@ -157,23 +197,45 @@ export function VendorDashboard() {
     return (
       <>
         {data.map((block) => {
-          const byProduct = new Map<string, { name: string; qty: number }>();
+          const bySignature = new Map<
+            string,
+            {
+              menuItemId: string;
+              name: string;
+              qty: number;
+              selectedOptions: any[];
+              remark: string;
+              details: string[];
+            }
+          >();
           for (const o of block.orders) {
             for (const it of o.items) {
-              const id = it.menuItem.id;
-              const name = it.menuItem.name;
-              const node = byProduct.get(id);
+              const key = preparationKey(it);
+              const node = bySignature.get(key);
               if (node) {
                 node.qty += Number(it.quantity || 0);
               } else {
-                byProduct.set(id, { name, qty: Number(it.quantity || 0) });
+                const remark = String(it.remark || '').trim();
+                const selectedOptions = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
+                bySignature.set(key, {
+                  menuItemId: it.menuItem.id,
+                  name: it.menuItem.name,
+                  qty: Number(it.quantity || 0),
+                  selectedOptions,
+                  remark,
+                  details: formatItemDetails(it),
+                });
               }
             }
           }
-          const aggregated = Array.from(byProduct.entries()).map(([menuItemId, v]) => ({
-            menuItemId,
+          const aggregated = Array.from(bySignature.entries()).map(([key, v]) => ({
+            key,
+            menuItemId: v.menuItemId,
             name: v.name,
             quantity: v.qty,
+            selectedOptions: v.selectedOptions,
+            remark: v.remark,
+            details: v.details,
           }));
           const windowStartISO = new Date(block.windowStart).toISOString();
           const windowEndISO = new Date(block.windowEnd).toISOString();
@@ -185,10 +247,21 @@ export function VendorDashboard() {
               </h4>
               <ul className="space-y-2">
                 {aggregated.map((it) => (
-                  <li key={it.menuItemId} className="flex items-center justify-between rounded border p-2 bg-white">
-                    <div>
-                      <span className="font-medium">{it.name}</span>{' '}
-                      <span className="font-semibold">x{it.quantity}</span>
+                  <li key={it.key} className="flex items-start justify-between rounded border p-3 bg-white gap-4">
+                    <div className="min-w-0">
+                      <div>
+                        <span className="font-medium">{it.name}</span>{' '}
+                        <span className="font-semibold">x{it.quantity}</span>
+                      </div>
+                      {it.details.length > 0 ? (
+                        <div className="mt-1 text-xs text-gray-600 space-y-1">
+                          {it.details.map((d, idx) => (
+                            <div key={idx} className="truncate">
+                              {d}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <Button
                       className="bg-green-600 text-white"
@@ -198,6 +271,8 @@ export function VendorDashboard() {
                             menuItemId: it.menuItemId,
                             windowStart: windowStartISO,
                             windowEnd: windowEndISO,
+                            selectedOptions: it.selectedOptions,
+                            remark: it.remark,
                           });
                           toast.success(`${it.name} marked ready for this window`);
                           await refetchAll();
@@ -249,13 +324,22 @@ export function VendorDashboard() {
                       <p className="text-sm font-medium mb-2">{order.customer?.name ?? 'Guest'}</p>
                       <ul className="text-sm space-y-1 mb-3">
                         {order.items.map((item, idx) => (
-                          <li key={idx} className="flex justify-between">
-                            <span>
-                              {item.quantity}x {item.menuItem.name}
-                            </span>
-                            <span className="text-xs">
-                              {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-                            </span>
+                          <li key={idx} className="py-1">
+                            <div className="flex justify-between">
+                              <span>
+                                {item.quantity}x {item.menuItem.name}
+                              </span>
+                              <span className="text-xs">
+                                {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                              </span>
+                            </div>
+                            {formatItemDetails(item).length > 0 ? (
+                              <div className="mt-1 text-xs text-gray-600 space-y-1">
+                                {formatItemDetails(item).map((d, j) => (
+                                  <div key={j}>{d}</div>
+                                ))}
+                              </div>
+                            ) : null}
                           </li>
                         ))}
                       </ul>
@@ -313,13 +397,22 @@ export function VendorDashboard() {
           </div>
           <div className="mt-2">
             {order.items.map((item: any, idx: number) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <span>
-                  {item.quantity}x {item.menuItem.name}
-                </span>
-                <span className="text-xs">
-                  {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-                </span>
+              <div key={idx} className="text-sm py-1">
+                <div className="flex justify-between items-center">
+                  <span>
+                    {item.quantity}x {item.menuItem.name}
+                  </span>
+                  <span className="text-xs">
+                    {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                  </span>
+                </div>
+                {formatItemDetails(item).length > 0 ? (
+                  <div className="mt-1 text-xs text-gray-600 space-y-1">
+                    {formatItemDetails(item).map((d, j) => (
+                      <div key={j}>{d}</div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

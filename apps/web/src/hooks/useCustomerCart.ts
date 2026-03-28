@@ -9,6 +9,7 @@ export type CartLine = {
   remark: string;
   imageUrl: string;
   selectedOptions?: { groupId: string; choiceIds: string[]; title?: string; choiceLabels?: string[] }[];
+  remarksEnabled?: boolean;
 };
 
 type CartState = {
@@ -41,6 +42,10 @@ function newId() {
 function clampQuantity(q: number) {
   if (!Number.isFinite(q)) return 1;
   return Math.max(1, Math.min(99, Math.floor(q)));
+}
+
+function normalizeRemarksEnabled(val: any) {
+  return val !== false;
 }
 
 function normalizeSelectedOptions(input: CartLine['selectedOptions']): string {
@@ -84,7 +89,12 @@ export function useCustomerCart(params: {
       vendorId,
       vendorName: loaded.vendorName || vendorName,
       boothName: loaded.boothName || boothName,
-      lines: Array.isArray(loaded.lines) ? loaded.lines : [],
+      lines: Array.isArray(loaded.lines)
+        ? loaded.lines.map((l: any) => ({
+            ...l,
+            remarksEnabled: normalizeRemarksEnabled(l?.remarksEnabled),
+          }))
+        : [],
     });
   }, [key, eventSlug, vendorId, vendorName, boothName]);
 
@@ -101,6 +111,7 @@ export function useCustomerCart(params: {
         const normalizedRemark = (input.remark || '').trim();
         const qty = clampQuantity(input.quantity);
         const sig = normalizeSelectedOptions(input.selectedOptions);
+        const allowRemarks = normalizeRemarksEnabled((input as any).remarksEnabled);
         const idx = prev.lines.findIndex(
           (l) =>
             l.menuItemId === input.menuItemId &&
@@ -117,6 +128,7 @@ export function useCustomerCart(params: {
                 id: newId(),
                 quantity: qty,
                 remark: normalizedRemark,
+                remarksEnabled: allowRemarks,
               });
         return {
           vendorId,
