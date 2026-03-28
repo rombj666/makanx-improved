@@ -13,12 +13,6 @@ export function Navbar() {
   const [mobileVendorMenuOpen, setMobileVendorMenuOpen] = React.useState(false);
 
   const isVendor = !!user?.vendorProfile?.id;
-  const vendorTabs = [
-    { label: 'Dashboard', to: '/vendor' },
-    { label: 'Menu', to: '/vendor/menu' },
-    { label: 'Booth', to: '/vendor/map' },
-    { label: 'Sales', to: '/vendor/sales' },
-  ];
   const vendorLinkClass = ({ isActive }: { isActive: boolean }) =>
     `text-sm font-medium transition-colors ${isActive ? 'text-black' : 'text-gray-700 hover:text-black'}`;
 
@@ -39,24 +33,6 @@ export function Navbar() {
               >
                 <Menu size={20} />
               </button>
-            </div>
-
-            <div className="mt-3">
-              <div className="inline-flex rounded-2xl border border-neutral-200 bg-white overflow-hidden">
-                {vendorTabs.map((t) => (
-                  <NavLink
-                    key={t.to}
-                    to={t.to}
-                    className={({ isActive }) =>
-                      `h-11 px-4 text-sm font-semibold transition-colors ${
-                        isActive ? 'bg-black text-white' : 'bg-white text-black'
-                      }`
-                    }
-                  >
-                    {t.label}
-                  </NavLink>
-                ))}
-              </div>
             </div>
 
             <VendorMobileMenu
