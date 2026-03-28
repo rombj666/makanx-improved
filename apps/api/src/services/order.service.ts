@@ -467,19 +467,25 @@ export const markBatchItemsReady = async (
   userId: string,
   menuItemId: string,
   windowStartISO: string,
-  windowEndISO: string
+  windowEndISO: string,
+  selectedOptions?: any[],
+  remark?: string
 ) => {
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
   const windowStart = new Date(windowStartISO);
   const windowEnd = new Date(windowEndISO);
+  const remarkNormalized = typeof remark === 'string' && remark.trim() !== '' ? remark.trim() : null;
+  const selectedNormalized = Array.isArray(selectedOptions) ? selectedOptions : null;
 
   // Update order items matching the criteria
   const result = await (prisma as any).orderItem.updateMany({
     where: {
       menuItemId,
       status: 'PREPARING',
+      ...(selectedNormalized !== null ? { selectedOptions: { equals: selectedNormalized } } : {}),
+      ...(remark !== undefined ? { remark: remarkNormalized } : {}),
       order: {
         vendorId: vendorProfile.id,
         status: 'PREPARING',

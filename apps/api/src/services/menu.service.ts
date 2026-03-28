@@ -1,9 +1,58 @@
 import prisma from '../utils/prisma';
 import { z } from 'zod';
+import crypto from 'crypto';
 
 function isMissingColumnError(e: any, columnName: string) {
   const msg = String(e?.message || '');
   return msg.includes('column') && msg.includes(columnName) && msg.includes('does not exist');
+}
+
+function newId() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return Math.random().toString(16).slice(2) + Date.now().toString(16);
+  }
+}
+
+function sanitizeOptionGroups(input: any): any[] | undefined {
+  const raw = typeof input === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(input);
+        } catch {
+          return input;
+        }
+      })()
+    : input;
+
+  if (raw == null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+
+  const groups = raw
+    .map((g: any) => {
+      const title = String(g?.title || '').trim();
+      if (!title) return null;
+      const type = g?.type === 'multi' ? 'multi' : 'single';
+      const required = !!g?.required;
+      const choicesRaw = Array.isArray(g?.choices) ? g.choices : [];
+      const choices = choicesRaw
+        .map((c: any) => {
+          const label = String(c?.label || '').trim();
+          if (!label) return null;
+          return {
+            id: String(c?.id || newId()),
+            label,
+            priceDelta: typeof c?.priceDelta === 'number' ? c.priceDelta : undefined,
+          };
+        })
+        .filter(Boolean);
+      if (choices.length === 0) return null;
+      return { id: String(g?.id || newId()), title, type, required, choices };
+    })
+    .filter(Boolean);
+
+  return groups;
 }
 
 const optionChoiceSchema = z.object({
@@ -27,18 +76,7 @@ const menuItemInputSchema = z.object({
   imageUrl: z.string().optional(),
   isAvailable: z.boolean().optional(),
   remarksEnabled: z.boolean().optional(),
-  optionGroups: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          return val;
-        }
-      }
-      return val;
-    }, z.array(optionGroupSchema))
-    .optional(),
+  optionGroups: z.preprocess((val) => sanitizeOptionGroups(val), z.array(optionGroupSchema)).optional(),
 });
 
 export const createMenuItem = async (userId: string, data: any) => {

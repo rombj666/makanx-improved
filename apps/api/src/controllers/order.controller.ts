@@ -123,7 +123,7 @@ export const bulkStatusUpdate = async (req: Request, res: Response) => {
 export const markBatchItemsReady = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const { menuItemId, windowStart, windowEnd } = req.body;
+    const { menuItemId, windowStart, windowEnd, selectedOptions, remark } = req.body;
     if (!menuItemId || !windowStart || !windowEnd) {
       return res.status(400).json({ success: false, error: 'Missing fields' });
     }
@@ -131,7 +131,9 @@ export const markBatchItemsReady = async (req: Request, res: Response) => {
       req.user.userId,
       String(menuItemId),
       String(windowStart),
-      String(windowEnd)
+      String(windowEnd),
+      Array.isArray(selectedOptions) ? selectedOptions : undefined,
+      typeof remark === 'string' ? remark : undefined
     );
     return res.status(200).json({ success: true, ...result });
   } catch (error: any) {
