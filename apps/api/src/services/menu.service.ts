@@ -144,6 +144,7 @@ export const updateMenuItem = async (
 
   const existing = await prisma.menuItem.findFirst({
     where: { id: itemId, vendorId: vendorProfile.id },
+    select: { id: true },
   });
   if (!existing) throw new Error('Menu item not found');
 
@@ -191,6 +192,7 @@ export const deleteMenuItem = async (
 
   const existing = await prisma.menuItem.findFirst({
     where: { id: itemId, vendorId: vendorProfile.id },
+    select: { id: true, vendorId: true, isAvailable: true },
   });
   if (!existing) throw new Error('Menu item not found');
 
