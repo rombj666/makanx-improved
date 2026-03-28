@@ -191,8 +191,10 @@ export function VendorDashboard() {
 
   const GroupedProduction = ({
     data,
+    showWindowHeader = true,
   }: {
     data: { windowStart: number; windowEnd: number; orders: Order[] }[];
+    showWindowHeader?: boolean;
   }) => {
     return (
       <>
@@ -241,10 +243,12 @@ export function VendorDashboard() {
           const windowEndISO = new Date(block.windowEnd).toISOString();
           return (
             <div key={block.windowStart} className="mb-6">
-              <h4 className="font-bold text-lg mb-2">
-                {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
-                {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-              </h4>
+              {showWindowHeader ? (
+                <h4 className="font-bold text-lg mb-2">
+                  {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
+                  {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </h4>
+              ) : null}
               <ul className="space-y-2">
                 {aggregated.map((it) => (
                   <li key={it.key} className="flex items-start justify-between rounded border p-3 bg-white gap-4">
@@ -439,75 +443,280 @@ export function VendorDashboard() {
   );
 
   return (
-    <div className="container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Live Orders</h1>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex rounded-md border bg-white overflow-hidden">
-            <Button
-              variant={viewMode === 'kitchen' ? 'default' : 'outline'}
-              className={viewMode === 'kitchen' ? 'bg-orange-500 text-white' : 'bg-white'}
-              onClick={() => setViewMode('kitchen')}
+    <>
+      <div className="block [@media(pointer:coarse)]:hidden container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Live Orders</h1>
+          <div className="flex items-center gap-3">
+            <div className="inline-flex rounded-md border bg-white overflow-hidden">
+              <Button
+                variant={viewMode === 'kitchen' ? 'default' : 'outline'}
+                className={viewMode === 'kitchen' ? 'bg-orange-500 text-white' : 'bg-white'}
+                onClick={() => setViewMode('kitchen')}
+              >
+                Kitchen View
+              </Button>
+              <Button
+                variant={viewMode === 'fulfillment' ? 'default' : 'outline'}
+                className={viewMode === 'fulfillment' ? 'bg-gray-200' : 'bg-white'}
+                onClick={() => setViewMode('fulfillment')}
+              >
+                Order Fulfillment
+              </Button>
+            </div>
+            <select
+              value={groupMinutes}
+              onChange={(e) => setGroupMinutes(Number(e.target.value))}
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
             >
-              Kitchen View
-            </Button>
+              <option value={1}>1 min</option>
+              <option value={2}>2 min</option>
+              <option value={5}>5 min</option>
+            </select>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={groupByWindow}
+                onChange={(e) => setGroupByWindow(e.target.checked)}
+              />
+              Group production by {groupMinutes}-minute windows
+            </label>
             <Button
-              variant={viewMode === 'fulfillment' ? 'default' : 'outline'}
-              className={viewMode === 'fulfillment' ? 'bg-gray-200' : 'bg-white'}
-              onClick={() => setViewMode('fulfillment')}
+              variant="outline"
+              onClick={() => {
+                fetchOrders();
+                fetchProductionBatch();
+              }}
             >
-              Order Fulfillment
+              Refresh
             </Button>
           </div>
-          <select
-            value={groupMinutes}
-            onChange={(e) => setGroupMinutes(Number(e.target.value))}
-            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
-          >
-            <option value={1}>1 min</option>
-            <option value={2}>2 min</option>
-            <option value={5}>5 min</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="rounded border-gray-300"
-              checked={groupByWindow}
-              onChange={(e) => setGroupByWindow(e.target.checked)}
-            />
-            Group production by {groupMinutes}-minute windows
-          </label>
-          <Button
-            variant="outline"
+        </div>
+        {viewMode === 'kitchen' && (
+          <div className="mt-4">
+            {groupByWindow && groupedProduction.length === 0 && <p>No grouped production data.</p>}
+            {!groupByWindow && productionOrders.length === 0 && <p>No live orders.</p>}
+            {groupByWindow && <GroupedProduction data={groupedProduction} />}
+            {!groupByWindow && <SingleOrderList data={productionOrders} />}
+          </div>
+        )}
+
+        {viewMode === 'fulfillment' && (
+          <FulfillmentBoardView orders={orders} COLUMNS={COLUMNS} getOrdersByStatus={getOrdersByStatus} />
+        )}
+      </div>
+
+      <div className="hidden [@media(pointer:coarse)]:flex flex-col min-h-[100dvh] bg-neutral-50 px-4 pt-5 pb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
+            <div className="text-2xl font-semibold text-black">Live Orders</div>
+          </div>
+          <button
             onClick={() => {
               fetchOrders();
               fetchProductionBatch();
             }}
+            className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
           >
             Refresh
-          </Button>
+          </button>
+        </div>
+
+        <div className="mt-4 inline-flex rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode('kitchen')}
+            className={`h-11 px-4 text-sm font-semibold ${
+              viewMode === 'kitchen' ? 'bg-black text-white' : 'bg-white text-black'
+            }`}
+          >
+            Kitchen
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('fulfillment')}
+            className={`h-11 px-4 text-sm font-semibold ${
+              viewMode === 'fulfillment' ? 'bg-black text-white' : 'bg-white text-black'
+            }`}
+          >
+            Fulfillment
+          </button>
+        </div>
+
+        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+          <div className="flex flex-col gap-3 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-center">
+            <label className="flex items-center justify-between gap-3 text-sm font-semibold text-black">
+              <span>Group by time window</span>
+              <input
+                type="checkbox"
+                className="rounded border-neutral-300"
+                checked={groupByWindow}
+                onChange={(e) => setGroupByWindow(e.target.checked)}
+              />
+            </label>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-black">Window</div>
+              <select
+                value={groupMinutes}
+                onChange={(e) => setGroupMinutes(Number(e.target.value))}
+                className="h-11 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black"
+              >
+                <option value={1}>1 min</option>
+                <option value={2}>2 min</option>
+                <option value={5}>5 min</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex-1 overflow-y-auto">
+          {viewMode === 'kitchen' ? (
+            <>
+              {groupByWindow ? (
+                groupedProduction.length === 0 ? (
+                  <div className="text-sm text-neutral-600">No grouped production data.</div>
+                ) : (
+                  <div className="space-y-5">
+                    {groupedProduction.map((block) => (
+                      <div key={block.windowStart} className="space-y-3">
+                        <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">
+                          {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} –{' '}
+                          {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        </div>
+                        <GroupedProduction data={[block]} showWindowHeader={false} />
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : productionOrders.length === 0 ? (
+                <div className="text-sm text-neutral-600">No live orders.</div>
+              ) : (
+                <div className="space-y-4">
+                  {productionOrders.map((order) => (
+                    <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-black">Order #{order.id.slice(-4)}</div>
+                          <div className="text-xs text-neutral-500">
+                            {new Date(order.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
+                          {order.status}
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {order.items.map((item: any, idx: number) => (
+                          <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-semibold text-black">
+                                {item.quantity}x {item.menuItem.name}
+                              </div>
+                              <div className="text-xs text-neutral-600">
+                                {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                              </div>
+                            </div>
+                            {formatItemDetails(item).length > 0 ? (
+                              <div className="mt-2 text-xs text-neutral-600 space-y-1">
+                                {formatItemDetails(item).map((d, j) => (
+                                  <div key={j}>{d}</div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      {order.status !== 'COMPLETED' ? (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await markOrderReady(order.id);
+                              toast.success('Order items marked ready');
+                            } catch (e: any) {
+                              toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                            }
+                          }}
+                          className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
+                        >
+                          Mark Ready
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-5">
+              {COLUMNS.map((status) => {
+                const list = getOrdersByStatus(status);
+                return (
+                  <div key={status}>
+                    <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase mb-2">
+                      {status} ({list.length})
+                    </div>
+                    <div className="space-y-3">
+                      {list.length === 0 ? (
+                        <div className="text-sm text-neutral-600">No orders.</div>
+                      ) : (
+                        list.map((order) => (
+                          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-black">Order #{order.id.slice(-4)}</div>
+                                <div className="text-xs text-neutral-500">
+                                  {new Date(order.createdAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                              <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
+                                {order.status}
+                              </div>
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              {order.items.map((item: any, idx: number) => (
+                                <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-semibold text-black">
+                                      {item.quantity}x {item.menuItem.name}
+                                    </div>
+                                    <div className="text-xs text-neutral-600">
+                                      {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                                    </div>
+                                  </div>
+                                  {formatItemDetails(item).length > 0 ? (
+                                    <div className="mt-2 text-xs text-neutral-600 space-y-1">
+                                      {formatItemDetails(item).map((d, j) => (
+                                        <div key={j}>{d}</div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              onClick={() => markComplete(order.id)}
+                              disabled={
+                                order.status === 'COMPLETED' ||
+                                !order.items ||
+                                !order.items.every((it: any) => it.status === 'READY')
+                              }
+                              className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold disabled:opacity-40 active:scale-[0.99] transition"
+                            >
+                              {order.status === 'COMPLETED' ? 'Completed' : 'Complete'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
-      {viewMode === "kitchen" && (
-        <div className="mt-4">
-          {groupByWindow && groupedProduction.length === 0 && (
-            <p>No grouped production data.</p>
-          )}
-          {!groupByWindow && productionOrders.length === 0 && (
-            <p>No live orders.</p>
-          )}
-          {groupByWindow && (
-            <GroupedProduction data={groupedProduction} />
-          )}
-          {!groupByWindow && (
-            <SingleOrderList data={productionOrders} />
-          )}
-        </div>
-      )}
-
-      {viewMode === "fulfillment" && (
-        <FulfillmentBoardView orders={orders} COLUMNS={COLUMNS} getOrdersByStatus={getOrdersByStatus} />
-      )}
-    </div>
+    </>
   );
 }

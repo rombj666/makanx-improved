@@ -8,9 +8,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  mobileFullScreen?: boolean;
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, mobileFullScreen }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,11 +32,20 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
   if (!isOpen) return null;
 
+  const overlayClassName = mobileFullScreen
+    ? 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm [@media(pointer:coarse)]:p-0'
+    : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm';
+
+  const containerClassName = mobileFullScreen
+    ? 'bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 ' +
+      '[@media(pointer:coarse)]:rounded-none [@media(pointer:coarse)]:max-w-none [@media(pointer:coarse)]:max-h-none [@media(pointer:coarse)]:h-[100dvh]'
+    : 'bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-auto flex flex-col animate-in fade-in zoom-in-95 duration-200';
+
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className={overlayClassName}>
       <div 
         ref={overlayRef}
-        className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-auto flex flex-col animate-in fade-in zoom-in-95 duration-200"
+        className={containerClassName}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b">
@@ -47,7 +57,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             <X size={20} />
           </button>
         </div>
-        <div className="p-4">
+        <div className="p-4 overflow-y-auto">
           {children}
         </div>
       </div>

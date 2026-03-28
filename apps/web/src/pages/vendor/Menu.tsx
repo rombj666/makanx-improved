@@ -176,40 +176,121 @@ export function VendorMenu() {
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="max-w-md mx-auto md:max-w-2xl p-4 space-y-4 pb-24">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Menu</h1>
-        <Button onClick={openAddModal} className="bg-orange-600 hover:bg-orange-700">
-          <Plus size={18} className="mr-2" /> Add Item
-        </Button>
-      </div>
+    <>
+      <div className="block [@media(pointer:coarse)]:hidden max-w-md mx-auto md:max-w-2xl p-4 space-y-4 pb-24">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">My Menu</h1>
+          <Button onClick={openAddModal} className="bg-orange-600 hover:bg-orange-700">
+            <Plus size={18} className="mr-2" /> Add Item
+          </Button>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {menuItems.map(item => (
-          <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4">
-            {item.imageUrl && (
-              <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-lg bg-gray-100" />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start">
-                <h3 className="font-bold text-gray-900 truncate">{item.name}</h3>
-                <div className="flex gap-1">
-                  <button onClick={() => openEditModal(item)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
+        <div className="grid gap-4 md:grid-cols-2">
+          {menuItems.map(item => (
+            <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4">
+              {item.imageUrl && (
+                <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-lg bg-gray-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-bold text-gray-900 truncate">{item.name}</h3>
+                  <div className="flex gap-1">
+                    <button onClick={() => openEditModal(item)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={16} /></button>
+                    <button onClick={() => handleDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500 line-clamp-2">{item.description}</p>
+                <div className="mt-2 font-bold text-orange-600">${item.price.toFixed(2)}</div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {(Array.isArray(item.optionGroups) && item.optionGroups.length > 0) ? `${item.optionGroups.length} groups` : 'No customizations'}
                 </div>
               </div>
-              <p className="text-sm text-gray-500 line-clamp-2">{item.description}</p>
-              <div className="mt-2 font-bold text-orange-600">${item.price.toFixed(2)}</div>
-              <div className="mt-1 text-xs text-gray-500">
-                {(Array.isArray(item.optionGroups) && item.optionGroups.length > 0) ? `${item.optionGroups.length} groups` : 'No customizations'}
-              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Add/Edit Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Edit Item' : 'Add New Item'}>
+      <div className="hidden [@media(pointer:coarse)]:block min-h-[100dvh] bg-neutral-50 px-4 pt-5 pb-28">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
+            <div className="text-2xl font-semibold text-black">Menu</div>
+          </div>
+          <button
+            onClick={openAddModal}
+            className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Plus size={18} />
+              Add
+            </span>
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 [@media(orientation:landscape)]:grid-cols-2">
+          {menuItems.map((item) => {
+            const groupsCount = Array.isArray(item.optionGroups) ? item.optionGroups.length : 0;
+            return (
+              <div key={item.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+                <div className="w-full aspect-[16/9] bg-neutral-100">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200" />
+                  )}
+                </div>
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-black truncate">{item.name}</div>
+                      <div className="mt-1 text-sm font-semibold text-neutral-700">${item.price.toFixed(2)}</div>
+                      <div className="mt-1 text-xs text-neutral-500">
+                        {groupsCount > 0 ? `${groupsCount} groups` : 'No customizations'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        className="w-10 h-10 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition"
+                        aria-label="Edit item"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="w-10 h-10 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition"
+                        aria-label="Delete item"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {item.description ? (
+                    <div className="mt-3 text-sm text-neutral-600 line-clamp-2">{item.description}</div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="fixed bottom-4 left-4 right-4 z-40">
+          <button
+            onClick={openAddModal}
+            className="w-full h-14 rounded-3xl bg-black text-white font-semibold shadow-2xl active:scale-[0.99] transition"
+          >
+            Add Item
+          </button>
+        </div>
+      </div>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingItem ? 'Edit Item' : 'Add New Item'}
+        mobileFullScreen
+      >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Name</label>
@@ -257,7 +338,7 @@ export function VendorMenu() {
           <div>
             <label className="block text-sm font-medium text-gray-700">Description</label>
             <textarea 
-              className="w-full rounded-md border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="w-full rounded-md border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent [@media(pointer:coarse)]:rounded-2xl [@media(pointer:coarse)]:border-neutral-200 [@media(pointer:coarse)]:focus:ring-black/20 [@media(pointer:coarse)]:focus:border-neutral-300"
               rows={3}
               value={formData.description} 
               onChange={e => setFormData({...formData, description: e.target.value})} 
@@ -437,12 +518,12 @@ export function VendorMenu() {
           </div>
           <div className="pt-4 flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-orange-600 hover:bg-orange-700">
+            <Button type="submit" className="bg-orange-600 hover:bg-orange-700 [@media(pointer:coarse)]:bg-black [@media(pointer:coarse)]:hover:bg-black">
               {editingItem ? 'Save Changes' : 'Create Item'}
             </Button>
           </div>
         </form>
       </Modal>
-    </div>
+    </>
   );
 }

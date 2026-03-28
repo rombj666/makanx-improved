@@ -116,76 +116,125 @@ export function VendorMap() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center [@media(pointer:coarse)]:bg-neutral-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your booth location...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4 [@media(pointer:coarse)]:border-black"></div>
+          <p className="text-gray-600 [@media(pointer:coarse)]:text-neutral-600">Loading your booth location...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Booth Location</h1>
-          <p className="text-gray-600">
-            {isConnected ? (
-              <span className="inline-flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                Connected
-              </span>
-            ) : (
-              <span className="inline-flex items-center text-orange-600">
-                <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-                Reconnecting...
-              </span>
-            )}
-          </p>
-        </div>
+    <>
+      <div className="block [@media(pointer:coarse)]:hidden min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Booth Location</h1>
+            <p className="text-gray-600">
+              {isConnected ? (
+                <span className="inline-flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-orange-600">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                  Reconnecting...
+                </span>
+              )}
+            </p>
+          </div>
 
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Event Map</h2>
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Event Map</h2>
+                {myBoothId && (
+                  <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
+                    <span className="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
+                    Your Booth
+                  </div>
+                )}
+              </div>
+              
+              <div className="border border-gray-200 rounded-2xl overflow-hidden relative" style={{ height: '600px' }}>
+                <MapCanvas
+                  mapImageUrl={mapImageUrl}
+                  booths={booths}
+                  readOnly={true}
+                  myBoothId={myBoothId}
+                  onFixMap={() => setMapImageUrl('/images/event-map.jpg')}
+                  onBoothClick={(booth) => {
+                    if (booth.id === myBoothId) {
+                      console.log('Clicked on vendor booth:', booth);
+                    }
+                  }}
+                />
+              </div>
+
               {myBoothId && (
-                <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
-                  <span className="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
-                  Your Booth
+                <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-amber-500 rounded-full mr-3"></div>
+                    <div>
+                      <p className="font-medium text-amber-900">Your booth is highlighted on the map</p>
+                      <p className="text-sm text-amber-700">Customers can easily find your location at the event</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-            
-            <div className="border border-gray-200 rounded-2xl overflow-hidden relative" style={{ height: '600px' }}>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden [@media(pointer:coarse)]:block min-h-[100dvh] bg-neutral-50 px-4 pt-5 pb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
+            <div className="text-2xl font-semibold text-black">Booth</div>
+          </div>
+          <div className={`shrink-0 px-3 py-2 rounded-2xl border text-xs font-semibold ${
+            isConnected ? 'border-neutral-200 bg-white text-black' : 'border-neutral-200 bg-white text-neutral-600'
+          }`}>
+            {isConnected ? 'Connected' : 'Reconnecting'}
+          </div>
+        </div>
+
+        <div className="mt-5 bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+          <div className="p-4 flex items-center justify-between">
+            <div className="text-sm font-semibold text-black">Event Map</div>
+            {myBoothId ? (
+              <div className="px-3 py-1 rounded-full text-xs font-semibold bg-black text-white">Your Booth</div>
+            ) : null}
+          </div>
+          <div className="px-4 pb-4">
+            <div className="rounded-2xl overflow-hidden border border-neutral-200 relative h-[55vh] [@media(orientation:landscape)]:h-[70vh]">
               <MapCanvas
                 mapImageUrl={mapImageUrl}
                 booths={booths}
                 readOnly={true}
                 myBoothId={myBoothId}
                 onFixMap={() => setMapImageUrl('/images/event-map.jpg')}
-                onBoothClick={(booth) => {
-                  if (booth.id === myBoothId) {
-                    console.log('Clicked on vendor booth:', booth);
-                  }
-                }}
+                onBoothClick={() => {}}
               />
             </div>
-
-            {myBoothId && (
-              <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-200">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-amber-500 rounded-full mr-3"></div>
-                  <div>
-                    <p className="font-medium text-amber-900">Your booth is highlighted on the map</p>
-                    <p className="text-sm text-amber-700">Customers can easily find your location at the event</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
+
+        {myBoothId ? (
+          <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-sm font-semibold text-black">Your booth is highlighted</div>
+            <div className="mt-1 text-sm text-neutral-600">Customers can find your location easily.</div>
+          </div>
+        ) : (
+          <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-sm font-semibold text-black">No booth assigned</div>
+            <div className="mt-1 text-sm text-neutral-600">Contact the organizer to assign your booth.</div>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
