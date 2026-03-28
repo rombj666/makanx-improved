@@ -6,6 +6,7 @@ import MenuCard from '../../components/customer/MenuCard';
 import CartBar from '../../components/customer/CartBar';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { toast } from 'react-hot-toast';
+import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
 
 interface MenuItem {
   id: string;
@@ -13,6 +14,8 @@ interface MenuItem {
   description?: string;
   price: number;
   imageUrl: string;
+  optionGroups?: any[];
+  remarksEnabled?: boolean;
 }
 
 interface Booth {
@@ -30,6 +33,7 @@ export function CustomerBoothOrderPage() {
   const navigate = useNavigate();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -82,14 +86,13 @@ export function CustomerBoothOrderPage() {
   }
 
   return (
-    <div className="w-full h-full bg-[#FAF7F0] flex flex-col">
+    <div className="w-full h-full bg-neutral-50 flex flex-col">
       <BoothHeader
         boothName={booth.name}
         boothNumber={booth.name}
         vendorName={booth.vendor?.businessName || null}
         description={null}
         heroImageUrl={null}
-        rating={null}
         prepTimeMinutes={5}
         onBack={() => navigate(`/customer/event/${slug}`)}
       />
@@ -109,18 +112,7 @@ export function CustomerBoothOrderPage() {
                 name={item.name}
                 price={item.price}
                 image={item.imageUrl}
-                description={item.description}
-                onAdd={({ quantity, remark }) => {
-                  cart.addLine({
-                    menuItemId: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity,
-                    remark,
-                    imageUrl: item.imageUrl || '',
-                  });
-                  toast.success('Added to cart');
-                }}
+                onClick={() => setActiveItem(item)}
               />
             ))}
           </div>
@@ -132,7 +124,29 @@ export function CustomerBoothOrderPage() {
         totalPrice={cart.total}
         onViewCart={() => navigate(`/customer/event/${slug}/order/${vendorId}/cart?boothId=${boothId}`)}
       />
+
+      <ProductDetailSheet
+        isOpen={!!activeItem}
+        name={activeItem?.name || ''}
+        price={Number(activeItem?.price || 0)}
+        imageUrl={activeItem?.imageUrl || ''}
+        optionGroups={Array.isArray(activeItem?.optionGroups) ? activeItem?.optionGroups : []}
+        remarksEnabled={activeItem?.remarksEnabled !== false}
+        onClose={() => setActiveItem(null)}
+        onAdd={({ quantity, remark, selectedOptions }) => {
+          if (!activeItem) return;
+          cart.addLine({
+            menuItemId: activeItem.id,
+            name: activeItem.name,
+            price: Number(activeItem.price),
+            quantity,
+            remark,
+            imageUrl: activeItem.imageUrl || '',
+            selectedOptions,
+          });
+          toast.success('Added to cart');
+        }}
+      />
     </div>
   );
 }
-

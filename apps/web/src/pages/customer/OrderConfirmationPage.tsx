@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { enableSound, primeReadySound } from '../../lib/alerts';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
 import { useSocket } from '../../context/SocketContext';
-import { toast } from 'react-hot-toast';
 
 interface OrderState {
   orderId?: string;
@@ -15,7 +13,7 @@ interface OrderState {
   vendorId?: string;
   boothId?: string;
   status?: string;
-  items?: { name: string; quantity: number; remark?: string }[];
+  items?: { name: string; quantity: number; remark?: string; selectedOptions?: any[] }[];
 }
 
 export function OrderConfirmationPage() {
@@ -72,6 +70,7 @@ export function OrderConfirmationPage() {
               name: it?.menuItem?.name || '',
               quantity: Number(it?.quantity ?? 0),
               remark: it?.remark || '',
+              selectedOptions: Array.isArray(it?.selectedOptions) ? it.selectedOptions : [],
             }))
           : [];
         let boothId: string | undefined = boothIdFromQuery;
@@ -116,30 +115,11 @@ export function OrderConfirmationPage() {
   const status = (liveStatus || order?.status || 'PREPARING').toUpperCase();
   const items = useMemo(() => (Array.isArray(order?.items) ? order!.items! : []), [order]);
 
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('soundEnabled') === 'true';
-  });
-
-  const toggleSound = () => {
-    const v = !soundEnabled;
-    setSoundEnabled(v);
-    try {
-      localStorage.setItem('soundEnabled', String(v));
-    } catch {}
-    if (v) {
-      enableSound();
-      primeReadySound();
-    }
-  };
-
   const [pushUiState, setPushUiState] = useState<
     'checking' | 'available' | 'enabled' | 'blocked' | 'not_supported'
   >('checking');
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
-  const [whatsappPhone, setWhatsappPhone] = useState('');
-  const [whatsappBusy, setWhatsappBusy] = useState(false);
 
   useEffect(() => {
     const run = async () => {
@@ -194,21 +174,6 @@ export function OrderConfirmationPage() {
     setPushBusy(false);
   };
 
-  const enableWhatsappPlaceholder = async () => {
-    if (whatsappBusy) return;
-    const raw = whatsappPhone.trim();
-    if (!raw) {
-      toast.error('Please enter your phone number');
-      return;
-    }
-    setWhatsappBusy(true);
-    try {
-      toast.success('WhatsApp notification UI coming soon');
-    } finally {
-      setWhatsappBusy(false);
-    }
-  };
-
   useEffect(() => {
     if (order || orderIdFromQuery) return;
     navigate('/', { replace: true });
@@ -260,45 +225,45 @@ export function OrderConfirmationPage() {
 
   if (!order && orderIdFromQuery) {
     return (
-      <div className="w-full h-full bg-[#FAF7F0] flex items-center justify-center">
-        <div className="text-sm text-gray-600">{loadError || 'Loading order…'}</div>
+      <div className="w-full h-full bg-neutral-50 flex items-center justify-center">
+        <div className="text-sm text-neutral-600">{loadError || 'Loading order…'}</div>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="w-full h-full bg-[#FAF7F0] flex items-center justify-center">
-        <div className="text-sm text-gray-600">Returning to home…</div>
+      <div className="w-full h-full bg-neutral-50 flex items-center justify-center">
+        <div className="text-sm text-neutral-600">Returning to home…</div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full bg-[#FAF7F0] flex flex-col">
+    <div className="w-full h-full bg-neutral-50 flex flex-col">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-md mx-auto p-4 pb-10">
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-neutral-100">
             <div className="p-5">
-            <div className="text-sm font-semibold text-gray-500">Order Confirmed</div>
-            <div className="text-2xl font-extrabold text-gray-900 mt-1">You’re all set</div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Order Confirmed</div>
+            <div className="text-2xl font-semibold text-black mt-2">You’re all set</div>
 
-            <div className="mt-5 bg-[#FAF7F0] rounded-3xl p-5 text-center">
-              <div className="text-xs font-semibold text-gray-500">Your Number</div>
-              <div className="text-5xl font-extrabold tracking-tight text-gray-900 mt-2">
+            <div className="mt-5 bg-neutral-50 rounded-3xl p-5 text-center border border-neutral-100">
+              <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Your Number</div>
+              <div className="text-5xl font-semibold tracking-tight text-black mt-2">
                 #{orderNumber}
               </div>
-              <div className="text-sm text-gray-600 mt-2">
-                Estimated prep time: <span className="font-semibold text-gray-900">~{eta} min</span>
+              <div className="text-sm text-neutral-600 mt-2">
+                Estimated prep time: <span className="font-semibold text-black">~{eta} min</span>
               </div>
               <div className="mt-3">
                 <span
                   className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
                     status === 'READY'
-                      ? 'bg-green-100 text-green-800'
+                      ? 'bg-black text-white'
                       : status === 'COMPLETED'
-                        ? 'bg-gray-200 text-gray-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                        ? 'bg-neutral-200 text-neutral-900'
+                        : 'bg-white text-black border border-neutral-200'
                   }`}
                 >
                   {status}
@@ -307,21 +272,35 @@ export function OrderConfirmationPage() {
             </div>
 
             <div className="mt-5">
-              <div className="text-sm font-extrabold text-gray-900">Order Summary</div>
+              <div className="text-sm font-semibold text-black">Order Summary</div>
               {items.length === 0 ? (
-                <div className="mt-2 text-sm text-gray-600">Summary unavailable.</div>
+                <div className="mt-2 text-sm text-neutral-600">Summary unavailable.</div>
               ) : (
                 <div className="mt-3 space-y-3">
                   {items.map((it, idx) => (
-                    <div key={idx} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                    <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="text-sm font-semibold text-gray-900">
+                        <div className="text-sm font-semibold text-black">
                           {it.quantity}x {it.name || 'Item'}
                         </div>
                       </div>
+                      {Array.isArray(it.selectedOptions) && it.selectedOptions.length > 0 ? (
+                        <div className="mt-1 text-xs text-neutral-600">
+                          {it.selectedOptions
+                            .map((s: any) => {
+                              const title = String(s?.title || '');
+                              const choices = Array.isArray(s?.choices) ? s.choices : [];
+                              const labels = choices.map((c: any) => String(c?.label || '')).filter(Boolean);
+                              if (!title || labels.length === 0) return '';
+                              return `${title}: ${labels.join(', ')}`;
+                            })
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </div>
+                      ) : null}
                       {it.remark && String(it.remark).trim() !== '' ? (
-                        <div className="mt-1 text-sm text-gray-600">
-                          <span className="text-gray-500">Remark:</span> {String(it.remark)}
+                        <div className="mt-1 text-sm text-neutral-600">
+                          <span className="text-neutral-500">Remark:</span> {String(it.remark)}
                         </div>
                       ) : null}
                     </div>
@@ -330,11 +309,9 @@ export function OrderConfirmationPage() {
               )}
             </div>
 
-            <div className="mt-5 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="text-sm font-extrabold text-gray-900">Website Notifications</div>
-              <div className="text-sm text-gray-600 mt-1">
-                Get a notification on this website when your order is ready.
-              </div>
+            <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
+              <div className="text-sm font-semibold text-black">Website Notifications</div>
+              <div className="text-sm text-neutral-600 mt-1">Get notified here when your order is ready.</div>
               {pushError ? <div className="text-sm text-red-600 mt-2">{pushError}</div> : null}
 
               <button
@@ -343,55 +320,17 @@ export function OrderConfirmationPage() {
                 className="mt-4 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition disabled:opacity-60 bg-black text-white"
               >
                 {pushUiState === 'enabled'
-                  ? 'Website Notifications Enabled'
+                  ? 'Enabled'
                   : pushUiState === 'blocked'
-                    ? 'Website Notifications Blocked'
+                    ? 'Blocked'
                     : pushUiState === 'not_supported'
-                      ? 'Website Notifications Not Supported'
+                      ? 'Not Supported'
                       : pushBusy
                         ? 'Enabling…'
                         : pushUiState === 'checking'
                           ? 'Checking…'
                           : 'Enable Website Notifications'}
               </button>
-
-              <button
-                onClick={toggleSound}
-                className={`mt-3 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition ${
-                  soundEnabled ? 'bg-yellow-500 text-black' : 'bg-white border border-gray-200 text-gray-900'
-                }`}
-              >
-                {soundEnabled ? 'Sound ON' : 'Sound OFF'}
-              </button>
-
-              <div className="mt-5 border-t border-gray-100 pt-5">
-                <div className="text-sm font-extrabold text-gray-900">WhatsApp Notifications</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  Get a WhatsApp message when your order is ready.
-                </div>
-
-                <label className="block mt-4">
-                  <div className="text-sm font-semibold text-gray-900">Phone Number</div>
-                  <input
-                    value={whatsappPhone}
-                    onChange={(e) => setWhatsappPhone(e.target.value)}
-                    placeholder="Enter WhatsApp number (e.g. 60123456789)"
-                    className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                    inputMode="tel"
-                  />
-                  <div className="mt-2 text-xs text-gray-500">
-                    Include country code, e.g. 60123456789
-                  </div>
-                </label>
-
-                <button
-                  onClick={enableWhatsappPlaceholder}
-                  disabled={whatsappBusy}
-                  className="mt-4 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition disabled:opacity-60 bg-black text-white"
-                >
-                  {whatsappBusy ? 'Saving…' : 'Enable WhatsApp Notifications'}
-                </button>
-              </div>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -411,7 +350,7 @@ export function OrderConfirmationPage() {
                   }
                   navigate(`/customer/event/${eventSlug}`);
                 }}
-                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-white border border-gray-200 text-gray-900"
+                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-white border border-neutral-200 text-black"
               >
                 Back to Menu
               </button>
@@ -425,7 +364,7 @@ export function OrderConfirmationPage() {
                   const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
                   navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
                 }}
-                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-yellow-500 text-black"
+                className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white"
               >
                 View Cart
               </button>

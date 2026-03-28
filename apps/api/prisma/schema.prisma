@@ -106,6 +106,8 @@ model MenuItem {
   price       Decimal
   imageUrl    String?
   isAvailable Boolean       @default(true)
+  optionGroups Json?
+  remarksEnabled Boolean    @default(true)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   vendor      VendorProfile @relation(fields: [vendorId], references: [id])
@@ -136,6 +138,7 @@ model OrderItem {
   quantity   Int
   price      Decimal
   remark     String?
+  selectedOptions Json?
   status     OrderItemStatus @default(PREPARING)
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   order      Order    @relation(fields: [orderId], references: [id])

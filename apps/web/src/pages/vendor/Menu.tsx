@@ -13,6 +13,24 @@ interface MenuItem {
   price: number;
   imageUrl?: string;
   isAvailable: boolean;
+  optionGroups?: any[];
+  remarksEnabled?: boolean;
+}
+
+type OptionChoice = { id: string; label: string; priceDelta?: number };
+type OptionGroup = {
+  id: string;
+  title: string;
+  type: 'single' | 'multi';
+  required: boolean;
+  choices: OptionChoice[];
+};
+
+function newId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return (crypto as any).randomUUID();
+  }
+  return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
 export function VendorMenu() {
@@ -26,8 +44,10 @@ export function VendorMenu() {
     name: '',
     price: '',
     description: '',
-    imageUrl: ''
+    imageUrl: '',
+    remarksEnabled: true as boolean,
   });
+  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -79,6 +99,8 @@ export function VendorMenu() {
       description: formData.description,
       imageUrl,
       isAvailable: true,
+      remarksEnabled: formData.remarksEnabled,
+      optionGroups,
     };
 
       if (editingItem) {
@@ -91,7 +113,9 @@ export function VendorMenu() {
       
       setIsModalOpen(false);
       setEditingItem(null);
-      setFormData({ name: '', price: '', description: '', imageUrl: '' });
+      setFormData({ name: '', price: '', description: '', imageUrl: '', remarksEnabled: true });
+      setOptionGroups([]);
+      setSelectedFile(null);
       fetchMenu();
     } catch (error) {
       toast.error('Operation failed');
@@ -100,7 +124,8 @@ export function VendorMenu() {
 
   const openAddModal = () => {
     setEditingItem(null);
-    setFormData({ name: '', price: '', description: '', imageUrl: '' });
+    setFormData({ name: '', price: '', description: '', imageUrl: '', remarksEnabled: true });
+    setOptionGroups([]);
     setIsModalOpen(true);
   };
 
@@ -110,8 +135,10 @@ export function VendorMenu() {
       name: item.name,
       price: item.price.toString(),
       description: item.description || '',
-      imageUrl: item.imageUrl || ''
+      imageUrl: item.imageUrl || '',
+      remarksEnabled: item.remarksEnabled !== false,
     });
+    setOptionGroups(Array.isArray(item.optionGroups) ? (item.optionGroups as any) : []);
     setIsModalOpen(true);
   };
 
@@ -153,6 +180,9 @@ export function VendorMenu() {
               </div>
               <p className="text-sm text-gray-500 line-clamp-2">{item.description}</p>
               <div className="mt-2 font-bold text-orange-600">${item.price.toFixed(2)}</div>
+              <div className="mt-1 text-xs text-gray-500">
+                {(Array.isArray(item.optionGroups) && item.optionGroups.length > 0) ? `${item.optionGroups.length} groups` : 'No customizations'}
+              </div>
             </div>
           </div>
         ))}
@@ -213,6 +243,166 @@ export function VendorMenu() {
               onChange={e => setFormData({...formData, description: e.target.value})} 
               placeholder="Ingredients, details..."
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={formData.remarksEnabled}
+              onChange={(e) => setFormData({ ...formData, remarksEnabled: e.target.checked })}
+            />
+            <div className="text-sm text-gray-700">Allow customer remarks</div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Customization Groups</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOptionGroups((prev) =>
+                    prev.concat({
+                      id: newId(),
+                      title: '',
+                      type: 'single',
+                      required: true,
+                      choices: [{ id: newId(), label: '' }],
+                    })
+                  )
+                }
+              >
+                <Plus size={16} className="mr-2" />
+                Add Group
+              </Button>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {optionGroups.map((g, gi) => (
+                <div key={g.id} className="rounded-lg border border-gray-200 p-3 bg-white">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-xs font-semibold text-gray-500">Group Name</label>
+                      <Input
+                        value={g.title}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setOptionGroups((prev) =>
+                            prev.map((x, i) => (i === gi ? { ...x, title: v } : x))
+                          );
+                        }}
+                        placeholder="e.g. Temperature"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOptionGroups((prev) => prev.filter((x) => x.id !== g.id))}
+                      className="p-2 text-gray-400 hover:text-red-600"
+                      aria-label="Remove group"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500">Type</label>
+                      <select
+                        value={g.type}
+                        onChange={(e) => {
+                          const v = e.target.value as 'single' | 'multi';
+                          setOptionGroups((prev) =>
+                            prev.map((x, i) => (i === gi ? { ...x, type: v } : x))
+                          );
+                        }}
+                        className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                      >
+                        <option value="single">Single choice</option>
+                        <option value="multi">Multiple choice</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <input
+                        type="checkbox"
+                        checked={g.required}
+                        onChange={(e) => {
+                          const v = e.target.checked;
+                          setOptionGroups((prev) =>
+                            prev.map((x, i) => (i === gi ? { ...x, required: v } : x))
+                          );
+                        }}
+                      />
+                      <div className="text-sm text-gray-700">Required</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-gray-500">Choices</div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setOptionGroups((prev) =>
+                            prev.map((x, i) =>
+                              i === gi
+                                ? { ...x, choices: x.choices.concat({ id: newId(), label: '' }) }
+                                : x
+                            )
+                          )
+                        }
+                      >
+                        <Plus size={14} className="mr-2" />
+                        Add Choice
+                      </Button>
+                    </div>
+
+                    <div className="mt-2 space-y-2">
+                      {g.choices.map((c, ci) => (
+                        <div key={c.id} className="flex items-center gap-2">
+                          <Input
+                            value={c.label}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setOptionGroups((prev) =>
+                                prev.map((x, i) =>
+                                  i === gi
+                                    ? {
+                                        ...x,
+                                        choices: x.choices.map((y, j) =>
+                                          j === ci ? { ...y, label: v } : y
+                                        ),
+                                      }
+                                    : x
+                                )
+                              );
+                            }}
+                            placeholder="e.g. Hot"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOptionGroups((prev) =>
+                                prev.map((x, i) =>
+                                  i === gi
+                                    ? { ...x, choices: x.choices.filter((y) => y.id !== c.id) }
+                                    : x
+                                )
+                              )
+                            }
+                            className="p-2 text-gray-400 hover:text-red-600"
+                            aria-label="Remove choice"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Image URL (Optional)</label>

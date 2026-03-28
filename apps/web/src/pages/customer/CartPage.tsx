@@ -47,6 +47,7 @@ export function CartPage() {
         name: l.name,
         quantity: l.quantity,
         remark: (l.remark || '').trim(),
+        selectedOptions: Array.isArray((l as any).selectedOptions) ? (l as any).selectedOptions : [],
       })),
     [cart.lines]
   );
@@ -72,6 +73,12 @@ export function CartPage() {
           menuItemId: l.menuItemId,
           quantity: l.quantity,
           remark: (l.remark || '').trim(),
+          selectedOptions: Array.isArray((l as any).selectedOptions)
+            ? (l as any).selectedOptions.map((s: any) => ({
+                groupId: String(s?.groupId || ''),
+                choiceIds: Array.isArray(s?.choiceIds) ? s.choiceIds.map(String).filter(Boolean) : [],
+              }))
+            : [],
         })),
         paymentMode: 'PAY_AT_BOOTH',
         guestId,
@@ -94,7 +101,12 @@ export function CartPage() {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
         displayNumber,
-        items: summaryItems.map((it) => ({ name: it.name, quantity: it.quantity, remark: it.remark })),
+        items: summaryItems.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          remark: it.remark,
+          selectedOptions: it.selectedOptions,
+        })),
       } as any);
 
       cart.clear();
@@ -127,15 +139,14 @@ export function CartPage() {
   };
 
   return (
-    <div className="w-full h-full bg-[#FAF7F0] flex flex-col">
+    <div className="w-full h-full bg-neutral-50 flex flex-col">
       <BoothHeader
         boothName={vendorTitle}
         boothNumber={cart.boothName || null}
         vendorName={cart.vendorName || null}
         description={null}
         heroImageUrl={null}
-        prepTimeMinutes={null}
-        rating={null}
+        prepTimeMinutes={5}
         onBack={() =>
           boothId
             ? navigate(`/customer/event/${eventSlug}/booth/${boothId}`)
@@ -145,10 +156,10 @@ export function CartPage() {
 
       <div className={`flex-1 overflow-y-auto p-4 ${hasCheckoutBar ? 'pb-32' : 'pb-6'}`}>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-lg font-bold text-gray-900">View Cart</div>
+          <div className="text-lg font-semibold text-black">Cart</div>
           <button
             onClick={() => navigate(`/customer/event/${eventSlug}/order/${vid}`)}
-            className="text-sm font-semibold text-gray-700 underline underline-offset-4"
+            className="text-sm font-semibold text-neutral-700 underline underline-offset-4"
           >
             Continue browsing
           </button>
@@ -158,22 +169,22 @@ export function CartPage() {
 
         {activeOrdersForVendor.length > 0 ? (
           <div className="mb-4">
-            <div className="text-sm font-extrabold text-gray-900 mb-2">Current Orders</div>
+            <div className="text-sm font-semibold text-black mb-2">Current Orders</div>
             <div className="space-y-3">
               {activeOrdersForVendor.map((ord) => {
                 const ordStatus = String(ord.status || '').toUpperCase();
                 return (
-                  <div key={ord.orderId} className="bg-white rounded-3xl shadow-xl overflow-hidden">
+                  <div key={ord.orderId} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
                     <div className="p-5">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-extrabold text-gray-900">Order #{ord.displayNumber}</div>
+                        <div className="text-sm font-semibold text-black">Order #{ord.displayNumber}</div>
                         <span
                           className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
                             ordStatus === 'READY'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'bg-neutral-900 text-white'
                               : ordStatus === 'PREPARING'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-gray-200 text-gray-800'
+                                ? 'bg-white text-black border border-neutral-200'
+                                : 'bg-neutral-100 text-neutral-800'
                           }`}
                         >
                           {ordStatus || '—'}
@@ -182,16 +193,16 @@ export function CartPage() {
 
                       {Array.isArray(ord.items) && ord.items.length > 0 ? (
                         <div className="mt-4">
-                          <div className="text-sm font-extrabold text-gray-900">Order Details</div>
+                          <div className="text-sm font-semibold text-black">Order Details</div>
                           <div className="mt-3 space-y-3">
                             {ord.items.map((it, idx) => (
-                              <div key={idx} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                                <div className="text-sm font-semibold text-gray-900">
+                              <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
+                                <div className="text-sm font-semibold text-black">
                                   {it.quantity}x {it.name || 'Item'}
                                 </div>
                                 {it.remark && String(it.remark).trim() !== '' ? (
-                                  <div className="mt-1 text-sm text-gray-600">
-                                    <span className="text-gray-500">Remark:</span> {String(it.remark)}
+                                  <div className="mt-1 text-sm text-neutral-600">
+                                    <span className="text-neutral-500">Remark:</span> {String(it.remark)}
                                   </div>
                                 ) : null}
                               </div>
@@ -207,10 +218,10 @@ export function CartPage() {
           </div>
         ) : null}
 
-        <div className="text-sm font-extrabold text-gray-900 mb-2">New Cart</div>
+        <div className="text-sm font-semibold text-black mb-2">New Cart</div>
 
         {cart.lines.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-md p-5 text-gray-600">
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-5 text-neutral-600">
             Your cart is empty.
           </div>
         ) : (
@@ -234,11 +245,11 @@ export function CartPage() {
             <div className="p-4">
               <div className="flex justify-between text-sm text-gray-600">
                 <div>Subtotal</div>
-                <div className="font-semibold text-gray-900">${cart.subtotal.toFixed(2)}</div>
+                <div className="font-semibold text-black">RM{cart.subtotal.toFixed(2)}</div>
               </div>
               <div className="flex justify-between mt-1 text-base">
-                <div className="font-semibold text-gray-900">Total</div>
-                <div className="font-extrabold text-gray-900">${cart.total.toFixed(2)}</div>
+                <div className="font-semibold text-black">Total</div>
+                <div className="font-extrabold text-black">RM{cart.total.toFixed(2)}</div>
               </div>
 
               <button

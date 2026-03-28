@@ -8,6 +8,7 @@ export type CartLine = {
   quantity: number;
   remark: string;
   imageUrl: string;
+  selectedOptions?: { groupId: string; choiceIds: string[]; title?: string; choiceLabels?: string[] }[];
 };
 
 type CartState = {
@@ -35,6 +36,24 @@ function newId() {
     return (crypto as any).randomUUID();
   }
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function clampQuantity(q: number) {
+  if (!Number.isFinite(q)) return 1;
+  return Math.max(1, Math.min(99, Math.floor(q)));
+}
+
+function normalizeSelectedOptions(input: CartLine['selectedOptions']): string {
+  const list = Array.isArray(input) ? input : [];
+  const normalized = list
+    .map((s) => ({
+      groupId: String((s as any)?.groupId || ''),
+      choiceIds: Array.isArray((s as any)?.choiceIds) ? (s as any).choiceIds.map(String).filter(Boolean) : [],
+    }))
+    .filter((s) => s.groupId && s.choiceIds.length > 0)
+    .map((s) => ({ ...s, choiceIds: Array.from(new Set(s.choiceIds)).sort() }))
+    .sort((a, b) => a.groupId.localeCompare(b.groupId));
+  return JSON.stringify(normalized);
 }
 
 export function useCustomerCart(params: {
@@ -80,17 +99,23 @@ export function useCustomerCart(params: {
     (input: Omit<CartLine, 'id'>) => {
       setState((prev) => {
         const normalizedRemark = (input.remark || '').trim();
+        const qty = clampQuantity(input.quantity);
+        const sig = normalizeSelectedOptions(input.selectedOptions);
         const idx = prev.lines.findIndex(
-          (l) => l.menuItemId === input.menuItemId && (l.remark || '').trim() === normalizedRemark
+          (l) =>
+            l.menuItemId === input.menuItemId &&
+            (l.remark || '').trim() === normalizedRemark &&
+            normalizeSelectedOptions(l.selectedOptions) === sig
         );
         const nextLines =
           idx >= 0
             ? prev.lines.map((l, i) =>
-                i === idx ? { ...l, quantity: l.quantity + input.quantity } : l
+                i === idx ? { ...l, quantity: clampQuantity(l.quantity + qty) } : l
               )
             : prev.lines.concat({
                 ...input,
                 id: newId(),
+                quantity: qty,
                 remark: normalizedRemark,
               });
         return {
@@ -107,7 +132,7 @@ export function useCustomerCart(params: {
   const updateQuantity = useCallback((id: string, quantity: number) => {
     setState((prev) => {
       const next = prev.lines
-        .map((l) => (l.id === id ? { ...l, quantity } : l))
+        .map((l) => (l.id === id ? { ...l, quantity: clampQuantity(quantity) } : l))
         .filter((l) => l.quantity > 0);
       return { ...prev, lines: next };
     });

@@ -19,13 +19,25 @@ const createOrderSchema = z.object({
   items: z.array(
     z.object({
       menuItemId: z.string().uuid(),
-      quantity: z.number().min(1),
+      quantity: z.number().min(1).max(99),
       remark: z.string().max(500).optional(),
+      selectedOptions: z
+        .array(
+          z.object({
+            groupId: z.string().min(1),
+            choiceIds: z.array(z.string().min(1)).min(1),
+          })
+        )
+        .optional(),
     })
   ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
   guestId: z.string().optional(),
 });
+
+function coerceOptionGroups(val: any): any[] {
+  return Array.isArray(val) ? val : [];
+}
 
 export const createOrder = async (
   customerId: string | undefined,
@@ -47,6 +59,65 @@ export const createOrder = async (
     if (!menuItem) throw new Error(`Menu item ${item.menuItemId} not found`);
     if (menuItem.vendorId !== vendorId) throw new Error('Menu item does not belong to vendor');
 
+    const optionGroups = coerceOptionGroups((menuItem as any).optionGroups);
+    const remarksEnabled = (menuItem as any).remarksEnabled !== false;
+    const selections = Array.isArray(item.selectedOptions) ? item.selectedOptions : [];
+
+    const selectionsByGroup = new Map<string, string[]>();
+    for (const s of selections) {
+      if (!s?.groupId) continue;
+      const ids = Array.isArray(s.choiceIds) ? s.choiceIds.filter(Boolean) : [];
+      if (ids.length === 0) continue;
+      selectionsByGroup.set(String(s.groupId), Array.from(new Set(ids.map(String))));
+    }
+
+    const frozenSelections: any[] = [];
+    for (const g of optionGroups) {
+      const groupId = String(g?.id || '');
+      if (!groupId) continue;
+      const required = !!g?.required;
+      const type = String(g?.type || 'single');
+      const title = String(g?.title || '');
+      const choices = Array.isArray(g?.choices) ? g.choices : [];
+
+      const selected = selectionsByGroup.get(groupId) || [];
+      if (required && selected.length === 0) {
+        throw new Error(`Missing required option: ${title || groupId}`);
+      }
+      if (selected.length === 0) continue;
+
+      if (type === 'single' && selected.length !== 1) {
+        throw new Error(`Invalid selection for ${title || groupId}`);
+      }
+
+      const choiceMap = new Map<string, any>();
+      for (const c of choices) {
+        const cid = String(c?.id || '');
+        if (!cid) continue;
+        choiceMap.set(cid, c);
+      }
+
+      const invalid = selected.find((cid) => !choiceMap.has(cid));
+      if (invalid) throw new Error(`Invalid choice for ${title || groupId}`);
+
+      const selectedChoices = selected.map((cid) => {
+        const c = choiceMap.get(cid);
+        return {
+          id: String(c?.id || cid),
+          label: String(c?.label || ''),
+          priceDelta: typeof c?.priceDelta === 'number' ? c.priceDelta : 0,
+        };
+      });
+
+      frozenSelections.push({
+        groupId,
+        title,
+        type,
+        required,
+        choices: selectedChoices,
+      });
+    }
+
     const priceNumber = Number(menuItem.price);
     totalAmountNumber += priceNumber * item.quantity;
 
@@ -54,7 +125,8 @@ export const createOrder = async (
       menuItemId: item.menuItemId,
       quantity: item.quantity,
       price: menuItem.price, // snapshot
-      remark: item.remark ? String(item.remark).trim() : null,
+      remark: remarksEnabled && item.remark ? String(item.remark).trim() : null,
+      selectedOptions: frozenSelections,
     });
   }
 
