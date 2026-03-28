@@ -21,7 +21,16 @@ export const updateBooth = async (req: Request, res: Response) => {
     const result = await boothService.updateBooth(req.params.id, req.user.userId, req.body);
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    const statusCode = Number(error?.statusCode || 0) || (error?.message === 'Booth not found' ? 404 : 400);
+    if (statusCode === 403) {
+      console.warn('[booth] 403 updateBooth forbidden', {
+        userId: req.user?.userId || null,
+        role: (req.user as any)?.role || null,
+        boothId: req.params.id,
+        meta: error?.meta || null,
+      });
+    }
+    res.status(statusCode).json({ success: false, error: error.message });
   }
 };
 
@@ -31,7 +40,16 @@ export const deleteBooth = async (req: Request, res: Response) => {
     await boothService.deleteBooth(req.params.id, req.user.userId);
     res.status(200).json({ success: true, message: 'Booth deleted' });
   } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
+    const statusCode = Number(error?.statusCode || 0) || (error?.message === 'Booth not found' ? 404 : 400);
+    if (statusCode === 403) {
+      console.warn('[booth] 403 deleteBooth forbidden', {
+        userId: req.user?.userId || null,
+        role: (req.user as any)?.role || null,
+        boothId: req.params.id,
+        meta: error?.meta || null,
+      });
+    }
+    res.status(statusCode).json({ success: false, error: error.message });
   }
 };
 

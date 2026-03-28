@@ -29,7 +29,17 @@ export const createBooth = async (organizerId: string, input: z.infer<typeof boo
 
   const event = await prisma.event.findUnique({ where: { id: data.eventId } });
   if (!event) throw new Error('Event not found');
-  if (event.organizerId !== organizerId) throw new Error('Unauthorized');
+  if (event.organizerId !== organizerId) {
+    const err: any = new Error('Forbidden');
+    err.statusCode = 403;
+    err.meta = {
+      reason: 'event_owner_mismatch',
+      userId: organizerId,
+      eventId: data.eventId,
+      eventOrganizerId: event.organizerId,
+    };
+    throw err;
+  }
 
   return prisma.booth.create({
     data,
@@ -43,7 +53,18 @@ export const updateBooth = async (id: string, organizerId: string, input: Partia
   });
   
   if (!booth) throw new Error('Booth not found');
-  if (booth.event.organizerId !== organizerId) throw new Error('Unauthorized');
+  if (booth.event.organizerId !== organizerId) {
+    const err: any = new Error('Forbidden');
+    err.statusCode = 403;
+    err.meta = {
+      reason: 'event_owner_mismatch',
+      userId: organizerId,
+      boothId: id,
+      boothEventId: booth.eventId,
+      eventOrganizerId: booth.event.organizerId,
+    };
+    throw err;
+  }
 
   const data = boothSchema.partial().parse(input);
 
@@ -60,7 +81,18 @@ export const deleteBooth = async (id: string, organizerId: string) => {
   });
   
   if (!booth) throw new Error('Booth not found');
-  if (booth.event.organizerId !== organizerId) throw new Error('Unauthorized');
+  if (booth.event.organizerId !== organizerId) {
+    const err: any = new Error('Forbidden');
+    err.statusCode = 403;
+    err.meta = {
+      reason: 'event_owner_mismatch',
+      userId: organizerId,
+      boothId: id,
+      boothEventId: booth.eventId,
+      eventOrganizerId: booth.event.organizerId,
+    };
+    throw err;
+  }
 
   return prisma.booth.delete({ where: { id } });
 };
@@ -74,7 +106,17 @@ export const updateEventLayout = async (organizerId: string, input: z.infer<type
 
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) throw new Error('Event not found');
-  if (event.organizerId !== organizerId) throw new Error('Unauthorized');
+  if (event.organizerId !== organizerId) {
+    const err: any = new Error('Forbidden');
+    err.statusCode = 403;
+    err.meta = {
+      reason: 'event_owner_mismatch',
+      userId: organizerId,
+      eventId,
+      eventOrganizerId: event.organizerId,
+    };
+    throw err;
+  }
 
   // Update Map Image if provided
   if (mapImageUrl) {

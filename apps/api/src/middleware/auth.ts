@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, TokenPayload } from '../utils/jwt';
 import { Role } from '@makanx/shared';
+import prisma from '../utils/prisma';
 
 // Extend Express Request to include user
 declare global {
@@ -50,15 +51,40 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction) =>
 };
 
 export const requireRole = (roles: Role[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ success: false, error: 'Forbidden: Insufficient permissions' });
+    const tokenRole = req.user.role;
+    if (roles.includes(tokenRole)) {
+      return next();
     }
 
-    next();
+    let dbRole: Role | null = null;
+    try {
+      const found = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { role: true },
+      });
+      dbRole = (found?.role as Role) || null;
+    } catch {}
+
+    if (dbRole && roles.includes(dbRole)) {
+      req.user.role = dbRole;
+      return next();
+    }
+
+    console.warn('[auth] 403 forbidden', {
+      userId: req.user.userId,
+      tokenRole,
+      dbRole,
+      requiredRoles: roles,
+      method: req.method,
+      path: req.originalUrl,
+      boothId: (req.params as any)?.id || null,
+    });
+
+    return res.status(403).json({ success: false, error: 'Forbidden: Insufficient permissions' });
   };
 };
