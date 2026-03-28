@@ -174,7 +174,14 @@ export const createOrder = async (
       const avgMinutesPerOrder = 5;
       const estimatedMinutes = pendingCount * avgMinutesPerOrder;
 
-      return { order: createdOrder, estimatedMinutes };
+      const queueNumber = await tx.order.count({
+        where: { vendorId, createdAt: { lte: createdOrder.createdAt } },
+      });
+
+      return {
+        order: { ...createdOrder, queueNumber, displayNumber: String(queueNumber) },
+        estimatedMinutes,
+      };
     });
   } catch (e: any) {
     if (isMissingColumnError(e, 'selectedOptions')) {
@@ -206,7 +213,14 @@ export const createOrder = async (
         const avgMinutesPerOrder = 5;
         const estimatedMinutes = pendingCount * avgMinutesPerOrder;
 
-        return { order: createdOrder, estimatedMinutes };
+        const queueNumber = await tx.order.count({
+          where: { vendorId, createdAt: { lte: createdOrder.createdAt } },
+        });
+
+        return {
+          order: { ...createdOrder, queueNumber, displayNumber: String(queueNumber) },
+          estimatedMinutes,
+        };
       });
     } else {
       throw e;
@@ -381,7 +395,7 @@ export const getVendorProductionBatch = async (
  * Customer Orders (for customer "My Orders")
  */
 export const getCustomerOrders = async (customerId: string) => {
-  return prisma.order.findMany({
+  const orders = await prisma.order.findMany({
     where: { 
       customerId,
       status: { in: ['PREPARING', 'READY', 'COMPLETED'] }
@@ -392,6 +406,22 @@ export const getCustomerOrders = async (customerId: string) => {
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  const withQueue = await Promise.all(
+    orders.map(async (o: any) => {
+      const vendorId = String(o?.vendorId || '');
+      const createdAt = o?.createdAt;
+      if (!vendorId || !createdAt) return o;
+
+      const queueNumber = await prisma.order.count({
+        where: { vendorId, createdAt: { lte: createdAt } },
+      });
+
+      return { ...o, queueNumber, displayNumber: String(queueNumber) };
+    })
+  );
+
+  return withQueue;
 };
 
 /**

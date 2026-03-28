@@ -31,9 +31,10 @@ function safeParse<T>(val: string | null, fallback: T): T {
   }
 }
 
-function computeDisplayNumber(order: any): string {
+function extractExplicitDisplayNumber(order: any): string | null {
   const raw =
     order?.boothOrderNumber ??
+    order?.queueNumber ??
     order?.displayNumber ??
     order?.orderNumber ??
     order?.sequence ??
@@ -41,6 +42,12 @@ function computeDisplayNumber(order: any): string {
   if (raw !== null && raw !== undefined && `${raw}`.trim() !== '') {
     return String(raw).toUpperCase();
   }
+  return null;
+}
+
+function computeDisplayNumber(order: any): string {
+  const explicit = extractExplicitDisplayNumber(order);
+  if (explicit) return explicit;
   const id = order?.id || '';
   return id ? id.slice(-4).toUpperCase() : '----';
 }
@@ -146,21 +153,23 @@ export function useCustomerOrders(eventSlug: string | undefined) {
     if (!socket) return;
 
     const onUpdate = (updated: any) => {
+      const explicitDisplay = extractExplicitDisplayNumber(updated);
       const upd: Partial<ActiveOrder> = {
         orderId: updated.id,
         status: updated.status,
         updatedAt: updated.updatedAt,
         estimatedMinutes: Math.max(Number(updated.estimatedMinutes ?? 0), 0),
-        displayNumber: computeDisplayNumber(updated),
         vendorName: updated.vendor?.businessName || updated.vendorName,
         vendorId: updated.vendorId,
+        ...(explicitDisplay ? { displayNumber: explicitDisplay } : {}),
       };
       setOrders((prev) => {
         const next = prev.slice();
         const idx = next.findIndex((o) => o.orderId === upd.orderId);
         let becameReady = false;
         let becameCompleted = false;
-        let displayNum = upd.displayNumber || computeDisplayNumber(updated);
+        let displayNum =
+          explicitDisplay || (idx >= 0 ? next[idx]?.displayNumber : null) || computeDisplayNumber(updated);
         if (idx >= 0) {
           const old = next[idx];
           const merged = { ...old, ...upd };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Info } from 'lucide-react';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
@@ -57,6 +58,7 @@ export function OrderConfirmationPage() {
         }
         const raw =
           found?.boothOrderNumber ??
+          found?.queueNumber ??
           found?.displayNumber ??
           found?.orderNumber ??
           found?.sequence ??
@@ -310,8 +312,16 @@ export function OrderConfirmationPage() {
             </div>
 
             <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
-              <div className="text-sm font-semibold text-black">Website Notifications</div>
-              <div className="text-sm text-neutral-600 mt-1">Get notified here when your order is ready.</div>
+              <div className="text-sm font-semibold text-black">Notifications</div>
+              <div className="mt-3 flex items-start gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-neutral-200 bg-white text-black">
+                  <Info size={14} />
+                </div>
+                <div className="text-sm leading-snug text-neutral-800">
+                  <span className="font-semibold text-black">Reminder:</span> Keep this website open to receive order
+                  updates and notifications.
+                </div>
+              </div>
               {pushError ? <div className="text-sm text-red-600 mt-2">{pushError}</div> : null}
 
               <button

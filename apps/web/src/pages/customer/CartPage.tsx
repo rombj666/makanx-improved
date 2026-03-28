@@ -11,6 +11,7 @@ import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 function computeDisplayNumber(order: any): string {
   const raw =
     order?.boothOrderNumber ??
+    order?.queueNumber ??
     order?.displayNumber ??
     order?.orderNumber ??
     order?.sequence ??
