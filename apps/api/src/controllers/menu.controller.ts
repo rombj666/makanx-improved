@@ -22,6 +22,8 @@ export const getVendorMenu = async (req: any, res: any) => {
     const normalized = items.map((item: any) => ({
       ...item,
       price: Number(item.price),
+      optionGroups: Array.isArray(item.optionGroups) ? item.optionGroups : [],
+      remarksEnabled: item.remarksEnabled !== false,
     }));
 
     res.json({ success: true, data: normalized });

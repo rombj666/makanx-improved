@@ -1,6 +1,11 @@
 import prisma from '../utils/prisma';
 import { z } from 'zod';
 
+function isMissingColumnError(e: any, columnName: string) {
+  const msg = String(e?.message || '');
+  return msg.includes('column') && msg.includes(columnName) && msg.includes('does not exist');
+}
+
 const optionChoiceSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -35,18 +40,34 @@ export const createMenuItem = async (userId: string, data: any) => {
   }
 
   const parsed = menuItemInputSchema.parse(data);
-  return prisma.menuItem.create({
-    data: {
-      vendorId: vendorProfile.id,
-      name: parsed.name,
-      description: parsed.description || null,
-      price: parsed.price,
-      imageUrl: parsed.imageUrl || null,
-      isAvailable: parsed.isAvailable ?? true,
-      remarksEnabled: parsed.remarksEnabled ?? true,
-      optionGroups: parsed.optionGroups ?? [],
+  try {
+    return await prisma.menuItem.create({
+      data: {
+        vendorId: vendorProfile.id,
+        name: parsed.name,
+        description: parsed.description || null,
+        price: parsed.price,
+        imageUrl: parsed.imageUrl || null,
+        isAvailable: parsed.isAvailable ?? true,
+        remarksEnabled: parsed.remarksEnabled ?? true,
+        optionGroups: parsed.optionGroups ?? [],
+      },
+    });
+  } catch (e: any) {
+    if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) {
+      return prisma.menuItem.create({
+        data: {
+          vendorId: vendorProfile.id,
+          name: parsed.name,
+          description: parsed.description || null,
+          price: parsed.price,
+          imageUrl: parsed.imageUrl || null,
+          isAvailable: parsed.isAvailable ?? true,
+        } as any,
+      });
     }
-  });
+    throw e;
+  }
 };
 
 export const getVendorMenu = async (userId: string) => {
@@ -58,10 +79,45 @@ export const getVendorMenu = async (userId: string) => {
     throw new Error("Vendor profile not found");
   }
 
-  return prisma.menuItem.findMany({
-    where: { vendorId: vendorProfile.id },
-    orderBy: { createdAt: "desc" }
-  });
+  try {
+    return await prisma.menuItem.findMany({
+      where: { vendorId: vendorProfile.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        vendorId: true,
+        name: true,
+        description: true,
+        price: true,
+        imageUrl: true,
+        isAvailable: true,
+        createdAt: true,
+        updatedAt: true,
+        optionGroups: true,
+        remarksEnabled: true,
+      },
+    });
+  } catch (e: any) {
+    if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) {
+      const items = await prisma.menuItem.findMany({
+        where: { vendorId: vendorProfile.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          vendorId: true,
+          name: true,
+          description: true,
+          price: true,
+          imageUrl: true,
+          isAvailable: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      return items.map((it: any) => ({ ...it, optionGroups: [], remarksEnabled: true }));
+    }
+    throw e;
+  }
 };
 
 export const updateMenuItem = async (
@@ -90,10 +146,26 @@ export const updateMenuItem = async (
   if (parsed.remarksEnabled !== undefined) updateData.remarksEnabled = parsed.remarksEnabled;
   if (parsed.optionGroups !== undefined) updateData.optionGroups = parsed.optionGroups;
 
-  return prisma.menuItem.update({
-    where: { id: itemId },
-    data: updateData,
-  });
+  try {
+    return await prisma.menuItem.update({
+      where: { id: itemId },
+      data: updateData,
+    });
+  } catch (e: any) {
+    if (
+      (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) &&
+      (updateData.optionGroups !== undefined || updateData.remarksEnabled !== undefined)
+    ) {
+      const fallback = { ...updateData };
+      delete (fallback as any).optionGroups;
+      delete (fallback as any).remarksEnabled;
+      return prisma.menuItem.update({
+        where: { id: itemId },
+        data: fallback,
+      });
+    }
+    throw e;
+  }
 };
 
 export const deleteMenuItem = async (

@@ -39,6 +39,11 @@ function coerceOptionGroups(val: any): any[] {
   return Array.isArray(val) ? val : [];
 }
 
+function isMissingColumnError(e: any, columnName: string) {
+  const msg = String(e?.message || '');
+  return msg.includes('column') && msg.includes(columnName) && msg.includes('does not exist');
+}
+
 export const createOrder = async (
   customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
@@ -144,31 +149,69 @@ export const createOrder = async (
   if (!booth) throw new Error('Vendor has no assigned booth');
 
   // Transaction: create order + compute ETA (vendor-based)
-  const result = await prisma.$transaction(async (tx) => {
-    const createdOrder = await tx.order.create({
-      data: {
-        customerId: finalCustomerId,
-        vendorId,
-        totalAmount,
-        status: OrderStatus.PREPARING,
-        paymentMode,
-        paymentStatus,
-        items: { create: orderItemsData as any },
-      },
-      include: {
-        items: { include: { menuItem: true } },
-      },
+  let result: { order: any; estimatedMinutes: number };
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const createdOrder = await tx.order.create({
+        data: {
+          customerId: finalCustomerId,
+          vendorId,
+          totalAmount,
+          status: OrderStatus.PREPARING,
+          paymentMode,
+          paymentStatus,
+          items: { create: orderItemsData as any },
+        },
+        include: {
+          items: { include: { menuItem: true } },
+        },
+      });
+
+      const pendingCount = await tx.order.count({
+        where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
+      });
+
+      const avgMinutesPerOrder = 5;
+      const estimatedMinutes = pendingCount * avgMinutesPerOrder;
+
+      return { order: createdOrder, estimatedMinutes };
     });
+  } catch (e: any) {
+    if (isMissingColumnError(e, 'selectedOptions')) {
+      const fallbackItems = orderItemsData.map((x) => {
+        const copy: any = { ...x };
+        delete copy.selectedOptions;
+        return copy;
+      });
+      result = await prisma.$transaction(async (tx) => {
+        const createdOrder = await tx.order.create({
+          data: {
+            customerId: finalCustomerId,
+            vendorId,
+            totalAmount,
+            status: OrderStatus.PREPARING,
+            paymentMode,
+            paymentStatus,
+            items: { create: fallbackItems as any },
+          },
+          include: {
+            items: { include: { menuItem: true } },
+          },
+        });
 
-    const pendingCount = await tx.order.count({
-      where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
-    });
+        const pendingCount = await tx.order.count({
+          where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
+        });
 
-    const avgMinutesPerOrder = 5;
-    const estimatedMinutes = pendingCount * avgMinutesPerOrder;
+        const avgMinutesPerOrder = 5;
+        const estimatedMinutes = pendingCount * avgMinutesPerOrder;
 
-    return { order: createdOrder, estimatedMinutes };
-  });
+        return { order: createdOrder, estimatedMinutes };
+      });
+    } else {
+      throw e;
+    }
+  }
 
   // Audit log
   await createAuditLog(
@@ -195,13 +238,93 @@ export const getVendorOrders = async (userId: string) => {
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
-  return prisma.order.findMany({
-    where: { vendorId: vendorProfile.id },
-    include: {
-      items: { include: { menuItem: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  try {
+    return await prisma.order.findMany({
+      where: { vendorId: vendorProfile.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        customerId: true,
+        vendorId: true,
+        status: true,
+        paymentMode: true,
+        paymentStatus: true,
+        totalAmount: true,
+        createdAt: true,
+        updatedAt: true,
+        acceptedAt: true,
+        readyAt: true,
+        completedAt: true,
+        items: {
+          select: {
+            id: true,
+            orderId: true,
+            menuItemId: true,
+            quantity: true,
+            price: true,
+            remark: true,
+            status: true,
+            selectedOptions: true,
+            menuItem: {
+              select: {
+                id: true,
+                vendorId: true,
+                name: true,
+                description: true,
+                price: true,
+                imageUrl: true,
+                isAvailable: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  } catch (e: any) {
+    if (isMissingColumnError(e, 'selectedOptions')) {
+      return prisma.order.findMany({
+        where: { vendorId: vendorProfile.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          customerId: true,
+          vendorId: true,
+          status: true,
+          paymentMode: true,
+          paymentStatus: true,
+          totalAmount: true,
+          createdAt: true,
+          updatedAt: true,
+          acceptedAt: true,
+          readyAt: true,
+          completedAt: true,
+          items: {
+            select: {
+              id: true,
+              orderId: true,
+              menuItemId: true,
+              quantity: true,
+              price: true,
+              remark: true,
+              status: true,
+              menuItem: {
+                select: {
+                  id: true,
+                  vendorId: true,
+                  name: true,
+                  description: true,
+                  price: true,
+                  imageUrl: true,
+                  isAvailable: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+    throw e;
+  }
 };
 
 export const getVendorProductionBatch = async (
