@@ -118,7 +118,11 @@ export function VendorMenu() {
       setSelectedFile(null);
       fetchMenu();
     } catch (error) {
-      toast.error('Operation failed');
+      const msg =
+        (error as any)?.response?.data?.message ||
+        (error as any)?.response?.data?.error ||
+        'Operation failed';
+      toast.error(msg);
     }
   };
 
@@ -149,7 +153,11 @@ export function VendorMenu() {
       toast.success('Item deleted');
       fetchMenu();
     } catch (error) {
-      toast.error('Delete failed');
+      const msg =
+        (error as any)?.response?.data?.message ||
+        (error as any)?.response?.data?.error ||
+        'Delete failed';
+      toast.error(msg);
     }
   };
 

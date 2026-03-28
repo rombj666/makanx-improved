@@ -1,5 +1,13 @@
 import * as menuService from '../services/menu.service';
 
+import { ZodError } from 'zod';
+
+function errorToMessage(err: any) {
+  if (!err) return 'Unknown error';
+  if (err instanceof ZodError) return 'Invalid menu item payload';
+  return err.message || String(err);
+}
+
 export const createMenuItem = async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
@@ -10,7 +18,12 @@ export const createMenuItem = async (req: any, res: any) => {
       data: { ...item, price: Number(item.price) },
     });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('[menu-items] create failed', error);
+    res.status(400).json({
+      success: false,
+      message: errorToMessage(error),
+      details: error instanceof ZodError ? error.issues : undefined,
+    });
   }
 };
 
@@ -28,7 +41,8 @@ export const getVendorMenu = async (req: any, res: any) => {
 
     res.json({ success: true, data: normalized });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('[menu-items] list failed', error);
+    res.status(400).json({ success: false, message: errorToMessage(error) });
   }
 };
 
@@ -44,7 +58,12 @@ export const updateMenuItem = async (req: any, res: any) => {
       data: { ...updated, price: Number(updated.price) },
     });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('[menu-items] update failed', error);
+    res.status(400).json({
+      success: false,
+      message: errorToMessage(error),
+      details: error instanceof ZodError ? error.issues : undefined,
+    });
   }
 };
 
@@ -53,10 +72,14 @@ export const deleteMenuItem = async (req: any, res: any) => {
     const userId = req.user.userId;
     const itemId = req.params.id;
 
-    await menuService.deleteMenuItem(userId, itemId);
+    const deletedOrArchived = await menuService.deleteMenuItem(userId, itemId);
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      data: { archived: deletedOrArchived?.isAvailable === false },
+    });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('[menu-items] delete failed', error);
+    res.status(400).json({ success: false, message: errorToMessage(error) });
   }
 };

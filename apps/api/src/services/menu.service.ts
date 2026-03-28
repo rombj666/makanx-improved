@@ -27,7 +27,18 @@ const menuItemInputSchema = z.object({
   imageUrl: z.string().optional(),
   isAvailable: z.boolean().optional(),
   remarksEnabled: z.boolean().optional(),
-  optionGroups: z.array(optionGroupSchema).optional(),
+  optionGroups: z
+    .preprocess((val) => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return val;
+        }
+      }
+      return val;
+    }, z.array(optionGroupSchema))
+    .optional(),
 });
 
 export const createMenuItem = async (userId: string, data: any) => {
@@ -81,7 +92,7 @@ export const getVendorMenu = async (userId: string) => {
 
   try {
     return await prisma.menuItem.findMany({
-      where: { vendorId: vendorProfile.id },
+      where: { vendorId: vendorProfile.id, isAvailable: true },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -100,7 +111,7 @@ export const getVendorMenu = async (userId: string) => {
   } catch (e: any) {
     if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) {
       const items = await prisma.menuItem.findMany({
-        where: { vendorId: vendorProfile.id },
+        where: { vendorId: vendorProfile.id, isAvailable: true },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -183,7 +194,13 @@ export const deleteMenuItem = async (
   });
   if (!existing) throw new Error('Menu item not found');
 
-  return prisma.menuItem.delete({
-    where: { id: itemId },
-  });
+  const linkedCount = await prisma.orderItem.count({ where: { menuItemId: itemId } });
+  if (linkedCount > 0) {
+    return prisma.menuItem.update({
+      where: { id: itemId },
+      data: { isAvailable: false },
+    });
+  }
+
+  return prisma.menuItem.delete({ where: { id: itemId } });
 };
