@@ -108,10 +108,13 @@ model MenuItem {
   isAvailable Boolean       @default(true)
   optionGroups Json?
   remarksEnabled Boolean    @default(true)
+  displayOrder Int          @default(0)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   vendor      VendorProfile @relation(fields: [vendorId], references: [id])
   orderItems  OrderItem[]
+
+  @@index([vendorId, displayOrder])
 }
 
 model Order {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { toast } from 'react-hot-toast';
-import { Loader2, Plus, Edit2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
@@ -15,6 +15,7 @@ interface MenuItem {
   isAvailable: boolean;
   optionGroups?: any[];
   remarksEnabled?: boolean;
+  displayOrder?: number;
 }
 
 type OptionChoice = { id: string; label: string; priceDelta?: number };
@@ -68,7 +69,12 @@ export function VendorMenu() {
       const { data } = await api.get('/menu-items');
 
       if (data.success) {
-        setMenuItems(data.data);
+        const normalized = (Array.isArray(data.data) ? data.data : []).map((it: any, idx: number) => ({
+          ...it,
+          displayOrder: typeof it?.displayOrder === 'number' ? it.displayOrder : idx + 1,
+        }));
+        normalized.sort((a: any, b: any) => Number(a.displayOrder) - Number(b.displayOrder));
+        setMenuItems(normalized);
       }
     } catch (error) {
       toast.error('Failed to load menu');
@@ -173,7 +179,44 @@ export function VendorMenu() {
     }
   };
 
+  const moveItem = async (itemId: string, direction: -1 | 1) => {
+    const sorted = [...menuItems].sort((a: any, b: any) => Number(a.displayOrder) - Number(b.displayOrder));
+    const fromIndex = sorted.findIndex((x) => x.id === itemId);
+    const toIndex = fromIndex + direction;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= sorted.length) return;
+
+    const a = sorted[fromIndex];
+    const b = sorted[toIndex];
+    const aOrder = typeof a.displayOrder === 'number' ? a.displayOrder : fromIndex + 1;
+    const bOrder = typeof b.displayOrder === 'number' ? b.displayOrder : toIndex + 1;
+
+    const optimistic = menuItems.map((it) => {
+      if (it.id === a.id) return { ...it, displayOrder: bOrder };
+      if (it.id === b.id) return { ...it, displayOrder: aOrder };
+      return it;
+    });
+    optimistic.sort((x: any, y: any) => Number(x.displayOrder) - Number(y.displayOrder));
+    setMenuItems(optimistic);
+
+    try {
+      await Promise.all([
+        api.put(`/menu-items/${a.id}`, { displayOrder: bOrder }),
+        api.put(`/menu-items/${b.id}`, { displayOrder: aOrder }),
+      ]);
+      fetchMenu();
+    } catch (error) {
+      const msg =
+        (error as any)?.response?.data?.message ||
+        (error as any)?.response?.data?.error ||
+        'Reorder failed';
+      toast.error(msg);
+      fetchMenu();
+    }
+  };
+
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+
+  const sortedMenu = [...menuItems].sort((a: any, b: any) => Number(a.displayOrder) - Number(b.displayOrder));
 
   return (
     <>
@@ -186,7 +229,7 @@ export function VendorMenu() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {menuItems.map(item => (
+          {sortedMenu.map((item, index) => (
             <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4">
               {item.imageUrl && (
                 <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-lg bg-gray-100" />
@@ -194,7 +237,23 @@ export function VendorMenu() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <h3 className="font-bold text-gray-900 truncate">{item.name}</h3>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    <button
+                      onClick={() => moveItem(item.id, -1)}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-black disabled:opacity-30"
+                      aria-label="Move up"
+                    >
+                      <ArrowUp size={16} />
+                    </button>
+                    <button
+                      onClick={() => moveItem(item.id, 1)}
+                      disabled={index === sortedMenu.length - 1}
+                      className="p-1 text-gray-400 hover:text-black disabled:opacity-30"
+                      aria-label="Move down"
+                    >
+                      <ArrowDown size={16} />
+                    </button>
                     <button onClick={() => openEditModal(item)} className="p-1 text-gray-400 hover:text-blue-600"><Edit2 size={16} /></button>
                     <button onClick={() => handleDelete(item.id)} className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
                   </div>
@@ -228,7 +287,7 @@ export function VendorMenu() {
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 [@media(orientation:landscape)]:grid-cols-2">
-          {menuItems.map((item) => {
+          {sortedMenu.map((item, index) => {
             const groupsCount = Array.isArray(item.optionGroups) ? item.optionGroups.length : 0;
             return (
               <div key={item.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
@@ -249,6 +308,24 @@ export function VendorMenu() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => moveItem(item.id, -1)}
+                          disabled={index === 0}
+                          className="w-10 h-10 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition disabled:opacity-30"
+                          aria-label="Move up"
+                        >
+                          <ArrowUp size={18} />
+                        </button>
+                        <button
+                          onClick={() => moveItem(item.id, 1)}
+                          disabled={index === sortedMenu.length - 1}
+                          className="ml-2 w-10 h-10 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition disabled:opacity-30"
+                          aria-label="Move down"
+                        >
+                          <ArrowDown size={18} />
+                        </button>
+                      </div>
                       <button
                         onClick={() => openEditModal(item)}
                         className="w-10 h-10 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition"

@@ -76,6 +76,7 @@ const menuItemInputSchema = z.object({
   imageUrl: z.string().optional(),
   isAvailable: z.boolean().optional(),
   remarksEnabled: z.boolean().optional(),
+  displayOrder: z.number().int().nonnegative().optional(),
   optionGroups: z.preprocess((val) => sanitizeOptionGroups(val), z.array(optionGroupSchema)).optional(),
 });
 
@@ -89,6 +90,18 @@ export const createMenuItem = async (userId: string, data: any) => {
   }
 
   const parsed = menuItemInputSchema.parse(data);
+  let nextDisplayOrder: number | undefined;
+  try {
+    const agg = await prisma.menuItem.aggregate({
+      where: { vendorId: vendorProfile.id },
+      _max: { displayOrder: true },
+    });
+    nextDisplayOrder = Number(agg?._max?.displayOrder ?? 0) + 1;
+  } catch (e: any) {
+    if (!isMissingColumnError(e, 'displayOrder')) {
+      throw e;
+    }
+  }
   try {
     return await prisma.menuItem.create({
       data: {
@@ -99,11 +112,16 @@ export const createMenuItem = async (userId: string, data: any) => {
         imageUrl: parsed.imageUrl || null,
         isAvailable: parsed.isAvailable ?? true,
         remarksEnabled: parsed.remarksEnabled ?? true,
+        ...(typeof nextDisplayOrder === 'number' ? { displayOrder: nextDisplayOrder } : {}),
         optionGroups: parsed.optionGroups ?? [],
       },
     });
   } catch (e: any) {
-    if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) {
+    if (
+      isMissingColumnError(e, 'optionGroups') ||
+      isMissingColumnError(e, 'remarksEnabled') ||
+      isMissingColumnError(e, 'displayOrder')
+    ) {
       return prisma.menuItem.create({
         data: {
           vendorId: vendorProfile.id,
@@ -131,7 +149,7 @@ export const getVendorMenu = async (userId: string) => {
   try {
     return await prisma.menuItem.findMany({
       where: { vendorId: vendorProfile.id, isAvailable: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
         vendorId: true,
@@ -140,6 +158,7 @@ export const getVendorMenu = async (userId: string) => {
         price: true,
         imageUrl: true,
         isAvailable: true,
+        displayOrder: true,
         createdAt: true,
         updatedAt: true,
         optionGroups: true,
@@ -147,7 +166,11 @@ export const getVendorMenu = async (userId: string) => {
       },
     });
   } catch (e: any) {
-    if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) {
+    if (
+      isMissingColumnError(e, 'optionGroups') ||
+      isMissingColumnError(e, 'remarksEnabled') ||
+      isMissingColumnError(e, 'displayOrder')
+    ) {
       const items = await prisma.menuItem.findMany({
         where: { vendorId: vendorProfile.id, isAvailable: true },
         orderBy: { createdAt: 'desc' },
@@ -163,7 +186,14 @@ export const getVendorMenu = async (userId: string) => {
           updatedAt: true,
         },
       });
-      return items.map((it: any) => ({ ...it, optionGroups: [], remarksEnabled: true }));
+      return items
+        .map((it: any, idx: number) => ({
+          ...it,
+          displayOrder: idx + 1,
+          optionGroups: [],
+          remarksEnabled: true,
+        }))
+        .sort((a: any, b: any) => Number(a.displayOrder) - Number(b.displayOrder));
     }
     throw e;
   }
@@ -194,6 +224,7 @@ export const updateMenuItem = async (
   if (parsed.imageUrl !== undefined) updateData.imageUrl = parsed.imageUrl || null;
   if (parsed.isAvailable !== undefined) updateData.isAvailable = parsed.isAvailable;
   if (parsed.remarksEnabled !== undefined) updateData.remarksEnabled = parsed.remarksEnabled;
+  if (parsed.displayOrder !== undefined) updateData.displayOrder = parsed.displayOrder;
   if (parsed.optionGroups !== undefined) updateData.optionGroups = parsed.optionGroups;
 
   try {
@@ -202,13 +233,11 @@ export const updateMenuItem = async (
       data: updateData,
     });
   } catch (e: any) {
-    if (
-      (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled')) &&
-      (updateData.optionGroups !== undefined || updateData.remarksEnabled !== undefined)
-    ) {
+    if (isMissingColumnError(e, 'optionGroups') || isMissingColumnError(e, 'remarksEnabled') || isMissingColumnError(e, 'displayOrder')) {
       const fallback = { ...updateData };
       delete (fallback as any).optionGroups;
       delete (fallback as any).remarksEnabled;
+      delete (fallback as any).displayOrder;
       return prisma.menuItem.update({
         where: { id: itemId },
         data: fallback,

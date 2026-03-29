@@ -81,7 +81,7 @@ export function CustomerOrderPage() {
   }
 
   return (
-    <div className="w-full h-full bg-neutral-50 flex flex-col">
+    <div className="w-full h-full bg-white flex flex-col">
       <BoothHeader
         boothName={booth.name}
         boothNumber={booth.name}
@@ -95,9 +95,9 @@ export function CustomerOrderPage() {
       <div className="flex-1 overflow-y-auto p-4 pb-28">
         {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
         {menu.length === 0 ? (
-          <p className="text-gray-500">No menu items.</p>
+          <p className="text-neutral-600">No menu items.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {menu.map((item) => (
               <MenuCard
                 key={item.id}
@@ -105,6 +105,7 @@ export function CustomerOrderPage() {
                 price={item.price}
                 image={item.imageUrl}
                 onClick={() => setActiveItem(item)}
+                className="border-neutral-900/15 shadow-none h-full"
               />
             ))}
           </div>

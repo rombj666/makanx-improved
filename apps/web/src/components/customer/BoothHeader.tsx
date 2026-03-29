@@ -6,6 +6,9 @@ type Props = {
   heroImageUrl?: string | null;
   prepTimeMinutes?: number | null;
   onBack?: (() => void) | null;
+  showBackButton?: boolean;
+  variant?: 'default' | 'minimal';
+  className?: string;
 };
 
 export function BoothHeader({
@@ -16,13 +19,39 @@ export function BoothHeader({
   heroImageUrl,
   prepTimeMinutes,
   onBack,
+  showBackButton = true,
+  variant = 'default',
+  className,
 }: Props) {
   const title = vendorName || boothName || 'Vendor';
+  if (variant === 'minimal') {
+    return (
+      <div className={['bg-white', className].filter(Boolean).join(' ')}>
+        <div className="px-4 pt-5 pb-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold text-neutral-400 tracking-[0.16em] uppercase">
+                BOOTH{boothNumber ? <span className="ml-2 tracking-normal">• {boothNumber}</span> : null}
+              </div>
+              <div className="mt-1 text-3xl font-semibold text-black truncate">{boothName || title}</div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[11px] text-neutral-500 tracking-wide uppercase">Prep</div>
+              <div className="mt-0.5 text-sm font-semibold text-black">
+                {prepTimeMinutes != null ? `~${prepTimeMinutes} min` : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="h-px bg-neutral-900/10" />
+      </div>
+    );
+  }
   return (
-    <div className="bg-neutral-50">
+    <div className={['bg-neutral-50', className].filter(Boolean).join(' ')}>
       <div className="px-4 pt-4">
         <div className="flex items-center gap-3">
-          {onBack ? (
+          {onBack && showBackButton ? (
             <button
               onClick={onBack}
               className="w-11 h-11 rounded-full bg-white border border-neutral-200 flex items-center justify-center active:scale-95 transition"

@@ -126,20 +126,49 @@ export const getMe = async (userId: string) => {
 };
 
 export const customerQrLoginBySlug = async (slug: string) => {
-  const event = await prisma.event.findUnique({
-    where: { slug },
-    include: {
-      booths: {
-        include: {
-          vendor: {
-            include: {
-              menuItems: true,
+  let event: any;
+  try {
+    event = await prisma.event.findUnique({
+      where: { slug },
+      include: {
+        booths: {
+          include: {
+            vendor: {
+              include: {
+                menuItems: {
+                  where: { isAvailable: true },
+                  orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+                },
+              },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (msg.includes('displayOrder') && msg.includes('does not exist')) {
+      event = await prisma.event.findUnique({
+        where: { slug },
+        include: {
+          booths: {
+            include: {
+              vendor: {
+                include: {
+                  menuItems: {
+                    where: { isAvailable: true },
+                    orderBy: { createdAt: 'asc' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    } else {
+      throw e;
+    }
+  }
   if (!event) {
     throw new Error('Invalid event');
   }

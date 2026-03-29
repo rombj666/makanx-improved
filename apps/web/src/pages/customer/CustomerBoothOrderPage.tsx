@@ -34,6 +34,7 @@ export function CustomerBoothOrderPage() {
   const [booth, setBooth] = useState<Booth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
+  const handleBack = () => navigate(`/customer/event/${slug}`);
 
   useEffect(() => {
     const run = async () => {
@@ -86,26 +87,28 @@ export function CustomerBoothOrderPage() {
   }
 
   return (
-    <div className="w-full h-full bg-neutral-50 flex flex-col">
+    <div className="w-full h-full bg-white flex flex-col">
       <BoothHeader
         boothName={booth.name}
-        boothNumber={booth.name}
-        vendorName={booth.vendor?.businessName || null}
+        boothNumber={null}
+        vendorName={null}
         description={null}
         heroImageUrl={null}
         prepTimeMinutes={5}
-        onBack={() => navigate(`/customer/event/${slug}`)}
+        onBack={handleBack}
+        showBackButton={false}
+        variant="minimal"
       />
 
       <div className="flex-1 overflow-y-auto p-4 pb-28">
         {error ? (
-          <div className="bg-white rounded-2xl shadow-md p-5 text-gray-700">
+          <div className="bg-white rounded-2xl border border-neutral-900/15 p-5 text-neutral-700">
             {error}
           </div>
         ) : menu.length === 0 ? (
-          <p className="text-gray-500">No menu items.</p>
+          <p className="text-neutral-600">No menu items.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {menu.map((item) => (
               <MenuCard
                 key={item.id}
@@ -113,6 +116,7 @@ export function CustomerBoothOrderPage() {
                 price={item.price}
                 image={item.imageUrl}
                 onClick={() => setActiveItem(item)}
+                className="border-neutral-900/15 shadow-none h-full"
               />
             ))}
           </div>
