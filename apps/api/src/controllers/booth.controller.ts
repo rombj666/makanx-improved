@@ -74,3 +74,24 @@ export const updateLayout = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: error.message });
   }
 };
+
+export const getVendorShowPrices = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    const result = await boothService.getVendorShowPrices(req.user.userId);
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+export const vendorUpdateShowPrices = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) throw new Error('Unauthorized');
+    const showPrices = Boolean(req.body?.showPrices);
+    const result = await boothService.updateVendorShowPrices(req.user.userId, showPrices);
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};

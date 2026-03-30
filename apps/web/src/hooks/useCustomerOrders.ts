@@ -4,6 +4,7 @@ import { getOrCreateGuestId } from '../lib/guest';
 import { useSocket } from '../context/SocketContext';
 import { playReadySound, vibrateReady } from '../lib/alerts';
 import { toast } from 'react-hot-toast';
+import { computeDisplayEtaMinutesFromQuantity, computeDisplayNumber, extractExplicitDisplayNumber } from '../lib/utils';
 
 export type ActiveOrder = {
   orderId: string;
@@ -31,27 +32,6 @@ function safeParse<T>(val: string | null, fallback: T): T {
   }
 }
 
-function extractExplicitDisplayNumber(order: any): string | null {
-  const raw =
-    order?.boothOrderNumber ??
-    order?.queueNumber ??
-    order?.displayNumber ??
-    order?.orderNumber ??
-    order?.sequence ??
-    null;
-  if (raw !== null && raw !== undefined && `${raw}`.trim() !== '') {
-    return String(raw).toUpperCase();
-  }
-  return null;
-}
-
-function computeDisplayNumber(order: any): string {
-  const explicit = extractExplicitDisplayNumber(order);
-  if (explicit) return explicit;
-  const id = order?.id || '';
-  return id ? id.slice(-4).toUpperCase() : '----';
-}
-
 export function useCustomerOrders(eventSlug: string | undefined) {
   const slug = eventSlug || '';
   const { socket, isConnected } = useSocket();
@@ -76,23 +56,29 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         params: { guestId },
       });
       const serverOrders: any[] = data?.data || [];
-      const normalized: ActiveOrder[] = serverOrders.map((o: any) => ({
-        orderId: o.id,
-        vendorId: o.vendorId,
-        vendorName: o.vendor?.businessName || o.vendorName || '',
-        status: o.status,
-        estimatedMinutes: Math.max(Number(o.estimatedMinutes ?? 0), 0),
-        createdAt: o.createdAt,
-        updatedAt: o.updatedAt,
-        displayNumber: computeDisplayNumber(o),
-        items: Array.isArray(o.items)
+      const normalized: ActiveOrder[] = serverOrders.map((o: any) => {
+        const items = Array.isArray(o.items)
           ? o.items.map((it: any) => ({
               name: it?.menuItem?.name || '',
               quantity: Number(it?.quantity ?? 0),
               remark: it?.remark || '',
             }))
-          : undefined,
-      }));
+          : undefined;
+        const qty = Array.isArray(items) ? items.reduce((sum, it) => sum + Math.max(0, Number(it.quantity || 0)), 0) : 0;
+        const computedEta = qty > 0 ? computeDisplayEtaMinutesFromQuantity(qty) : 0;
+        const serverEta = Math.max(Number(o.estimatedMinutes ?? 0), 0);
+        return {
+          orderId: o.id,
+          vendorId: o.vendorId,
+          vendorName: o.vendor?.businessName || o.vendorName || '',
+          status: o.status,
+          estimatedMinutes: computedEta > 0 ? computedEta : serverEta,
+          createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+          displayNumber: computeDisplayNumber(o),
+          items,
+        };
+      });
       setOrders((prev) => {
         const map = new Map<string, ActiveOrder>();
         [...prev, ...normalized].forEach((ord) => {
@@ -228,7 +214,13 @@ export function useCustomerOrders(eventSlug: string | undefined) {
       setOrders((prev) => {
         const next = prev.slice();
         const idx = next.findIndex((o) => o.orderId === order.orderId);
-        
+        const qty = Array.isArray(order.items)
+          ? order.items.reduce((sum, it) => sum + Math.max(0, Number(it.quantity || 0)), 0)
+          : 0;
+        const computedEta = qty > 0 ? computeDisplayEtaMinutesFromQuantity(qty) : 0;
+        const nextOrder: ActiveOrder =
+          computedEta > 0 ? { ...order, estimatedMinutes: computedEta } : order;
+
         const shouldRemove =
           order.status === 'COMPLETED' ||
           order.status === 'CANCELLED' ||
@@ -240,9 +232,9 @@ export function useCustomerOrders(eventSlug: string | undefined) {
           }
         } else {
           if (idx >= 0) {
-            next[idx] = { ...next[idx], ...order };
+            next[idx] = { ...next[idx], ...nextOrder };
           } else {
-            next.unshift(order);
+            next.unshift(nextOrder);
           }
         }
         localStorage.setItem(key, JSON.stringify(next));

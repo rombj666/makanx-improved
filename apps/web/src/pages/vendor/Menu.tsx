@@ -51,6 +51,8 @@ export function VendorMenu() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [showPrices, setShowPrices] = useState<boolean>(true);
+  const [isSavingToggle, setIsSavingToggle] = useState<boolean>(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -85,7 +87,34 @@ export function VendorMenu() {
 
   useEffect(() => {
     fetchMenu();
+    const run = async () => {
+      try {
+        const { data } = await api.get('/booths/vendor/show-prices');
+        if (data?.success) {
+          setShowPrices(Boolean(data?.data?.showPrices) !== false);
+        }
+      } catch {}
+    };
+    run();
   }, []);
+
+  const toggleShowPrices = async (next: boolean) => {
+    try {
+      setIsSavingToggle(true);
+      setShowPrices(next);
+      await api.patch('/booths/vendor/show-prices', { showPrices: next });
+      toast.success(next ? 'Customer prices are visible' : 'Customer prices are hidden');
+    } catch (e: any) {
+      setShowPrices(!next);
+      const msg =
+        (e as any)?.response?.data?.message ||
+        (e as any)?.response?.data?.error ||
+        'Failed to update setting';
+      toast.error(msg);
+    } finally {
+      setIsSavingToggle(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,9 +252,20 @@ export function VendorMenu() {
       <div className="block [@media(pointer:coarse)]:hidden max-w-md mx-auto md:max-w-2xl p-4 space-y-4 pb-24">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">My Menu</h1>
-          <Button onClick={openAddModal} className="bg-orange-600 hover:bg-orange-700">
-            <Plus size={18} className="mr-2" /> Add Item
-          </Button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+              <input
+                type="checkbox"
+                checked={showPrices}
+                onChange={(e) => toggleShowPrices(e.target.checked)}
+                disabled={isSavingToggle}
+              />
+              <span>Show Prices</span>
+            </label>
+            <Button onClick={openAddModal} className="bg-orange-600 hover:bg-orange-700">
+              <Plus size={18} className="mr-2" /> Add Item
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -275,15 +315,26 @@ export function VendorMenu() {
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
             <div className="text-2xl font-semibold text-black">Menu</div>
           </div>
-          <button
-            onClick={openAddModal}
-            className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
-          >
-            <span className="inline-flex items-center gap-2">
-              <Plus size={18} />
-              Add
-            </span>
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-sm font-semibold text-neutral-800">
+              <input
+                type="checkbox"
+                checked={showPrices}
+                onChange={(e) => toggleShowPrices(e.target.checked)}
+                disabled={isSavingToggle}
+              />
+              <span>Show Prices</span>
+            </label>
+            <button
+              onClick={openAddModal}
+              className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Plus size={18} />
+                Add
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 [@media(orientation:landscape)]:grid-cols-2">

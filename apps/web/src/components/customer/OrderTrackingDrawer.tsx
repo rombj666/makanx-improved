@@ -58,7 +58,7 @@ export function OrderTrackingDrawer({ eventSlug, open, onClose }: Props) {
         </button>
       </div>
 
-      <div className="h-[calc(100%-72px)] overflow-y-auto p-4 bg-[#FAF7F0]">
+      <div className="h-[calc(100%-72px)] overflow-y-auto p-4 bg-neutral-50">
         {activeOrders.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-5 text-sm text-gray-600">
             No active orders
@@ -81,4 +81,3 @@ export function OrderTrackingDrawer({ eventSlug, open, onClose }: Props) {
 }
 
 export default OrderTrackingDrawer;
-

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
@@ -7,21 +7,7 @@ import BoothHeader from '../../components/customer/BoothHeader';
 import CartItem from '../../components/customer/CartItem';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-
-function computeDisplayNumber(order: any): string {
-  const raw =
-    order?.boothOrderNumber ??
-    order?.queueNumber ??
-    order?.displayNumber ??
-    order?.orderNumber ??
-    order?.sequence ??
-    null;
-  if (raw !== null && raw !== undefined && `${raw}`.trim() !== '') {
-    return String(raw).toUpperCase();
-  }
-  const id = order?.id || '';
-  return id ? String(id).slice(-4).toUpperCase() : '----';
-}
+import { computeDisplayNumber } from '../../lib/utils';
 
 export function CartPage() {
   const { slug, vendorId } = useParams();
@@ -39,8 +25,27 @@ export function CartPage() {
 
   const [isPlacing, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hidePrices, setHidePrices] = useState<boolean>(false);
 
   const vendorTitle = cart.vendorName || 'Your Cart';
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        if (!eventSlug) return;
+        const { data } = await api.get(`/events/${eventSlug}`);
+        const booths: any[] = Array.isArray(data?.data?.booths) ? data.data.booths : [];
+        let b: any = null;
+        if (boothId) {
+          b = booths.find((x) => String(x?.id || '') === String(boothId)) || null;
+        } else if (vid) {
+          b = booths.find((x) => String(x?.vendor?.id || '') === String(vid)) || null;
+        }
+        setHidePrices(b?.showPrices === false);
+      } catch {}
+    };
+    run();
+  }, [eventSlug, boothId, vid]);
 
   const summaryItems = useMemo(
     () =>
@@ -234,6 +239,7 @@ export function CartPage() {
                 onQuantityChange={(q) => cart.updateQuantity(line.id, q)}
                 onRemarkChange={(r) => cart.updateRemark(line.id, r)}
                 onRemove={() => cart.removeLine(line.id)}
+                hidePrices={hidePrices}
               />
             ))}
           </div>
@@ -244,14 +250,18 @@ export function CartPage() {
         <div className="fixed bottom-0 left-0 right-0 z-50">
           <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white overflow-hidden">
             <div className="p-4">
-              <div className="flex justify-between text-sm text-gray-600">
-                <div>Subtotal</div>
-                <div className="font-semibold text-black">RM{cart.subtotal.toFixed(2)}</div>
-              </div>
-              <div className="flex justify-between mt-1 text-base">
-                <div className="font-semibold text-black">Total</div>
-                <div className="font-extrabold text-black">RM{cart.total.toFixed(2)}</div>
-              </div>
+              {!hidePrices ? (
+                <>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <div>Subtotal</div>
+                    <div className="font-semibold text-black">RM{cart.subtotal.toFixed(2)}</div>
+                  </div>
+                  <div className="flex justify-between mt-1 text-base">
+                    <div className="font-semibold text-black">Total</div>
+                    <div className="font-extrabold text-black">RM{cart.total.toFixed(2)}</div>
+                  </div>
+                </>
+              ) : null}
 
               <button
                 onClick={checkout}

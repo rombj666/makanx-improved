@@ -27,51 +27,125 @@ export const initSocket = (httpServer: HttpServer) => {
     }
   });
 
+  io.use((socket, next) => {
+    const token = (socket.handshake as any)?.auth?.token;
+    const guestId = (socket.handshake as any)?.auth?.guestId;
+    if (typeof guestId === 'string' && guestId.trim() !== '') {
+      (socket.data as any).guestId = guestId.trim();
+    }
+    if (typeof token === 'string' && token.trim() !== '') {
+      try {
+        const decoded: any = verifyToken(token.trim());
+        (socket.data as any).userId = decoded?.userId;
+        (socket.data as any).role = decoded?.role;
+      } catch {}
+    }
+    next();
+  });
+
   io.on('connection', (socket: Socket) => {
     console.log('Client connected:', socket.id);
 
-  socket.on('join', async (payload: string) => {
-    // Check for guest ID format "user:GUEST_ID"
-    if (payload && payload.startsWith('user:')) {
-      const guestId = payload.split(':')[1];
-      if (guestId) {
-        socket.join(`user:${guestId}`);
-        console.log(`Socket ${socket.id} joined guest room user:${guestId}`);
-      }
-      return;
+    const autoGuestId = String((socket.data as any)?.guestId || '').trim();
+    if (autoGuestId) {
+      socket.join(`user:${autoGuestId}`);
+      console.log(`Socket ${socket.id} joined guest room user:${autoGuestId}`);
     }
 
-    try {
-      const decoded = verifyToken(payload);
-      const { userId, role } = decoded;
-
-      socket.join(`user:${userId}`);
-      console.log(`Socket ${socket.id} joined user:${userId}`);
-
-      if (role === 'VENDOR') {
-        const vendorProfile = await prisma.vendorProfile.findUnique({
-          where: { userId }
+    const autoUserId = String((socket.data as any)?.userId || '').trim();
+    const autoRole = String((socket.data as any)?.role || '').trim();
+    if (autoUserId) {
+      socket.join(`user:${autoUserId}`);
+      console.log(`Socket ${socket.id} joined user:${autoUserId}`);
+    }
+    if (autoUserId && autoRole === 'VENDOR') {
+      prisma.vendorProfile
+        .findUnique({ where: { userId: autoUserId } })
+        .then((vendorProfile) => {
+          if (vendorProfile) {
+            (socket.data as any).vendorId = vendorProfile.id;
+            socket.join(`vendor:${vendorProfile.id}`);
+            console.log(`Socket ${socket.id} joined vendor:${vendorProfile.id}`);
+          } else {
+            console.warn(`Vendor profile not found for user ${autoUserId}`);
+          }
+        })
+        .catch((e) => {
+          console.error('Socket vendor auto-join failed:', e);
         });
-
-        if (vendorProfile) {
-          socket.join(`vendor:${vendorProfile.id}`);
-          console.log(
-            `Socket ${socket.id} joined vendor:${vendorProfile.id}`
-          );
-        } else {
-          console.warn(`Vendor profile not found for user ${userId}`);
-        }
-      }
-    } catch (e) {
-      console.error('Socket join failed:', e);
     }
-  });
 
-    socket.on('join_vendor', (vendorId: string) => {
-       // verify token again or assume trusted if we had proper middleware
-       // For prototype, just join
-       socket.join(`vendor:${vendorId}`);
-       console.log(`Socket ${socket.id} joined vendor:${vendorId}`);
+    socket.on('join', async (payload: string) => {
+      if (payload && payload.startsWith('user:')) {
+        const guestId = payload.split(':')[1];
+        if (guestId) {
+          socket.join(`user:${guestId}`);
+          console.log(`Socket ${socket.id} joined guest room user:${guestId}`);
+          (socket.data as any).guestId = guestId;
+        }
+        return;
+      }
+
+      try {
+        const decoded: any = verifyToken(payload);
+        const { userId, role } = decoded;
+
+        (socket.data as any).userId = userId;
+        (socket.data as any).role = role;
+        socket.join(`user:${userId}`);
+        console.log(`Socket ${socket.id} joined user:${userId}`);
+
+        if (role === 'VENDOR') {
+          const vendorProfile = await prisma.vendorProfile.findUnique({
+            where: { userId }
+          });
+
+          if (vendorProfile) {
+            (socket.data as any).vendorId = vendorProfile.id;
+            socket.join(`vendor:${vendorProfile.id}`);
+            console.log(`Socket ${socket.id} joined vendor:${vendorProfile.id}`);
+          } else {
+            console.warn(`Vendor profile not found for user ${userId}`);
+          }
+        }
+      } catch (e) {
+        console.error('Socket join failed:', e);
+      }
+    });
+
+    socket.on('join_vendor', async (vendorId: string) => {
+      const claimed = String(vendorId || '').trim();
+      const bound = String((socket.data as any)?.vendorId || '').trim();
+      if (bound && claimed && bound !== claimed) {
+        console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
+        return;
+      }
+      if (!bound && claimed) {
+        const role = String((socket.data as any)?.role || '').trim();
+        const userId = String((socket.data as any)?.userId || '').trim();
+        if (role !== 'VENDOR' || !userId) {
+          console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
+          return;
+        }
+        try {
+          const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+          const actual = String(vendorProfile?.id || '').trim();
+          if (!actual || actual !== claimed) {
+            console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
+            return;
+          }
+          (socket.data as any).vendorId = actual;
+          socket.join(`vendor:${actual}`);
+          console.log(`Socket ${socket.id} joined vendor:${actual}`);
+        } catch (e) {
+          console.error('Socket join_vendor lookup failed:', e);
+        }
+        return;
+      }
+      if (bound) {
+        socket.join(`vendor:${bound}`);
+        console.log(`Socket ${socket.id} joined vendor:${bound}`);
+      }
     });
 
     socket.on('disconnect', () => {

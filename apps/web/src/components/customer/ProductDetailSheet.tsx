@@ -18,6 +18,7 @@ type Props = {
   imageUrl?: string;
   optionGroups?: OptionGroup[];
   remarksEnabled?: boolean;
+  hidePrice?: boolean;
   onClose: () => void;
   onAdd: (payload: {
     quantity: number;
@@ -37,6 +38,7 @@ export function ProductDetailSheet({
   imageUrl,
   optionGroups,
   remarksEnabled,
+  hidePrice,
   onClose,
   onAdd,
 }: Props) {
@@ -62,6 +64,7 @@ export function ProductDetailSheet({
           src={src}
           optionGroups={groups}
           remarksEnabled={allowRemarks}
+          hidePrice={hidePrice === true}
           onClose={onClose}
           onAdd={onAdd}
         />
@@ -78,6 +81,7 @@ function ProductDetailSheetBody({
   src,
   optionGroups,
   remarksEnabled,
+  hidePrice,
   onClose,
   onAdd,
 }: {
@@ -86,6 +90,7 @@ function ProductDetailSheetBody({
   src: string;
   optionGroups: OptionGroup[];
   remarksEnabled: boolean;
+  hidePrice: boolean;
   onClose: () => void;
   onAdd: (payload: {
     quantity: number;
@@ -94,11 +99,31 @@ function ProductDetailSheetBody({
   }) => void;
 }) {
   const [quantity, setQuantity] = React.useState(1);
+  const [draftQty, setDraftQty] = React.useState('1');
   const [remark, setRemark] = React.useState('');
   const [selected, setSelected] = React.useState<Record<string, string[]>>({});
 
-  const dec = () => setQuantity((q) => clamp(q - 1, 1, 99));
-  const inc = () => setQuantity((q) => clamp(q + 1, 1, 99));
+  const setBothQty = (q: number) => {
+    const next = clamp(q, 1, 99);
+    setQuantity(next);
+    setDraftQty(String(next));
+  };
+  const dec = () => setBothQty(quantity - 1);
+  const inc = () => setBothQty(quantity + 1);
+
+  const commitQty = (raw: string) => {
+    const trimmed = String(raw || '').trim();
+    if (trimmed === '') {
+      setDraftQty(String(quantity));
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setDraftQty(String(quantity));
+      return;
+    }
+    setBothQty(Math.floor(parsed));
+  };
 
   React.useEffect(() => {
     if (!remarksEnabled) setRemark('');
@@ -129,7 +154,7 @@ function ProductDetailSheetBody({
         <div className="mt-4 flex items-end justify-between gap-4">
           <div className="min-w-0">
             <div className="text-lg font-semibold text-black truncate">{name}</div>
-            <div className="text-sm text-neutral-600">RM{price.toFixed(2)}</div>
+            {!hidePrice ? <div className="text-sm text-neutral-600">RM{price.toFixed(2)}</div> : null}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -140,7 +165,29 @@ function ProductDetailSheetBody({
             >
               −
             </button>
-            <div className="w-10 text-center font-semibold text-black">{quantity}</div>
+            <input
+              value={draftQty}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next === '') {
+                  setDraftQty('');
+                  return;
+                }
+                const sanitized = next.replace(/[^\d]/g, '').slice(0, 2);
+                setDraftQty(sanitized);
+              }}
+              onBlur={() => commitQty(draftQty)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  commitQty(draftQty);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-14 h-12 rounded-2xl border border-neutral-200 bg-white text-center font-semibold text-black outline-none focus:ring-2 focus:ring-black/20 focus:border-neutral-300"
+              aria-label="Quantity"
+            />
             <button
               onClick={inc}
               disabled={quantity >= 99}
@@ -239,6 +286,7 @@ function ProductDetailSheetBody({
 
             onAdd({ quantity, remark: remarksEnabled ? remark.trim() : '', selectedOptions });
             setQuantity(1);
+            setDraftQty('1');
             setRemark('');
             setSelected({});
             onClose();

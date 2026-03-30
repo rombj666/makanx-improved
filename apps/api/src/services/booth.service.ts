@@ -143,3 +143,21 @@ export const updateEventLayout = async (organizerId: string, input: z.infer<type
 
   return { success: true };
 };
+
+export const getVendorShowPrices = async (userId: string) => {
+  const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendor) throw new Error('Vendor profile not found');
+  const booth = await prisma.booth.findFirst({ where: { vendorId: vendor.id } });
+  if (!booth) return { showPrices: true };
+  return { showPrices: booth.showPrices !== false };
+};
+
+export const updateVendorShowPrices = async (userId: string, showPrices: boolean) => {
+  const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendor) throw new Error('Vendor profile not found');
+  const result = await prisma.booth.updateMany({
+    where: { vendorId: vendor.id },
+    data: { showPrices },
+  });
+  return { updated: result.count, showPrices };
+};

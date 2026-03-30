@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { toast } from 'react-hot-toast';
 import { Loader2, ChevronDown, ChevronRight} from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { computeDisplayNumber } from '../../lib/utils';
 
 import { useSocket } from '../../context/SocketContext';
 
@@ -18,6 +19,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  displayNumber?: string | number | null;
   status: 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
   totalAmount: number;
   createdAt: string;
@@ -52,7 +54,19 @@ export function VendorOrders() {
     try {
       const { data } = await api.get('/orders/vendor-orders');
       if (data.success) {
-        setOrders(data.data);
+        const list: any[] = Array.isArray(data.data) ? data.data : [];
+        const normalized: Order[] = list.map((o: any) => ({
+          id: String(o?.id || ''),
+          displayNumber: o?.displayNumber ?? null,
+          status: String(o?.status || 'PREPARING') as any,
+          totalAmount: typeof o?.totalAmount === 'number' ? o.totalAmount : Number(o?.totalAmount ?? 0),
+          createdAt: String(o?.createdAt || new Date().toISOString()),
+          acceptedAt: o?.acceptedAt ?? null,
+          readyAt: o?.readyAt ?? null,
+          completedAt: o?.completedAt ?? null,
+          items: Array.isArray(o?.items) ? o.items : [],
+        }));
+        setOrders(normalized);
       }
     } catch (error) {
       toast.error('Failed to load orders');
@@ -201,19 +215,35 @@ return (
 
               {isOpen && (
                 <div className="p-3 space-y-3 bg-gray-50/50 min-h-[100px]">
-                  {sectionOrders.map(order => (
-                    <div
-                      key={order.id}
-                      className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"
-                    >
-                      <div className="flex justify-between mb-2">
-                        <div>
-                          #{order.id.slice(-4)}
-                          <div>{formatMoney(order.totalAmount)}</div>
+                  {sectionOrders.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-6 text-center">No orders.</div>
+                  ) : (
+                    sectionOrders.map(order => {
+                      const num = computeDisplayNumber(order);
+                      const created = order.createdAt ? new Date(order.createdAt).toLocaleTimeString() : '';
+                      const completed = order.completedAt ? new Date(order.completedAt).toLocaleTimeString() : '';
+                      const amount = typeof order.totalAmount === 'number' ? order.totalAmount : Number(order.totalAmount ?? 0);
+                      return (
+                        <div
+                          key={order.id}
+                          className="bg-white p-3 rounded-xl shadow-sm border border-gray-100"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-bold text-zinc-900">Order #{num}</div>
+                              <div className="text-xs text-gray-500">
+                                Created {created}
+                                {order.status === 'COMPLETED' && completed ? ` • Completed ${completed}` : ''}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm font-bold text-zinc-900">{formatMoney(amount)}</div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })
+                  )}
                 </div>
               )}
             </div>

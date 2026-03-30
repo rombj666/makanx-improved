@@ -290,9 +290,12 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     });
 
     const data = orders.map((o) => ({
-      orderNumber: (o as any).orderNumber || o.id.slice(-4),
+      orderNumber: typeof (o as any).displayNumber === 'number' && (o as any).displayNumber > 0
+        ? `#${(o as any).displayNumber}`
+        : `#${o.id.slice(-4)}`,
       totalAmount: Number(o.totalAmount),
       createdAt: o.createdAt,
+      completedAt: o.completedAt,
       items: o.items.map((it) => ({
         productName: it.menuItem?.name || 'Unknown',
         qty: it.quantity,
@@ -301,6 +304,136 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     }));
 
     res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const organizerProductTrend = async (req: Request, res: Response) => {
+  try {
+    const eventId = String(req.query.eventId || '');
+    const date = String(req.query.date || '');
+    const windowMinutes = Number(req.query.window || 5) || 5;
+    const topN = Number(req.query.top || 5) || 5;
+    const { start, end } = parseDateRange(date);
+
+    const items = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          status: 'COMPLETED',
+          completedAt: { gte: start, lte: end },
+          vendor: { booths: { some: { eventId } } },
+        },
+      },
+      select: {
+        quantity: true,
+        order: { select: { completedAt: true } },
+        menuItemId: true,
+        menuItem: { select: { name: true } },
+      },
+      orderBy: { menuItemId: 'asc' },
+    });
+
+    const seriesMap: Record<string, { name: string; total: number; buckets: Record<string, number> }> =
+      {};
+
+    const bucketOf = (d: Date | null): string => {
+      const base = d ? new Date(d) : new Date();
+      const ms = windowMinutes * 60 * 1000;
+      const floored = Math.floor(base.getTime() / ms) * ms;
+      return new Date(floored).toISOString();
+    };
+
+    for (const it of items) {
+      const id = it.menuItemId;
+      const name = it.menuItem?.name || 'Unknown';
+      const when = it.order?.completedAt || null;
+      const bucket = bucketOf(when);
+
+      if (!seriesMap[id]) seriesMap[id] = { name, total: 0, buckets: {} };
+      seriesMap[id].total += it.quantity;
+      seriesMap[id].buckets[bucket] = (seriesMap[id].buckets[bucket] || 0) + it.quantity;
+    }
+
+    const ranked = Object.entries(seriesMap)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, topN);
+
+    const response = ranked.map(([id, s]) => ({
+      productId: id,
+      productName: s.name,
+      points: Object.entries(s.buckets)
+        .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+        .map(([t, qty]) => ({ time: t, qty })),
+    }));
+
+    res.json({ success: true, data: response });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const vendorProductTrend = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId!;
+    const windowMinutes = Number(req.query.window || 5) || 5;
+    const topN = Number(req.query.top || 5) || 5;
+    const date = String(req.query.date || '');
+    const { start, end } = parseDateRange(date);
+
+    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+    if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
+
+    const items = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          vendorId: vendor.id,
+          status: 'COMPLETED',
+          completedAt: { gte: start, lte: end },
+        },
+      },
+      select: {
+        quantity: true,
+        order: { select: { completedAt: true } },
+        menuItemId: true,
+        menuItem: { select: { name: true } },
+      },
+      orderBy: { menuItemId: 'asc' },
+    });
+
+    const seriesMap: Record<string, { name: string; total: number; buckets: Record<string, number> }> =
+      {};
+    const ms = windowMinutes * 60 * 1000;
+    const bucketOf = (d: Date | null): string => {
+      const base = d ? new Date(d) : new Date();
+      const floored = Math.floor(base.getTime() / ms) * ms;
+      return new Date(floored).toISOString();
+    };
+
+    for (const it of items) {
+      const id = it.menuItemId;
+      const name = it.menuItem?.name || 'Unknown';
+      const when = it.order?.completedAt || null;
+      const bucket = bucketOf(when);
+
+      if (!seriesMap[id]) seriesMap[id] = { name, total: 0, buckets: {} };
+      seriesMap[id].total += it.quantity;
+      seriesMap[id].buckets[bucket] = (seriesMap[id].buckets[bucket] || 0) + it.quantity;
+    }
+
+    const ranked = Object.entries(seriesMap)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, topN);
+
+    const response = ranked.map(([id, s]) => ({
+      productId: id,
+      productName: s.name,
+      points: Object.entries(s.buckets)
+        .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+        .map(([t, qty]) => ({ time: t, qty })),
+    }));
+
+    res.json({ success: true, data: response });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

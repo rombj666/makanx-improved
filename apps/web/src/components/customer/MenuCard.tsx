@@ -4,9 +4,10 @@ type Props = {
   image?: string;
   onClick: () => void;
   className?: string;
+  hidePrice?: boolean;
 };
 
-export function MenuCard({ name, price, image, onClick, className }: Props) {
+export function MenuCard({ name, price, image, onClick, className, hidePrice }: Props) {
   const src = image && image.trim() !== '' ? image : '';
 
   return (
@@ -34,7 +35,9 @@ export function MenuCard({ name, price, image, onClick, className }: Props) {
       </div>
       <div className="p-4 flex-1 flex flex-col">
         <div className="text-sm font-semibold text-black line-clamp-2 leading-snug">{name}</div>
-        <div className="mt-1 text-sm text-neutral-800 font-semibold">RM{price.toFixed(2)}</div>
+        {!hidePrice ? (
+          <div className="mt-1 text-sm text-neutral-800 font-semibold">RM{price.toFixed(2)}</div>
+        ) : null}
       </div>
     </button>
   );

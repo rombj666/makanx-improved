@@ -94,6 +94,7 @@ model Booth {
   y        Float          @default(0)
   width    Float          @default(10)
   height   Float          @default(10)
+  showPrices Boolean      @default(true)
   event    Event          @relation(fields: [eventId], references: [id])
   vendor   VendorProfile? @relation(fields: [vendorId], references: [id])
 }
@@ -121,6 +122,7 @@ model Order {
   id            String        @id @default(uuid())
   customerId    String
   vendorId      String
+  displayNumber Int           @default(0)
   status        OrderStatus   @default(PREPARING)
   paymentMode   PaymentMode   @default(PAY_AT_BOOTH)
   paymentStatus PaymentStatus @default(PENDING)
@@ -132,6 +134,11 @@ model Order {
   readyAt       DateTime?
   vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   items         OrderItem[]
+
+  @@unique([vendorId, displayNumber])
+  @@index([vendorId, createdAt])
+  @@index([status])
+  @@index([completedAt])
 }
 
 model OrderItem {

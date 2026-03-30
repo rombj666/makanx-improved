@@ -10,6 +10,7 @@ router.post('/', optionalAuth, orderController.createOrder);
 router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
 
 // Vendor
+router.get('/vendor-live', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorLiveOrders);
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
 router.get(
   '/vendor/production-batch',

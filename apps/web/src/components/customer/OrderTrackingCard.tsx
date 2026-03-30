@@ -11,6 +11,7 @@ type Props = {
 export function OrderTrackingCard({ order, boothLabel, defaultExpanded = false }: Props) {
   const [open, setOpen] = useState(defaultExpanded);
   const eta = useMemo(() => Math.max(Number(order.estimatedMinutes ?? 0), 0), [order.estimatedMinutes]);
+  const showEta = order.status !== 'READY' && eta > 0;
 
   const hasItems = Array.isArray(order.items) && order.items.length > 0;
 
@@ -31,8 +32,10 @@ export function OrderTrackingCard({ order, boothLabel, defaultExpanded = false }
             </div>
           </div>
           <div className="text-right shrink-0">
-            <div className="text-sm font-semibold text-gray-900">{eta > 0 ? `~${eta} min` : '—'}</div>
-            <div className="text-xs text-gray-500">{open ? 'Tap to collapse' : 'Tap to expand'}</div>
+            <div className="text-sm font-semibold text-gray-900">
+              {order.status === 'READY' ? 'READY — Collect now' : showEta ? `~${eta} min` : '—'}
+            </div>
+            <div className="text-xs text-gray-500">{open ? 'Hide details' : 'View details'}</div>
           </div>
         </div>
       </button>
@@ -40,8 +43,17 @@ export function OrderTrackingCard({ order, boothLabel, defaultExpanded = false }
       {open ? (
         <div className="px-4 pb-4">
           <div className="mt-1">
-            <div className="text-xs font-semibold text-gray-500 mb-2">Status</div>
+            <div className="text-xs font-semibold text-gray-500 mb-3">Progress</div>
             <OrderStatusStepper status={order.status} />
+            {showEta ? (
+              <div className="mt-3 text-sm text-gray-700">
+                Estimated prep time: <span className="font-semibold text-black">~{eta} min</span>
+              </div>
+            ) : order.status === 'READY' ? (
+              <div className="mt-3 text-sm text-gray-700">
+                <span className="font-semibold text-black">READY</span> — Collect now
+              </div>
+            ) : null}
           </div>
 
           {hasItems ? (
@@ -49,7 +61,7 @@ export function OrderTrackingCard({ order, boothLabel, defaultExpanded = false }
               <div className="text-xs font-semibold text-gray-500 mb-2">Items</div>
               <div className="space-y-3">
                 {order.items!.map((it, idx) => (
-                  <div key={idx} className="bg-[#FAF7F0] rounded-2xl p-3">
+                  <div key={idx} className="bg-neutral-50 rounded-2xl p-3 border border-neutral-200">
                     <div className="text-sm font-semibold text-gray-900">
                       {it.quantity}x {it.name || 'Item'}
                     </div>

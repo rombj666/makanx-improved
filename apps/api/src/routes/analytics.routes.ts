@@ -41,6 +41,13 @@ router.get(
 );
 
 router.get(
+  '/organizer/product-trend',
+  requireAuth,
+  requireRole([Role.ORGANIZER]),
+  analyticsController.organizerProductTrend
+);
+
+router.get(
   '/vendor/summary',
   requireAuth,
   requireRole([Role.VENDOR]),
@@ -59,6 +66,13 @@ router.get(
   requireAuth,
   requireRole([Role.VENDOR]),
   analyticsController.vendorRevenueTrend
+);
+
+router.get(
+  '/vendor/product-trend',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  analyticsController.vendorProductTrend
 );
 
 router.get(

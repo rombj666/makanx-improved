@@ -8,6 +8,7 @@ interface Order {
   id: string;
   status: string;
   totalAmount: string;
+  completedAt?: string | null;
   vendor: {
     businessName: string;
   };
@@ -79,6 +80,11 @@ export function CustomerOrders() {
               <div className="text-sm text-gray-500 mb-2">
                 Ordered on {new Date(order.createdAt).toLocaleString()}
               </div>
+              {order.status === 'COMPLETED' && order.completedAt ? (
+                <div className="text-sm text-gray-500 mb-2">
+                  Completed on {new Date(order.completedAt).toLocaleString()}
+                </div>
+              ) : null}
               <ul className="space-y-1 mb-4">
                 {order.items.map((item, idx) => (
                   <li key={idx} className="flex justify-between text-sm">

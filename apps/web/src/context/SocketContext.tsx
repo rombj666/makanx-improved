@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
-import { Role } from '@makanx/shared';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -33,7 +32,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const newSocket = io(SOCKET_URL);
+    const newSocket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
+      auth: user && token ? { token } : { guestId },
+    });
 
     newSocket.on('connect', async () => {
       setIsConnected(true);
@@ -43,40 +50,22 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       } else {
         newSocket.emit('join', `user:${guestId}`);
       }
-
-      if (user?.role === Role.VENDOR) {
-        try {
-      const res = await fetch(`${SOCKET_URL}/api/orders/vendor-orders`, {
-        headers: {
-          Authorization: `Bearer ${token || ''}`
-        }
-      });
-
-      const data = await res.json();
-      if (data.success && data.data.length > 0) {
-        const vendorId = data.data[0].vendorId;
-        newSocket.emit('join_vendor', vendorId);
-      }
-    } catch (e) {
-      console.error("Vendor room join failed", e);
-    }
-  }
-});
+    });
 
     newSocket.on('disconnect', () => {
       setIsConnected(false);
     });
-let lastPlayed = 0;
+    let lastPlayed = 0;
 
-  newSocket.on("order_created", () => {
-    const now = Date.now();
-    if (now - lastPlayed > 1500) {
-      const audio = new Audio("/sounds/new-order.mp3");
-      audio.volume = 0.8;
-      audio.play().catch(() => {});
-      lastPlayed = now;
-    }
-  });
+    newSocket.on("order_created", () => {
+      const now = Date.now();
+      if (now - lastPlayed > 1500) {
+        const audio = new Audio("/sounds/new-order.mp3");
+        audio.volume = 0.8;
+        audio.play().catch(() => {});
+        lastPlayed = now;
+      }
+    });
 
     setSocket(newSocket);
 

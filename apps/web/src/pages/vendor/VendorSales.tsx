@@ -13,15 +13,20 @@ interface Summary {
   avgOrder: number;
 }
 
-interface TrendPoint {
-  hour: number;
-  revenue: number;
-}
-
 interface ProductPerf {
   productName: string;
   qtySold: number;
   revenue: number;
+}
+
+interface ProductTrendPoint {
+  time: string;
+  qty: number;
+}
+interface ProductTrendSeries {
+  productId: string;
+  productName: string;
+  points: ProductTrendPoint[];
 }
 
 interface CompletedOrderItem {
@@ -33,6 +38,7 @@ interface CompletedOrder {
   orderNumber: string;
   totalAmount: number;
   createdAt: string;
+  completedAt?: string;
   items: CompletedOrderItem[];
 }
 
@@ -40,7 +46,7 @@ export function VendorSales() {
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [productTrend, setProductTrend] = useState<ProductTrendSeries[]>([]);
   const [products, setProducts] = useState<ProductPerf[]>([]);
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
 
@@ -51,14 +57,14 @@ export function VendorSales() {
     setLoading(true);
     try {
       const params = { eventId: '', date };
-      const [s, t, p, o] = await Promise.all([
+      const [s, pt, p, o] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
-        api.get('/analytics/vendor/trend', { params }),
+        api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
         api.get('/analytics/products', { params }),
         api.get('/analytics/vendor/orders', { params }),
       ]);
       setSummary(s.data.data);
-      setTrend(t.data.data);
+      setProductTrend(pt.data.data || []);
       setProducts(p.data.data);
       setOrders(o.data.data);
     } catch (e) {
@@ -73,10 +79,22 @@ export function VendorSales() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const formattedTrend = useMemo(
-    () => trend.map((d) => ({ name: `${d.hour}:00`, revenue: d.revenue })),
-    [trend]
-  );
+  const productTrendDataset = useMemo(() => {
+    const buckets = new Set<string>();
+    for (const series of productTrend) {
+      for (const pt of series.points) buckets.add(pt.time);
+    }
+    const times = Array.from(buckets).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    return times.map((t) => {
+      const label = new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const row: Record<string, any> = { time: label };
+      for (const series of productTrend) {
+        const found = series.points.find((pt) => pt.time === t);
+        row[series.productName] = found ? found.qty : 0;
+      }
+      return row;
+    });
+  }, [productTrend]);
 
   return (
     <>
@@ -122,18 +140,31 @@ export function VendorSales() {
 
         <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
-            <CardTitle>Revenue Trend</CardTitle>
+            <CardTitle>Product Trend</CardTitle>
           </CardHeader>
           <CardContent className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={formattedTrend}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
-                <Legend />
-                <Line type="monotone" dataKey="revenue" stroke="#ff7f50" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            {productTrend.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">No completed orders for selected date.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={productTrendDataset}>
+                  <XAxis dataKey="time" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  {productTrend.map((s, idx) => (
+                    <Line
+                      key={s.productId}
+                      type="monotone"
+                      dataKey={s.productName}
+                      stroke={COLORS[idx % COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -142,26 +173,30 @@ export function VendorSales() {
             <CardTitle>Top Products</CardTitle>
           </CardHeader>
           <CardContent className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={products}
-                  dataKey="qtySold"
-                  nameKey="productName"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={120}
-                  label={false}
-                  labelLine={false}
-                >
-                  {products.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {products.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">No product data.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={products}
+                    dataKey="qtySold"
+                    nameKey="productName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    label={false}
+                    labelLine={false}
+                  >
+                    {products.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -170,24 +205,28 @@ export function VendorSales() {
             <CardTitle>Product Breakdown</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b">
-                  <th className="p-2">Product</th>
-                  <th className="p-2">Qty</th>
-                  <th className="p-2">Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p, idx) => (
-                  <tr key={idx} className="border-b">
-                    <td className="p-2">{p.productName}</td>
-                    <td className="p-2">{p.qtySold}</td>
-                    <td className="p-2">{formatCurrency(p.revenue)}</td>
+            {products.length === 0 ? (
+              <div className="h-24 flex items-center justify-center text-sm text-gray-500">No product data.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="p-2">Product</th>
+                    <th className="p-2">Qty</th>
+                    <th className="p-2">Revenue</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {products.map((p, idx) => (
+                    <tr key={idx} className="border-b">
+                      <td className="p-2">{p.productName}</td>
+                      <td className="p-2">{p.qtySold}</td>
+                      <td className="p-2">{formatCurrency(p.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </CardContent>
         </Card>
 
@@ -200,28 +239,34 @@ export function VendorSales() {
               <thead>
                 <tr className="text-left border-b">
                   <th className="p-2">Order</th>
+                  <th className="p-2">Created</th>
+                  <th className="p-2">Completed</th>
                   <th className="p-2">Amount</th>
-                  <th className="p-2">Time</th>
                   <th className="p-2">Items</th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o, idx) => (
-                  <tr key={idx} className="border-b align-top">
-                    <td className="p-2">#{o.orderNumber}</td>
-                    <td className="p-2">{formatCurrency(o.totalAmount)}</td>
-                    <td className="p-2">{new Date(o.createdAt).toLocaleTimeString()}</td>
-                    <td className="p-2">
-                      <ul>
-                        {o.items.map((it, i) => (
-                          <li key={i}>
-                            {it.qty}x {it.productName} ({formatCurrency(it.price)})
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  </tr>
-                ))}
+                {orders.length === 0 ? (
+                  <tr><td colSpan={5} className="p-6 text-center text-sm text-gray-500">No completed orders.</td></tr>
+                ) : (
+                  orders.map((o, idx) => (
+                    <tr key={idx} className="border-b align-top">
+                      <td className="p-2">{o.orderNumber}</td>
+                      <td className="p-2">{new Date(o.createdAt).toLocaleTimeString()}</td>
+                      <td className="p-2">{o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-'}</td>
+                      <td className="p-2">{formatCurrency(o.totalAmount)}</td>
+                      <td className="p-2">
+                        <ul>
+                          {o.items.map((it, i) => (
+                            <li key={i}>
+                              {it.qty}x {it.productName} ({formatCurrency(it.price)})
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </CardContent>
@@ -264,41 +309,58 @@ export function VendorSales() {
         </div>
 
         <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-          <div className="text-sm font-semibold text-black">Revenue Trend</div>
+          <div className="text-sm font-semibold text-black">Product Trend</div>
           <div className="mt-3 h-64 [@media(orientation:landscape)]:h-52 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={formattedTrend}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(val: number | undefined) => formatCurrency(val ?? 0)} />
-                <Line type="monotone" dataKey="revenue" stroke="#111827" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            {productTrend.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-neutral-600">No completed orders for selected date.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={productTrendDataset}>
+                  <XAxis dataKey="time" />
+                  <YAxis />
+                  <Tooltip />
+                  {productTrend.map((s, idx) => (
+                    <Line
+                      key={s.productId}
+                      type="monotone"
+                      dataKey={s.productName}
+                      stroke={MOBILE_COLORS[idx % MOBILE_COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
         <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Top Products</div>
           <div className="mt-3 h-72 [@media(orientation:landscape)]:h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={products}
-                  dataKey="qtySold"
-                  nameKey="productName"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={110}
-                  label={false}
-                  labelLine={false}
-                >
-                  {products.map((_, index) => (
-                    <Cell key={`cell-m-${index}`} fill={MOBILE_COLORS[index % MOBILE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {products.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-neutral-600">No product data.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={products}
+                    dataKey="qtySold"
+                    nameKey="productName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={110}
+                    label={false}
+                    labelLine={false}
+                  >
+                    {products.map((_, index) => (
+                      <Cell key={`cell-m-${index}`} fill={MOBILE_COLORS[index % MOBILE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -330,8 +392,11 @@ export function VendorSales() {
                 <div key={idx} className="rounded-3xl border border-neutral-100 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-black">#{o.orderNumber}</div>
-                      <div className="text-xs text-neutral-500">{new Date(o.createdAt).toLocaleTimeString()}</div>
+                      <div className="text-sm font-semibold text-black">{o.orderNumber}</div>
+                      <div className="text-xs text-neutral-500">
+                        Created {new Date(o.createdAt).toLocaleTimeString()}
+                        {o.completedAt ? ` • Completed ${new Date(o.completedAt).toLocaleTimeString()}` : ''}
+                      </div>
                     </div>
                     <div className="text-sm font-semibold text-black">{formatCurrency(o.totalAmount)}</div>
                   </div>

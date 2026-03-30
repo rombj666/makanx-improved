@@ -148,14 +148,20 @@ export const createOrder = async (
 
   if (!booth) throw new Error('Vendor has no assigned booth');
 
-  // Transaction: create order + compute ETA (vendor-based)
+  // Transaction: assign displayNumber + create order + compute ETA (vendor-based)
   let result: { order: any; estimatedMinutes: number };
-  try {
-    result = await prisma.$transaction(async (tx) => {
+  const createWithDisplayNumber = async () => {
+    return prisma.$transaction(async (tx) => {
+      const maxRow = await tx.order.aggregate({
+        where: { vendorId },
+        _max: { displayNumber: true },
+      });
+      const nextDisplayNumber = Number(maxRow?._max?.displayNumber ?? 0) + 1;
       const createdOrder = await tx.order.create({
         data: {
           customerId: finalCustomerId,
           vendorId,
+          displayNumber: nextDisplayNumber,
           totalAmount,
           status: OrderStatus.PREPARING,
           paymentMode,
@@ -166,24 +172,24 @@ export const createOrder = async (
           items: { include: { menuItem: true } },
         },
       });
-
       const pendingCount = await tx.order.count({
         where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
       });
-
       const avgMinutesPerOrder = 5;
       const estimatedMinutes = pendingCount * avgMinutesPerOrder;
-
-      const queueNumber = await tx.order.count({
-        where: { vendorId, createdAt: { lte: createdOrder.createdAt } },
-      });
-
       return {
-        order: { ...createdOrder, queueNumber, displayNumber: String(queueNumber) },
+        order: createdOrder,
         estimatedMinutes,
       };
     });
+  };
+  try {
+    result = await createWithDisplayNumber();
   } catch (e: any) {
+    const code = String((e as any)?.code || '');
+    if (code === 'P2002') {
+      result = await createWithDisplayNumber();
+    } else
     if (isMissingColumnError(e, 'selectedOptions')) {
       const fallbackItems = orderItemsData.map((x) => {
         const copy: any = { ...x };
@@ -191,10 +197,16 @@ export const createOrder = async (
         return copy;
       });
       result = await prisma.$transaction(async (tx) => {
+        const maxRow = await tx.order.aggregate({
+          where: { vendorId },
+          _max: { displayNumber: true },
+        });
+        const nextDisplayNumber = Number(maxRow?._max?.displayNumber ?? 0) + 1;
         const createdOrder = await tx.order.create({
           data: {
             customerId: finalCustomerId,
             vendorId,
+            displayNumber: nextDisplayNumber,
             totalAmount,
             status: OrderStatus.PREPARING,
             paymentMode,
@@ -213,12 +225,8 @@ export const createOrder = async (
         const avgMinutesPerOrder = 5;
         const estimatedMinutes = pendingCount * avgMinutesPerOrder;
 
-        const queueNumber = await tx.order.count({
-          where: { vendorId, createdAt: { lte: createdOrder.createdAt } },
-        });
-
         return {
-          order: { ...createdOrder, queueNumber, displayNumber: String(queueNumber) },
+          order: createdOrder,
           estimatedMinutes,
         };
       });
@@ -238,6 +246,11 @@ export const createOrder = async (
 
   // Realtime: vendor sees new order
   getIO().to(`vendor:${vendorId}`).emit('order_created', result.order);
+  getIO().to(`vendor:${vendorId}`).emit('vendor_orders_changed', {
+    orderId: result.order.id,
+    status: result.order.status,
+    updatedAt: result.order.updatedAt,
+  });
 
   // Realtime: customer (guest or logged in)
   getIO().to(`user:${finalCustomerId}`).emit('order_created_customer', result.order);
@@ -253,11 +266,13 @@ export const getVendorOrders = async (userId: string) => {
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
   try {
-    return await prisma.order.findMany({
+    const t0 = Date.now();
+    const orders = await prisma.order.findMany({
       where: { vendorId: vendorProfile.id },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
+        displayNumber: true,
         customerId: true,
         vendorId: true,
         status: true,
@@ -294,13 +309,18 @@ export const getVendorOrders = async (userId: string) => {
         },
       },
     });
+    const ms = Date.now() - t0;
+    if (ms > 800) console.log('[orders] getVendorOrders slow', { vendorId: vendorProfile.id, ms, count: orders.length });
+    return orders;
   } catch (e: any) {
     if (isMissingColumnError(e, 'selectedOptions')) {
-      return prisma.order.findMany({
+      const t0 = Date.now();
+      const orders = await prisma.order.findMany({
         where: { vendorId: vendorProfile.id },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
+          displayNumber: true,
           customerId: true,
           vendorId: true,
           status: true,
@@ -336,6 +356,106 @@ export const getVendorOrders = async (userId: string) => {
           },
         },
       });
+      const ms = Date.now() - t0;
+      if (ms > 800) console.log('[orders] getVendorOrders slow', { vendorId: vendorProfile.id, ms, count: orders.length });
+      return orders;
+    }
+    throw e;
+  }
+};
+
+export const getVendorLiveOrders = async (userId: string) => {
+  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendorProfile) throw new Error('Vendor profile not found');
+
+  const recentCompletedSince = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+  try {
+    const t0 = Date.now();
+    const orders = await prisma.order.findMany({
+      where: {
+        vendorId: vendorProfile.id,
+        OR: [
+          { status: { in: ['PREPARING', 'READY'] } },
+          { status: 'COMPLETED', completedAt: { gte: recentCompletedSince } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 150,
+      select: {
+        id: true,
+        displayNumber: true,
+        customerId: true,
+        vendorId: true,
+        status: true,
+        paymentMode: true,
+        paymentStatus: true,
+        totalAmount: true,
+        createdAt: true,
+        updatedAt: true,
+        acceptedAt: true,
+        readyAt: true,
+        completedAt: true,
+        items: {
+          select: {
+            id: true,
+            orderId: true,
+            menuItemId: true,
+            quantity: true,
+            remark: true,
+            status: true,
+            selectedOptions: true,
+            menuItem: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    const ms = Date.now() - t0;
+    if (ms > 800) console.log('[orders] getVendorLiveOrders slow', { vendorId: vendorProfile.id, ms, count: orders.length });
+    return orders;
+  } catch (e: any) {
+    if (isMissingColumnError(e, 'selectedOptions')) {
+      const t0 = Date.now();
+      const orders = await prisma.order.findMany({
+        where: {
+          vendorId: vendorProfile.id,
+          OR: [
+            { status: { in: ['PREPARING', 'READY'] } },
+            { status: 'COMPLETED', completedAt: { gte: recentCompletedSince } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 150,
+        select: {
+          id: true,
+          displayNumber: true,
+          customerId: true,
+          vendorId: true,
+          status: true,
+          paymentMode: true,
+          paymentStatus: true,
+          totalAmount: true,
+          createdAt: true,
+          updatedAt: true,
+          acceptedAt: true,
+          readyAt: true,
+          completedAt: true,
+          items: {
+            select: {
+              id: true,
+              orderId: true,
+              menuItemId: true,
+              quantity: true,
+              remark: true,
+              status: true,
+              menuItem: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      const ms = Date.now() - t0;
+      if (ms > 800) console.log('[orders] getVendorLiveOrders slow', { vendorId: vendorProfile.id, ms, count: orders.length });
+      return orders;
     }
     throw e;
   }
@@ -345,50 +465,122 @@ export const getVendorProductionBatch = async (
   vendorId: string,
   groupByWindow: boolean
 ) => {
-  const orders = await prisma.order.findMany({
-    where: {
-      vendorId,
-      status: "PREPARING",
-    },
-    include: {
-      items: {
-        include: {
-          menuItem: true,
+  try {
+    const t0 = Date.now();
+    const orders = await prisma.order.findMany({
+      where: {
+        vendorId,
+        status: "PREPARING",
+      },
+      select: {
+        id: true,
+        displayNumber: true,
+        customerId: true,
+        vendorId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        acceptedAt: true,
+        readyAt: true,
+        completedAt: true,
+        items: {
+          select: {
+            id: true,
+            orderId: true,
+            menuItemId: true,
+            quantity: true,
+            remark: true,
+            status: true,
+            selectedOptions: true,
+            menuItem: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+    const ms = Date.now() - t0;
+    if (ms > 800) console.log('[orders] getVendorProductionBatch slow', { vendorId, ms, count: orders.length });
 
-  if (!groupByWindow) {
-    // Return raw orders immediately
-    return orders;
-  }
-
-  // Group into 5-minute windows
-  const grouped: Record<string, any[]> = {};
-
-  orders.forEach((order) => {
-    const created = new Date(order.createdAt);
-    const minutes = Math.floor(created.getMinutes() / 5) * 5;
-    const windowStart = new Date(created);
-    windowStart.setMinutes(minutes, 0, 0);
-
-    const key = windowStart.toISOString();
-
-    if (!grouped[key]) {
-      grouped[key] = [];
+    if (!groupByWindow) {
+      return orders;
     }
 
-    grouped[key].push(order);
-  });
+    const grouped: Record<string, any[]> = {};
 
-  return Object.entries(grouped).map(([window, orders]) => ({
-    window,
-    orders,
-  }));
+    orders.forEach((order) => {
+      const created = new Date(order.createdAt);
+      const minutes = Math.floor(created.getMinutes() / 5) * 5;
+      const windowStart = new Date(created);
+      windowStart.setMinutes(minutes, 0, 0);
+
+      const key = windowStart.toISOString();
+
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+
+      grouped[key].push(order);
+    });
+
+    return Object.entries(grouped).map(([window, orders]) => ({
+      window,
+      orders,
+    }));
+  } catch (e: any) {
+    if (!isMissingColumnError(e, 'selectedOptions')) throw e;
+
+    const t0 = Date.now();
+    const orders = await prisma.order.findMany({
+      where: {
+        vendorId,
+        status: "PREPARING",
+      },
+      select: {
+        id: true,
+        displayNumber: true,
+        customerId: true,
+        vendorId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        acceptedAt: true,
+        readyAt: true,
+        completedAt: true,
+        items: {
+          select: {
+            id: true,
+            orderId: true,
+            menuItemId: true,
+            quantity: true,
+            remark: true,
+            status: true,
+            menuItem: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+    const ms = Date.now() - t0;
+    if (ms > 800) console.log('[orders] getVendorProductionBatch slow', { vendorId, ms, count: orders.length });
+
+    if (!groupByWindow) return orders;
+
+    const grouped: Record<string, any[]> = {};
+    orders.forEach((order) => {
+      const created = new Date(order.createdAt);
+      const minutes = Math.floor(created.getMinutes() / 5) * 5;
+      const windowStart = new Date(created);
+      windowStart.setMinutes(minutes, 0, 0);
+      const key = windowStart.toISOString();
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(order);
+    });
+    return Object.entries(grouped).map(([window, orders]) => ({ window, orders }));
+  }
 };
 
 /**
@@ -413,10 +605,12 @@ export const getCustomerOrders = async (customerId: string) => {
       const createdAt = o?.createdAt;
       if (!vendorId || !createdAt) return o;
 
+      if (typeof o?.displayNumber === 'number' && o.displayNumber > 0) {
+        return { ...o, queueNumber: o.displayNumber, displayNumber: String(o.displayNumber) };
+      }
       const queueNumber = await prisma.order.count({
         where: { vendorId, createdAt: { lte: createdAt } },
       });
-
       return { ...o, queueNumber, displayNumber: String(queueNumber) };
     })
   );
@@ -472,6 +666,11 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   // Notify customer + vendor realtime
   getIO().to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
   getIO().to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
+  getIO().to(`vendor:${order.vendorId}`).emit('vendor_orders_changed', {
+    orderId: updatedOrder.id,
+    status: updatedOrder.status,
+    updatedAt: updatedOrder.updatedAt,
+  });
 
   if (order.status !== OrderStatus.READY && status === OrderStatus.READY) {
     console.log('[push] READY transition', { orderId: order.id, customerId: order.customerId });
@@ -555,6 +754,11 @@ export const markBatchItemsReady = async (
       });
       io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
       io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
+      io.to(`vendor:${updatedOrder.vendorId}`).emit('vendor_orders_changed', {
+        orderId: updatedOrder.id,
+        status: updatedOrder.status,
+        updatedAt: updatedOrder.updatedAt,
+      });
       if (nextStatus === OrderStatus.READY) {
         try {
           await sendReadyNotification(updatedOrder);
@@ -579,6 +783,10 @@ export const markBatchItemsReady = async (
     windowEnd: windowEnd.toISOString(),
     affectedOrderIds: affectedOrders.map((o) => o.id),
     updatedCount: result.count ?? 0,
+  });
+  io.to(`vendor:${vendorProfile.id}`).emit('vendor_orders_changed', {
+    orderIds: affectedOrders.map((o) => o.id),
+    updatedAt: new Date().toISOString(),
   });
 
   return { updatedCount: result.count ?? 0 };
@@ -623,6 +831,11 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
   const io = getIO();
   io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
   io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
+  io.to(`vendor:${updatedOrder.vendorId}`).emit('vendor_orders_changed', {
+    orderId: updatedOrder.id,
+    status: updatedOrder.status,
+    updatedAt: updatedOrder.updatedAt,
+  });
   if (nextStatus === OrderStatus.READY) {
     try {
       await sendReadyNotification(updatedOrder);
@@ -678,7 +891,7 @@ export const bulkStatusUpdate = async (userId: string, orderIds: string[], statu
   // Notify customers (light payload)
   const affected = await prisma.order.findMany({
     where: { id: { in: orderIds }, vendorId: vendorProfile.id },
-    select: { id: true, customerId: true, status: true, vendorId: true },
+    select: { id: true, displayNumber: true, customerId: true, status: true, vendorId: true, updatedAt: true },
   });
 
   affected.forEach((o) => {
@@ -686,6 +899,11 @@ export const bulkStatusUpdate = async (userId: string, orderIds: string[], statu
   });
 
   getIO().to(`vendor:${vendorProfile.id}`).emit('orders_bulk_updated', { orderIds, status });
+  getIO().to(`vendor:${vendorProfile.id}`).emit('vendor_orders_changed', {
+    orderIds,
+    status,
+    updatedAt: now.toISOString(),
+  });
 
   return { updatedCount: updateResult.count };
 };

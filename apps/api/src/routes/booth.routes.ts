@@ -13,4 +13,8 @@ router.post('/layout', requireAuth, requireRole([Role.ORGANIZER]), boothControll
 router.put('/:id', requireAuth, requireRole([Role.ORGANIZER]), boothController.updateBooth);
 router.delete('/:id', requireAuth, requireRole([Role.ORGANIZER]), boothController.deleteBooth);
 
+// Vendor routes
+router.get('/vendor/show-prices', requireAuth, requireRole([Role.VENDOR]), boothController.getVendorShowPrices);
+router.patch('/vendor/show-prices', requireAuth, requireRole([Role.VENDOR]), boothController.vendorUpdateShowPrices);
+
 export default router;

@@ -4,6 +4,7 @@ import { useSocket } from '../../context/SocketContext';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
+import { computeDisplayNumber } from '../../lib/utils';
 
 
 
@@ -21,6 +22,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  displayNumber?: string | number | null;
   status: string;
   totalAmount: string;
   customer?: {
@@ -68,12 +70,23 @@ export function VendorDashboard() {
   }, [productionOrders, groupMinutes]);
 
   useEffect(() => {
-    fetchOrders();
+    refetchAll();
 
     if (socket) {
+      let t: any;
+      const scheduleRefetch = () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          void refetchAll();
+        }, 200);
+      };
+
+      socket.on('connect', scheduleRefetch);
+
       socket.on('order_created', (newOrder: Order) => {
         setOrders((prev) => [newOrder, ...prev]);
         toast.success('New Order Received!');
+        scheduleRefetch();
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
@@ -86,29 +99,52 @@ export function VendorDashboard() {
           }
           return [updatedOrder, ...prev];
         });
+        scheduleRefetch();
       });
+
+      socket.on('vendor_orders_changed', scheduleRefetch);
     }
 
     return () => {
       if (socket) {
+        socket.off('connect');
         socket.off('order_created');
         socket.off('order_updated');
+        socket.off('vendor_orders_changed');
       }
     };
   }, [socket]);
 
+  useEffect(() => {
+    const onFocus = () => {
+      void refetchAll();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refetchAll();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void fetchOrders();
+      if (viewMode === 'kitchen') void fetchProductionBatch();
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [viewMode]);
+
   const fetchOrders = async () => {
     try {
-      const { data } = await api.get('/orders/vendor-orders');
+      const { data } = await api.get('/orders/vendor-live');
       if (data.success) {
         const list: Order[] = data.data || [];
         setOrders(list);
-        
-        // If we have orders, we know the vendorId
-        if (list.length > 0 && socket) {
-          const vid = list[0].vendorId;
-          socket.emit('join_vendor', vid);
-        }
       }
     } catch (error) {
       console.error(error);
@@ -320,7 +356,7 @@ export function VendorDashboard() {
                   <Card key={order.id} className="cursor-pointer hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-2">
-                        <span className="font-bold">#{order.id.slice(-4)}</span>
+                        <span className="font-bold">#{computeDisplayNumber(order)}</span>
                         <span className="text-xs text-gray-500">
                           {new Date(order.createdAt).toLocaleTimeString()}
                         </span>
@@ -388,7 +424,7 @@ export function VendorDashboard() {
         <Card key={order.id} className="p-4 mb-2">
           <div className="flex justify-between items-start">
             <div>
-              <h5 className="font-semibold">Order #{order.id.slice(-4)}</h5>
+              <h5 className="font-semibold">Order #{computeDisplayNumber(order)}</h5>
               <p className="text-sm text-gray-600">{new Date(order.createdAt).toLocaleTimeString()}</p>
             </div>
             <span className={`px-2 py-1 rounded text-xs ${
@@ -598,7 +634,7 @@ export function VendorDashboard() {
                     <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-semibold text-black">Order #{order.id.slice(-4)}</div>
+                          <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
                           <div className="text-xs text-neutral-500">
                             {new Date(order.createdAt).toLocaleTimeString()}
                           </div>
@@ -665,7 +701,7 @@ export function VendorDashboard() {
                           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <div className="text-sm font-semibold text-black">Order #{order.id.slice(-4)}</div>
+                                <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
                                 <div className="text-xs text-neutral-500">
                                   {new Date(order.createdAt).toLocaleTimeString()}
                                 </div>

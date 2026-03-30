@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CartLine } from '../../hooks/useCustomerCart';
 
 type Props = {
@@ -5,13 +6,35 @@ type Props = {
   onQuantityChange: (quantity: number) => void;
   onRemarkChange: (remark: string) => void;
   onRemove: () => void;
+  hidePrices?: boolean;
 };
 
-export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove }: Props) {
+export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove, hidePrices }: Props) {
   const dec = () => onQuantityChange(Math.max(1, line.quantity - 1));
   const inc = () => onQuantityChange(Math.min(99, line.quantity + 1));
   const src = line.imageUrl && line.imageUrl.trim() !== '' ? line.imageUrl : '';
   const allowRemarks = (line as any).remarksEnabled !== false;
+  const [draftQty, setDraftQty] = useState<string>(String(line.quantity));
+
+  useEffect(() => {
+    setDraftQty(String(line.quantity));
+  }, [line.quantity]);
+
+  const commitQty = (raw: string) => {
+    const trimmed = String(raw || '').trim();
+    if (trimmed === '') {
+      setDraftQty(String(line.quantity));
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setDraftQty(String(line.quantity));
+      return;
+    }
+    const clamped = Math.max(1, Math.min(99, Math.floor(parsed)));
+    setDraftQty(String(clamped));
+    onQuantityChange(clamped);
+  };
   const selectedSummary = Array.isArray((line as any).selectedOptions)
     ? (line as any).selectedOptions
         .map((s: any) => {
@@ -40,7 +63,9 @@ export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove }: P
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-semibold text-black truncate">{line.name}</div>
-                <div className="text-sm text-neutral-600">RM{line.price.toFixed(2)}</div>
+                {!hidePrices ? (
+                  <div className="text-sm text-neutral-600">RM{line.price.toFixed(2)}</div>
+                ) : null}
                   {selectedSummary ? (
                     <div className="mt-1 text-xs text-neutral-600 line-clamp-2">{selectedSummary}</div>
                   ) : null}
@@ -65,7 +90,29 @@ export function CartItem({ line, onQuantityChange, onRemarkChange, onRemove }: P
                 >
                   −
                 </button>
-                <div className="w-8 text-center font-semibold text-black">{line.quantity}</div>
+                <input
+                  value={draftQty}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === '') {
+                      setDraftQty('');
+                      return;
+                    }
+                    const sanitized = next.replace(/[^\d]/g, '').slice(0, 2);
+                    setDraftQty(sanitized);
+                  }}
+                  onBlur={() => commitQty(draftQty)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      commitQty(draftQty);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-12 h-11 rounded-2xl border border-neutral-200 bg-white text-center font-semibold text-black outline-none focus:ring-2 focus:ring-black/20 focus:border-neutral-300"
+                  aria-label={`Quantity for ${line.name}`}
+                />
                 <button
                   onClick={inc}
                   disabled={line.quantity >= 99}
