@@ -116,7 +116,7 @@ export function OrderConfirmationPage() {
   const items = useMemo(() => (Array.isArray(order?.items) ? order!.items! : []), [order]);
   const qty = items.reduce((sum, it) => sum + Math.max(0, Number(it.quantity || 0)), 0);
   const computedEta = computeDisplayEtaMinutesFromQuantity(qty);
-  const eta = Number.isFinite(computedEta) && computedEta > 0 ? computedEta : order?.eta ?? 5;
+  const eta = Number.isFinite(computedEta) && computedEta > 0 ? computedEta : order?.eta ?? 0;
   const eventSlug = order?.eventSlug || eventSlugFromQuery || '';
   const vendorId = order?.vendorId || '';
   const boothId = order?.boothId || boothIdFromQuery || '';
@@ -348,72 +348,113 @@ export function OrderConfirmationPage() {
                 <div className="text-5xl font-semibold tracking-tight text-black mt-2">#{orderNumber}</div>
               </div>
 
-              <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-sm font-semibold text-black">Order Progress</div>
-                  <span
-                    className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${
+              <div
+                className={`mt-5 rounded-3xl p-6 shadow-xl border ${
+                  status === 'READY'
+                    ? 'bg-black border-black text-white'
+                    : status === 'COMPLETED'
+                      ? 'bg-neutral-50 border-neutral-200 text-black'
+                      : 'bg-white border-neutral-200 text-black'
+                }`}
+              >
+                {status === 'READY' ? (
+                  <>
+                    <div className="text-[28px] leading-tight font-extrabold tracking-tight">
+                      READY FOR PICKUP
+                    </div>
+                    <div className="mt-3 text-base font-semibold text-white/90">
+                      Please collect at the booth now
+                    </div>
+                  </>
+                ) : status === 'COMPLETED' ? (
+                  <>
+                    <div className="text-[26px] leading-tight font-extrabold tracking-tight">COMPLETED</div>
+                    <div className="mt-3 text-base text-neutral-700">
+                      Thanks — enjoy your order.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[26px] leading-tight font-extrabold tracking-tight">PREPARING</div>
+                    {eta > 0 ? (
+                      <div className="mt-3 text-base text-neutral-700">
+                        Estimated prep time{' '}
+                        <span className="font-extrabold text-black">~{eta} min</span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+
+                {!hasActiveOrder || pushUiState === 'enabled' ? null : (
+                  <div
+                    className={`mt-5 rounded-2xl p-4 border ${
                       status === 'READY'
-                        ? 'bg-black text-white'
-                        : status === 'COMPLETED'
-                          ? 'bg-neutral-200 text-neutral-900'
-                          : 'bg-white text-black border border-neutral-200'
+                        ? 'border-white/20 bg-white/10'
+                        : 'border-neutral-200 bg-neutral-50'
                     }`}
                   >
-                    {status}
-                  </span>
-                </div>
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${
+                          status === 'READY' ? 'bg-white text-black' : 'bg-black text-white'
+                        }`}
+                      >
+                        <Info size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <div
+                          className={`text-xs font-extrabold tracking-wide uppercase ${
+                            status === 'READY' ? 'text-white' : 'text-black'
+                          }`}
+                        >
+                          Notifications Off
+                        </div>
+                        <div
+                          className={`mt-2 text-sm leading-snug ${
+                            status === 'READY' ? 'text-white/90' : 'text-neutral-700'
+                          }`}
+                        >
+                          Keep this tab open so you don’t miss updates, or enable notifications.
+                        </div>
+                        {pushError ? (
+                          <div className={`mt-2 text-sm ${status === 'READY' ? 'text-white/90' : 'text-neutral-700'}`}>
+                            {pushError}
+                          </div>
+                        ) : null}
+                        <div className="mt-4 flex items-center gap-3">
+                          <button
+                            onClick={() => setNotifSheetOpen(true)}
+                            className={`px-4 py-3 rounded-2xl text-sm font-semibold active:scale-[0.99] transition ${
+                              status === 'READY'
+                                ? 'bg-white text-black'
+                                : 'bg-black text-white'
+                            }`}
+                          >
+                            Enable Notifications
+                          </button>
+                          <button
+                            onClick={continueWithoutNotifications}
+                            className={`px-4 py-3 rounded-2xl text-sm font-semibold active:scale-[0.99] transition border ${
+                              status === 'READY'
+                                ? 'border-white/30 text-white'
+                                : 'border-neutral-200 text-black'
+                            }`}
+                          >
+                            Not Now
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
+              <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
+                <div className="text-sm font-semibold text-black">Progress</div>
                 <div className="mt-4">
                   <OrderStatusStepper status={status} />
                 </div>
-
-                {status === 'PREPARING' ? (
-                  <div className="mt-4 text-sm text-neutral-700">
-                    Estimated prep time:{' '}
-                    <span className="font-semibold text-black">~{eta} min</span>
-                  </div>
-                ) : status === 'READY' ? (
-                  <div className="mt-4 text-sm text-neutral-700">
-                    <span className="font-semibold text-black">READY</span> — Please collect at the booth.
-                  </div>
-                ) : status === 'COMPLETED' ? (
-                  <div className="mt-4 text-sm text-neutral-700">
-                    <span className="font-semibold text-black">Completed</span> — Enjoy your order.
-                  </div>
-                ) : null}
               </div>
-
-              {!hasActiveOrder || pushUiState === 'enabled' ? null : (
-                <div className="mt-4 rounded-3xl border border-black bg-black text-white p-5 shadow-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black">
-                      <Info size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-extrabold tracking-wide uppercase">Don’t close this page</div>
-                      <div className="mt-2 text-sm leading-snug text-white/90">
-                        Notifications are not enabled. Keep this tab open so you don’t miss status updates.
-                      </div>
-                      {pushError ? <div className="mt-2 text-sm text-white/90">{pushError}</div> : null}
-                      <div className="mt-4 flex items-center gap-3">
-                        <button
-                          onClick={() => setNotifSheetOpen(true)}
-                          className="px-4 py-3 rounded-2xl bg-white text-black text-sm font-semibold active:scale-[0.99] transition"
-                        >
-                          Enable Notifications
-                        </button>
-                        <button
-                          onClick={continueWithoutNotifications}
-                          className="px-4 py-3 rounded-2xl border border-white/30 text-white text-sm font-semibold active:scale-[0.99] transition"
-                        >
-                          Not Now
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="mt-5">
                 <div className="text-sm font-semibold text-black">Order Summary</div>

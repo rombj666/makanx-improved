@@ -37,6 +37,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
   const { socket, isConnected } = useSocket();
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [allowedVendorIds, setAllowedVendorIds] = useState<Set<string> | null>(null);
 
   const key = useMemo(() => storageKey(slug), [slug]);
 
@@ -47,6 +48,29 @@ export function useCustomerOrders(eventSlug: string | undefined) {
     setOrders(saved);
   }, [key, slug]);
 
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const { data } = await api.get(`/events/${slug}`);
+        const booths: any[] = data?.data?.booths || [];
+        const ids = new Set<string>();
+        for (const b of booths) {
+          const vid = b?.vendor?.id;
+          if (vid) ids.add(String(vid));
+        }
+        if (!cancelled) setAllowedVendorIds(ids);
+      } catch {
+        if (!cancelled) setAllowedVendorIds(null);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
   const fetchAndMerge = useCallback(async () => {
     if (!slug) return;
     setIsLoading(true);
@@ -55,7 +79,11 @@ export function useCustomerOrders(eventSlug: string | undefined) {
       const { data } = await api.get(`/orders/my-orders`, {
         params: { guestId },
       });
-      const serverOrders: any[] = data?.data || [];
+      const raw: any[] = Array.isArray(data?.data) ? data.data : [];
+      const serverOrders =
+        allowedVendorIds && allowedVendorIds.size > 0
+          ? raw.filter((o: any) => allowedVendorIds.has(String(o?.vendorId || '')))
+          : raw;
       const normalized: ActiveOrder[] = serverOrders.map((o: any) => {
         const items = Array.isArray(o.items)
           ? o.items.map((it: any) => ({
@@ -79,28 +107,23 @@ export function useCustomerOrders(eventSlug: string | undefined) {
           items,
         };
       });
-      setOrders((prev) => {
-        const map = new Map<string, ActiveOrder>();
-        [...prev, ...normalized].forEach((ord) => {
-          const existing = map.get(ord.orderId);
-          if (!existing) {
-            map.set(ord.orderId, ord);
-          } else {
-            map.set(ord.orderId, { ...existing, ...ord });
-          }
-        });
-        const merged = Array.from(map.values()).filter(
-          (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
-        );
-        localStorage.setItem(key, JSON.stringify(merged));
-        return merged;
-      });
+      const active = normalized.filter(
+        (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
+      );
+      if (active.length === 0) {
+        try {
+          localStorage.removeItem(key);
+        } catch {}
+      } else {
+        localStorage.setItem(key, JSON.stringify(active));
+      }
+      setOrders(active);
     } catch {
       // ignore fetch errors, keep local data
     } finally {
       setIsLoading(false);
     }
-  }, [key, slug]);
+  }, [allowedVendorIds, key, slug]);
 
   useEffect(() => {
     void fetchAndMerge();

@@ -14,7 +14,7 @@ export const formatCurrency = (value: number) => {
 
 export function computeEtaMinutes(totalItemQuantity: number) {
   const qty = Number.isFinite(totalItemQuantity) ? Math.max(0, totalItemQuantity) : 0;
-  return 5 + qty * 1.2;
+  return qty * 1.2;
 }
 
 export function roundUpToNearest5Minutes(minutes: number) {
