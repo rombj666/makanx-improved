@@ -32,14 +32,41 @@ initSocket(httpServer);
 // Security Middleware
 app.set('trust proxy', 1); // Trust first proxy (Render/Vercel)
 
+const stripQuotes = (s: string) => s.replace(/^['"`]+|['"`]+$/g, '');
+const normalizeOrigin = (s: string) => stripQuotes(s.trim()).replace(/\/+$/, '');
+const parseOriginList = (raw: unknown) => {
+  const input = typeof raw === 'string' ? raw : '';
+  return input
+    .split(/[,\s]+/g)
+    .map((x) => normalizeOrigin(x))
+    .filter(Boolean);
+};
+
+const originsFromEnv = [
+  ...parseOriginList(process.env.CORS_ORIGIN),
+  ...parseOriginList(process.env.CLIENT_URL),
+].filter(Boolean);
+
+const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const defaultDevOrigins = isProd ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+const allowedOrigins = Array.from(new Set([...originsFromEnv, ...defaultDevOrigins].map(normalizeOrigin)));
+const allowAllOrigins = allowedOrigins.includes('*');
+
+console.log('[cors] allowed origins', { allowAll: allowAllOrigins, origins: allowedOrigins.filter((o) => o !== '*') });
+
 const corsOptions: cors.CorsOptions = {
-  origin: [
-    'https://makanx-improved-web.vercel.app',
-    'http://localhost:5173',
-  ],
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    const cleaned = normalizeOrigin(origin);
+    if (allowAllOrigins) return cb(null, true);
+    if (allowedOrigins.includes(cleaned)) return cb(null, cleaned);
+    return cb(null, false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));

@@ -7,20 +7,37 @@ const prisma = new PrismaClient();
 let io: Server;
 
 export const initSocket = (httpServer: HttpServer) => {
-  const normalize = (s: string) => s.trim().replace(/\/$/, "");
+  const stripQuotes = (s: string) => s.replace(/^['"`]+|['"`]+$/g, '');
+  const normalize = (s: string) => stripQuotes(s.trim()).replace(/\/+$/, "");
+  const parseOriginList = (raw: unknown) => {
+    const input = typeof raw === 'string' ? raw : '';
+    return input
+      .split(/[,\s]+/g)
+      .map((x) => normalize(x))
+      .filter(Boolean);
+  };
 
-  const allowedOrigins = [
-    "https://makanx-improved-web.vercel.app",
-    "http://localhost:5173"
-  ].map(normalize);
+  const originsFromEnv = [
+    ...parseOriginList(process.env.CORS_ORIGIN),
+    ...parseOriginList(process.env.CLIENT_URL),
+  ].filter(Boolean);
+
+  const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  const defaultDevOrigins = isProd ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+  const allowedOrigins = Array.from(new Set([...originsFromEnv, ...defaultDevOrigins].map(normalize)));
+  const allowAllOrigins = allowedOrigins.includes('*');
+
+  console.log('[socket] allowed origins', { allowAll: allowAllOrigins, origins: allowedOrigins.filter((o) => o !== '*') });
 
   io = new Server(httpServer, {
     cors: {
       origin: (origin, cb) => {
         if (!origin) return cb(null, true);
         const cleaned = normalize(origin);
+        if (allowAllOrigins) return cb(null, true);
         if (allowedOrigins.includes(cleaned)) return cb(null, cleaned);
-        return cb(new Error("socket.io CORS blocked: " + origin));
+        return cb(null, false);
       },
       methods: ["GET", "POST"],
       credentials: true
