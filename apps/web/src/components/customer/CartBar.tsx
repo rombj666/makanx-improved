@@ -3,6 +3,8 @@ type Props = {
   totalPrice: number;
   onViewCart: () => void;
   hidePrices?: boolean;
+  topNode?: React.ReactNode;
+  bottomNode?: React.ReactNode;
   topText?: string;
   bottomText?: string;
   actionLabel?: string;
@@ -14,36 +16,35 @@ export function CartBar({
   totalPrice,
   onViewCart,
   hidePrices,
+  topNode,
+  bottomNode,
   topText,
   bottomText,
   actionLabel,
   onOpenSummary,
 }: Props) {
-  const top = topText ?? `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
-  const bottom =
-    bottomText ??
-    (!hidePrices && totalItems > 0 ? `RM${totalPrice.toFixed(2)}` : '');
+  const top = topNode ?? topText ?? `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
+  const bottom = bottomNode ?? bottomText ?? (!hidePrices && totalItems > 0 ? `RM${totalPrice.toFixed(2)}` : '');
   const label = actionLabel ?? 'View';
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
       <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white border border-neutral-100 overflow-hidden">
         <div className="px-5 py-4 flex items-center justify-between gap-4">
-          {onOpenSummary ? (
-            <button
-              type="button"
-              onClick={onOpenSummary}
-              className="min-w-0 text-left"
-              aria-label="Open summary"
-            >
+          <div className="min-w-0">
+            {onOpenSummary && typeof top === 'string' ? (
+              <button
+                type="button"
+                onClick={onOpenSummary}
+                className="text-left"
+                aria-label="Open summary"
+              >
+                <div className="text-xs font-semibold text-neutral-600">{top}</div>
+              </button>
+            ) : (
               <div className="text-xs font-semibold text-neutral-600">{top}</div>
-              {bottom ? <div className="text-base font-semibold text-black">{bottom}</div> : null}
-            </button>
-          ) : (
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-neutral-600">{top}</div>
-              {bottom ? <div className="text-base font-semibold text-black">{bottom}</div> : null}
-            </div>
-          )}
+            )}
+            {bottom ? <div className="text-base font-semibold text-black">{bottom}</div> : null}
+          </div>
           <button
             onClick={onViewCart}
             className="px-5 py-3 bg-black text-white rounded-2xl text-sm font-semibold active:scale-95 transition"

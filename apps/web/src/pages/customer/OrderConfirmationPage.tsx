@@ -17,7 +17,8 @@ interface OrderState {
   vendorId?: string;
   boothId?: string;
   status?: string;
-  items?: { name: string; quantity: number; remark?: string; selectedOptions?: any[] }[];
+  customerEmail?: string;
+  items?: { name: string; quantity: number; imageUrl?: string; remark?: string; selectedOptions?: any[] }[];
 }
 
 export function OrderConfirmationPage() {
@@ -74,6 +75,7 @@ export function OrderConfirmationPage() {
           ? found.items.map((it: any) => ({
               name: it?.menuItem?.name || '',
               quantity: Number(it?.quantity ?? 0),
+              imageUrl: it?.menuItem?.imageUrl || '',
               remark: it?.remark || '',
               selectedOptions: Array.isArray(it?.selectedOptions) ? it.selectedOptions : [],
             }))
@@ -98,6 +100,7 @@ export function OrderConfirmationPage() {
           vendorId,
           boothId,
           status,
+          customerEmail: typeof found?.customerEmail === 'string' ? found.customerEmail : undefined,
           items,
         });
         if (status) setLiveStatus(status);
@@ -457,6 +460,11 @@ export function OrderConfirmationPage() {
               </div>
 
               <div className="mt-5">
+                <div className="text-xs text-neutral-500 mb-2">
+                  {order?.customerEmail && String(order.customerEmail).trim() !== ''
+                    ? 'We’ll also send your order update by email when it’s ready.'
+                    : 'Keep this page open to receive order updates here.'}
+                </div>
                 <div className="text-sm font-semibold text-black">Order Summary</div>
                 {items.length === 0 ? (
                   <div className="mt-2 text-sm text-neutral-600">Summary unavailable.</div>
@@ -464,11 +472,23 @@ export function OrderConfirmationPage() {
                   <div className="mt-3 space-y-3">
                     {items.map((it, idx) => (
                       <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="text-sm font-semibold text-black">
-                            {it.quantity}x {it.name || 'Item'}
+                        <div className="flex items-start gap-3">
+                          <div className="w-14 h-14 rounded-2xl overflow-hidden bg-neutral-100 shrink-0">
+                            {it.imageUrl && String(it.imageUrl).trim() !== '' ? (
+                              <img
+                                src={String(it.imageUrl)}
+                                alt={it.name || 'Item'}
+                                className="w-14 h-14 object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 bg-gradient-to-br from-neutral-100 to-neutral-200" />
+                            )}
                           </div>
-                        </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold text-black">
+                              {it.quantity}x {it.name || 'Item'}
+                            </div>
                         {Array.isArray(it.selectedOptions) && it.selectedOptions.length > 0 ? (
                           <div className="mt-1 text-xs text-neutral-600">
                             {it.selectedOptions
@@ -488,6 +508,8 @@ export function OrderConfirmationPage() {
                             <span className="text-neutral-500">Remark:</span> {String(it.remark)}
                           </div>
                         ) : null}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

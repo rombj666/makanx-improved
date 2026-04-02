@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
@@ -27,7 +28,9 @@ export function CartPage() {
   const [error, setError] = useState<string | null>(null);
   const [hidePrices, setHidePrices] = useState<boolean>(false);
   const [customerEmail, setCustomerEmail] = useState('');
-  const [customerEmailTouched, setCustomerEmailTouched] = useState(false);
+  const [emailSheetOpen, setEmailSheetOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [emailDraftTouched, setEmailDraftTouched] = useState(false);
 
   const vendorTitle = cart.vendorName || 'Your Cart';
 
@@ -54,6 +57,7 @@ export function CartPage() {
       cart.lines.map((l) => ({
         name: l.name,
         quantity: l.quantity,
+        imageUrl: l.imageUrl || '',
         remark: (l as any).remarksEnabled === false ? '' : (l.remark || '').trim(),
         selectedOptions: Array.isArray((l as any).selectedOptions) ? (l as any).selectedOptions : [],
       })),
@@ -68,23 +72,23 @@ export function CartPage() {
   }, [activeOrders, vid]);
 
   const hasCheckoutBar = cart.lines.length > 0;
-  const normalizedEmail = customerEmail.trim();
-  const emailOk =
-    normalizedEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+  const normalizeEmail = (email: string) => email.trim();
+  const isValidEmail = (email: string) =>
+    email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const checkout = async () => {
+  const performCheckout = async (emailOverride?: string) => {
     if (!vid || cart.lines.length === 0) return;
-    if (!emailOk) {
-      setCustomerEmailTouched(true);
-      const msg = 'Please enter a valid email address';
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
     setIsPlacing(true);
     setError(null);
     try {
       const guestId = getOrCreateGuestId();
+      const normalizedEmail = normalizeEmail(typeof emailOverride === 'string' ? emailOverride : customerEmail);
+      if (!isValidEmail(normalizedEmail)) {
+        const msg = 'Please enter a valid email address';
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
       const res = await api.post('/orders', {
         vendorId: vid,
         items: cart.lines.map((l) => ({
@@ -123,14 +127,15 @@ export function CartPage() {
         items: summaryItems.map((it) => ({
           name: it.name,
           quantity: it.quantity,
+          imageUrl: it.imageUrl,
           remark: it.remark,
           selectedOptions: it.selectedOptions,
         })),
       } as any);
 
       cart.clear();
-      setCustomerEmail('');
-      setCustomerEmailTouched(false);
+      setEmailDraft('');
+      setEmailDraftTouched(false);
       try {
         localStorage.setItem('mx_center_map', '1');
       } catch {}
@@ -147,6 +152,7 @@ export function CartPage() {
           eventSlug,
           vendorId: vid,
           boothId,
+          customerEmail: normalizedEmail || undefined,
           items: summaryItems,
         },
       });
@@ -157,6 +163,19 @@ export function CartPage() {
     } finally {
       setIsPlacing(false);
     }
+  };
+
+  const requestCheckout = async () => {
+    if (isPlacing) return;
+    if (!vid || cart.lines.length === 0) return;
+    const normalized = normalizeEmail(customerEmail);
+    if (normalized === '') {
+      setEmailDraft('');
+      setEmailDraftTouched(false);
+      setEmailSheetOpen(true);
+      return;
+    }
+    await performCheckout(normalized);
   };
 
   return (
@@ -265,30 +284,6 @@ export function CartPage() {
         <div className="fixed bottom-0 left-0 right-0 z-50">
           <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white overflow-hidden">
             <div className="p-4">
-              <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                <div className="text-sm font-semibold text-black">Email address</div>
-                <div className="mt-1 text-xs text-neutral-600">
-                  Enter your email to receive order updates.
-                </div>
-                <input
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  onBlur={() => setCustomerEmailTouched(true)}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className={`mt-3 w-full rounded-2xl border px-4 py-3 text-sm outline-none ${
-                    customerEmailTouched && !emailOk ? 'border-red-500' : 'border-neutral-200'
-                  }`}
-                />
-                {customerEmailTouched && !emailOk ? (
-                  <div className="mt-2 text-xs font-semibold text-red-600">
-                    Please enter a valid email address.
-                  </div>
-                ) : null}
-              </div>
-
               {!hidePrices ? (
                 <>
                   <div className="flex justify-between text-sm text-gray-600">
@@ -303,8 +298,8 @@ export function CartPage() {
               ) : null}
 
               <button
-                onClick={checkout}
-                disabled={cart.lines.length === 0 || isPlacing || !emailOk}
+                onClick={requestCheckout}
+                disabled={cart.lines.length === 0 || isPlacing}
                 className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
               >
                 {isPlacing ? 'Placing order…' : 'Place New Order'}
@@ -313,8 +308,118 @@ export function CartPage() {
           </div>
         </div>
       ) : null}
+
+      <EmailPromptSheet
+        open={emailSheetOpen}
+        emailDraft={emailDraft}
+        emailTouched={emailDraftTouched}
+        isEmailValid={isValidEmail(normalizeEmail(emailDraft))}
+        onEmailChange={(v) => setEmailDraft(v)}
+        onEmailBlur={() => setEmailDraftTouched(true)}
+        onClose={() => setEmailSheetOpen(false)}
+        onContinueWithEmail={async () => {
+          const normalized = normalizeEmail(emailDraft);
+          setEmailDraftTouched(true);
+          if (!isValidEmail(normalized) || normalized === '') {
+            toast.error('Please enter a valid email address');
+            return;
+          }
+          setCustomerEmail(normalized);
+          setEmailSheetOpen(false);
+          await performCheckout(normalized);
+        }}
+        onSkip={async () => {
+          setEmailSheetOpen(false);
+          await performCheckout('');
+        }}
+      />
     </div>
   );
 }
 
 export default CartPage;
+
+function EmailPromptSheet({
+  open,
+  emailDraft,
+  emailTouched,
+  isEmailValid,
+  onEmailChange,
+  onEmailBlur,
+  onContinueWithEmail,
+  onSkip,
+  onClose,
+}: {
+  open: boolean;
+  emailDraft: string;
+  emailTouched: boolean;
+  isEmailValid: boolean;
+  onEmailChange: (v: string) => void;
+  onEmailBlur: () => void;
+  onContinueWithEmail: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  const sheet = (
+    <div className="fixed inset-0 z-50 bg-black/60" onMouseDown={onClose} onTouchStart={onClose}>
+      <div
+        className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl border-t border-neutral-200"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+          <div className="text-base font-semibold text-black truncate">Get order updates by email</div>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 rounded-full border border-neutral-200 text-black bg-white active:scale-95 transition"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="px-5 pb-5">
+          <div className="text-sm text-neutral-700 leading-snug">
+            Enter your email to receive order ready updates.
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-neutral-200 bg-white p-4">
+            <div className="text-sm font-semibold text-black">Email address</div>
+            <input
+              value={emailDraft}
+              onChange={(e) => onEmailChange(e.target.value)}
+              onBlur={onEmailBlur}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              className={`mt-3 w-full rounded-2xl border px-4 py-3 text-sm outline-none ${
+                emailTouched && !isEmailValid ? 'border-red-500' : 'border-neutral-200'
+              }`}
+            />
+            {emailTouched && !isEmailValid ? (
+              <div className="mt-2 text-xs font-semibold text-red-600">Please enter a valid email address.</div>
+            ) : null}
+          </div>
+
+          <button
+            onClick={onContinueWithEmail}
+            className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl active:scale-[0.99] transition"
+          >
+            Continue with Email
+          </button>
+          <button
+            onClick={onSkip}
+            className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold active:scale-[0.99] transition bg-white border border-neutral-200 text-neutral-700"
+          >
+            Skip for now
+          </button>
+
+          <div className="pb-[max(env(safe-area-inset-bottom),12px)]" />
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(sheet, document.body);
+}

@@ -41,6 +41,7 @@ export function CustomerOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -83,11 +84,23 @@ export function CustomerOrderPage() {
       .slice()
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [orders, vendorId]);
-  const activeOrder = activeOrdersForVendor[0] || null;
+  const selectedOrder = useMemo(() => {
+    if (!selectedOrderId) return activeOrdersForVendor[0] || null;
+    return activeOrdersForVendor.find((o) => String(o.orderId) === String(selectedOrderId)) || activeOrdersForVendor[0] || null;
+  }, [activeOrdersForVendor, selectedOrderId]);
+
+  useEffect(() => {
+    if (activeOrdersForVendor.length === 0) return;
+    const exists = selectedOrderId
+      ? activeOrdersForVendor.some((o) => String(o.orderId) === String(selectedOrderId))
+      : false;
+    if (!exists) setSelectedOrderId(String(activeOrdersForVendor[0].orderId));
+  }, [activeOrdersForVendor, selectedOrderId]);
+
   const mode: 'cart' | 'order' | 'empty' =
-    cart.totalItems > 0 ? 'cart' : activeOrder ? 'order' : 'empty';
-  const orderEta = activeOrder
-    ? roundUpToNearest5Minutes(Math.max(Number(activeOrder.estimatedMinutes ?? 0), 0))
+    cart.totalItems > 0 ? 'cart' : selectedOrder ? 'order' : 'empty';
+  const orderEta = selectedOrder
+    ? roundUpToNearest5Minutes(Math.max(Number(selectedOrder.estimatedMinutes ?? 0), 0))
     : 0;
 
   if (!booth) {
@@ -137,28 +150,56 @@ export function CustomerOrderPage() {
         totalItems={cart.totalItems}
         totalPrice={cart.total}
         hidePrices={hidePrices}
+        topNode={
+          mode === 'order' ? (
+            <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1">
+              {activeOrdersForVendor.map((o) => {
+                const isSelected = String(o.orderId) === String(selectedOrder?.orderId || '');
+                return (
+                  <button
+                    key={o.orderId}
+                    type="button"
+                    onClick={() => {
+                      setSelectedOrderId(String(o.orderId));
+                      setSummaryOpen(true);
+                    }}
+                    className={`shrink-0 text-xs font-semibold ${
+                      isSelected ? 'text-black underline underline-offset-4' : 'text-neutral-600'
+                    }`}
+                    aria-label={`Open Order #${o.displayNumber}`}
+                  >
+                    Order #{o.displayNumber}
+                  </button>
+                );
+              })}
+            </div>
+          ) : undefined
+        }
         topText={
           mode === 'order'
-            ? `Order #${activeOrder?.displayNumber || '—'}`
+            ? `Order #${selectedOrder?.displayNumber || '—'}`
             : `${cart.totalItems} ${cart.totalItems === 1 ? 'item' : 'items'}`
         }
         bottomText={
           mode === 'order'
-            ? activeOrder?.status === 'READY'
+            ? selectedOrder?.status === 'READY'
               ? 'READY — Collect now'
-              : activeOrder?.status === 'PREPARING'
+              : selectedOrder?.status === 'PREPARING'
                 ? `~${orderEta} min`
-                : String(activeOrder?.status || '')
+                : String(selectedOrder?.status || '')
             : undefined
         }
         actionLabel={mode === 'cart' ? 'View Cart' : 'Summary'}
-        onOpenSummary={() => setSummaryOpen(true)}
         onViewCart={() => {
           if (mode === 'cart') {
             navigate(`/customer/event/${slug}/order/${vendorId}/cart`);
             return;
           }
-          setSummaryOpen(true);
+          if (!selectedOrder?.orderId) return;
+          const nextUrl =
+            `/customer/order-confirmed?orderId=${encodeURIComponent(String(selectedOrder.orderId))}` +
+            (slug ? `&eventSlug=${encodeURIComponent(String(slug))}` : '');
+          navigate(nextUrl);
         }}
       />
 
@@ -253,23 +294,45 @@ export function CustomerOrderPage() {
               </button>
             </div>
           </div>
-        ) : mode === 'order' && activeOrder ? (
+        ) : mode === 'order' && selectedOrder ? (
           <div>
+            {activeOrdersForVendor.length > 1 ? (
+              <div className="mb-3 flex items-center gap-2 overflow-x-auto">
+                {activeOrdersForVendor.map((o) => {
+                  const isSelected = String(o.orderId) === String(selectedOrder.orderId);
+                  return (
+                    <button
+                      key={o.orderId}
+                      type="button"
+                      onClick={() => setSelectedOrderId(String(o.orderId))}
+                      className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold border ${
+                        isSelected
+                          ? 'bg-black text-white border-black'
+                          : 'bg-white text-black border-neutral-200'
+                      }`}
+                    >
+                      #{o.displayNumber}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
             <div className="rounded-2xl border border-neutral-100 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-semibold text-black">Order #{activeOrder.displayNumber}</div>
-                <div className="text-xs font-bold text-neutral-600">{String(activeOrder.status || '').toUpperCase()}</div>
+                <div className="text-sm font-semibold text-black">Order #{selectedOrder.displayNumber}</div>
+                <div className="text-xs font-bold text-neutral-600">{String(selectedOrder.status || '').toUpperCase()}</div>
               </div>
-              {activeOrder.status === 'PREPARING' ? (
+              {selectedOrder.status === 'PREPARING' ? (
                 <div className="mt-1 text-sm text-neutral-600">Estimated prep time: ~{orderEta} min</div>
-              ) : activeOrder.status === 'READY' ? (
+              ) : selectedOrder.status === 'READY' ? (
                 <div className="mt-1 text-sm text-neutral-600">READY — Collect now</div>
               ) : null}
             </div>
 
-            {Array.isArray(activeOrder.items) && activeOrder.items.length > 0 ? (
+            {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
               <div className="mt-4 space-y-3">
-                {activeOrder.items.map((it, idx) => (
+                {selectedOrder.items.map((it, idx) => (
                   <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
                     <div className="text-sm font-semibold text-black">
                       {it.quantity}x {it.name || 'Item'}
