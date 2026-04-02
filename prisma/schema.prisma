@@ -142,6 +142,7 @@ model MenuItem {
 model Order {
   id          String      @id @default(uuid())
   customerId  String
+  customerEmail String?
   customer    User        @relation(fields: [customerId], references: [id])
   vendorId    String
   vendor      VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])

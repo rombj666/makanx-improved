@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build":"npx prisma generate && tsc",
+    "build":"npm run db:push && npx prisma generate && tsc",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:seed": "npx prisma db seed",
