@@ -121,6 +121,7 @@ model MenuItem {
 model Order {
   id            String        @id @default(uuid())
   customerId    String
+  customerEmail String?
   vendorId      String
   displayNumber Int           @default(0)
   status        OrderStatus   @default(PREPARING)

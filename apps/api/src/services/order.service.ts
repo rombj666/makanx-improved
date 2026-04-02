@@ -33,6 +33,13 @@ const createOrderSchema = z.object({
   ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
   guestId: z.string().optional(),
+  customerEmail: z
+    .union([z.string().trim().email(), z.literal('')])
+    .optional()
+    .transform((v) => {
+      const s = typeof v === 'string' ? v.trim() : '';
+      return s ? s : undefined;
+    }),
 });
 
 function coerceOptionGroups(val: any): any[] {
@@ -48,7 +55,7 @@ export const createOrder = async (
   customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
 ) => {
-  const { vendorId, items, paymentMode, guestId } = createOrderSchema.parse(input);
+  const { vendorId, items, paymentMode, guestId, customerEmail } = createOrderSchema.parse(input);
 
   // Use guestId as customerId if provided and no customerId from JWT
   const finalCustomerId = customerId || guestId;
@@ -150,7 +157,16 @@ export const createOrder = async (
 
   // Transaction: assign displayNumber + create order + compute ETA (vendor-based)
   let result: { order: any; estimatedMinutes: number };
-  const createWithDisplayNumber = async () => {
+  const createWithDisplayNumber = async (opts?: { includeSelectedOptions?: boolean; includeCustomerEmail?: boolean }) => {
+    const includeSelectedOptions = opts?.includeSelectedOptions !== false;
+    const includeCustomerEmail = opts?.includeCustomerEmail !== false;
+    const itemsToCreate = includeSelectedOptions
+      ? (orderItemsData as any)
+      : (orderItemsData.map((x) => {
+          const copy: any = { ...x };
+          delete copy.selectedOptions;
+          return copy;
+        }) as any);
     return prisma.$transaction(async (tx) => {
       const maxRow = await tx.order.aggregate({
         where: { vendorId },
@@ -160,13 +176,14 @@ export const createOrder = async (
       const createdOrder = await tx.order.create({
         data: {
           customerId: finalCustomerId,
+          ...(includeCustomerEmail ? { customerEmail: customerEmail || null } : {}),
           vendorId,
           displayNumber: nextDisplayNumber,
           totalAmount,
           status: OrderStatus.PREPARING,
           paymentMode,
           paymentStatus,
-          items: { create: orderItemsData as any },
+          items: { create: itemsToCreate },
         },
         include: {
           items: { include: { menuItem: true } },
@@ -189,47 +206,28 @@ export const createOrder = async (
     const code = String((e as any)?.code || '');
     if (code === 'P2002') {
       result = await createWithDisplayNumber();
-    } else
-    if (isMissingColumnError(e, 'selectedOptions')) {
-      const fallbackItems = orderItemsData.map((x) => {
-        const copy: any = { ...x };
-        delete copy.selectedOptions;
-        return copy;
-      });
-      result = await prisma.$transaction(async (tx) => {
-        const maxRow = await tx.order.aggregate({
-          where: { vendorId },
-          _max: { displayNumber: true },
-        });
-        const nextDisplayNumber = Number(maxRow?._max?.displayNumber ?? 0) + 1;
-        const createdOrder = await tx.order.create({
-          data: {
-            customerId: finalCustomerId,
-            vendorId,
-            displayNumber: nextDisplayNumber,
-            totalAmount,
-            status: OrderStatus.PREPARING,
-            paymentMode,
-            paymentStatus,
-            items: { create: fallbackItems as any },
-          },
-          include: {
-            items: { include: { menuItem: true } },
-          },
-        });
-
-        const pendingCount = await tx.order.count({
-          where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
-        });
-
-        const avgMinutesPerOrder = 5;
-        const estimatedMinutes = pendingCount * avgMinutesPerOrder;
-
-        return {
-          order: createdOrder,
-          estimatedMinutes,
-        };
-      });
+    } else if (isMissingColumnError(e, 'selectedOptions')) {
+      try {
+        result = await createWithDisplayNumber({ includeSelectedOptions: false });
+      } catch (e2: any) {
+        if (isMissingColumnError(e2, 'customerEmail')) {
+          console.warn('[orders] customerEmail column missing; creating order without customerEmail');
+          result = await createWithDisplayNumber({ includeSelectedOptions: false, includeCustomerEmail: false });
+        } else {
+          throw e2;
+        }
+      }
+    } else if (isMissingColumnError(e, 'customerEmail')) {
+      try {
+        console.warn('[orders] customerEmail column missing; creating order without customerEmail');
+        result = await createWithDisplayNumber({ includeCustomerEmail: false });
+      } catch (e2: any) {
+        if (isMissingColumnError(e2, 'selectedOptions')) {
+          result = await createWithDisplayNumber({ includeSelectedOptions: false, includeCustomerEmail: false });
+        } else {
+          throw e2;
+        }
+      }
     } else {
       throw e;
     }

@@ -26,6 +26,8 @@ export function CartPage() {
   const [isPlacing, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hidePrices, setHidePrices] = useState<boolean>(false);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerEmailTouched, setCustomerEmailTouched] = useState(false);
 
   const vendorTitle = cart.vendorName || 'Your Cart';
 
@@ -66,9 +68,19 @@ export function CartPage() {
   }, [activeOrders, vid]);
 
   const hasCheckoutBar = cart.lines.length > 0;
+  const normalizedEmail = customerEmail.trim();
+  const emailOk =
+    normalizedEmail === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
 
   const checkout = async () => {
     if (!vid || cart.lines.length === 0) return;
+    if (!emailOk) {
+      setCustomerEmailTouched(true);
+      const msg = 'Please enter a valid email address';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     setIsPlacing(true);
     setError(null);
     try {
@@ -88,6 +100,7 @@ export function CartPage() {
         })),
         paymentMode: 'PAY_AT_BOOTH',
         guestId,
+        customerEmail: normalizedEmail || undefined,
       });
 
       if (!res.data?.success) {
@@ -116,6 +129,8 @@ export function CartPage() {
       } as any);
 
       cart.clear();
+      setCustomerEmail('');
+      setCustomerEmailTouched(false);
       try {
         localStorage.setItem('mx_center_map', '1');
       } catch {}
@@ -250,6 +265,30 @@ export function CartPage() {
         <div className="fixed bottom-0 left-0 right-0 z-50">
           <div className="mx-4 mb-4 rounded-3xl shadow-2xl bg-white overflow-hidden">
             <div className="p-4">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+                <div className="text-sm font-semibold text-black">Email address</div>
+                <div className="mt-1 text-xs text-neutral-600">
+                  Enter your email to receive order updates.
+                </div>
+                <input
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  onBlur={() => setCustomerEmailTouched(true)}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  className={`mt-3 w-full rounded-2xl border px-4 py-3 text-sm outline-none ${
+                    customerEmailTouched && !emailOk ? 'border-red-500' : 'border-neutral-200'
+                  }`}
+                />
+                {customerEmailTouched && !emailOk ? (
+                  <div className="mt-2 text-xs font-semibold text-red-600">
+                    Please enter a valid email address.
+                  </div>
+                ) : null}
+              </div>
+
               {!hidePrices ? (
                 <>
                   <div className="flex justify-between text-sm text-gray-600">
@@ -265,7 +304,7 @@ export function CartPage() {
 
               <button
                 onClick={checkout}
-                disabled={cart.lines.length === 0 || isPlacing}
+                disabled={cart.lines.length === 0 || isPlacing || !emailOk}
                 className="mt-4 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-xl disabled:opacity-50 active:scale-[0.99] transition"
               >
                 {isPlacing ? 'Placing order…' : 'Place New Order'}
