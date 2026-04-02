@@ -207,7 +207,10 @@ export function CustomerBoothOrderPage() {
             navigate(`/customer/event/${slug}/order/${vendorId}/cart?boothId=${boothId}`);
             return;
           }
-          if (!selectedOrder?.orderId) return;
+          if (!selectedOrder?.orderId) {
+            toast.success('No active order yet.');
+            return;
+          }
           const nextUrl =
             `/customer/order-confirmed?orderId=${encodeURIComponent(String(selectedOrder.orderId))}` +
             (slug ? `&eventSlug=${encodeURIComponent(String(slug))}` : '') +

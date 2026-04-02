@@ -45,6 +45,11 @@ export const sendReadyNotification = async (order: {
   customerId: string;
   vendorId: string;
   vendor?: { businessName?: string | null } | null;
+  displayNumber?: number | string | null;
+  boothOrderNumber?: string | number | null;
+  queueNumber?: string | number | null;
+  orderNumber?: string | number | null;
+  sequence?: string | number | null;
 }) => {
   if (!publicKey || !privateKey || !subject) {
     return;
@@ -57,7 +62,22 @@ export const sendReadyNotification = async (order: {
   if (!subs.length) return;
   console.log('[push] ready: subscriptions found', { orderId: order.id, count: subs.length });
 
-  const displayNumber = order.id.slice(-4).toUpperCase();
+  const computeDisplayNumber = (o: any) => {
+    const raw =
+      o?.displayNumber ??
+      o?.boothOrderNumber ??
+      o?.queueNumber ??
+      o?.orderNumber ??
+      o?.sequence ??
+      null;
+    if (raw !== null && raw !== undefined && `${raw}`.trim() !== '') {
+      return String(raw).toUpperCase();
+    }
+    const id = o?.id || '';
+    return id ? String(id).slice(-4).toUpperCase() : '----';
+  };
+
+  const displayNumber = computeDisplayNumber(order);
   const vendorName = order.vendor?.businessName || 'Booth';
 
   const booth = await prisma.booth.findFirst({
