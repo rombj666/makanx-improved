@@ -7,13 +7,22 @@ router.get('/verify', async (_req, res) => {
   try {
     const transporter = getHourCoffeeEmailTransporter();
     try {
+      console.log('[hour-coffee-test-email] starting SMTP verify...');
       await transporter.verify();
       console.log('[hour-coffee-test-email] SMTP verify ok');
       return res.status(200).json({ success: true });
     } catch (err: any) {
       const message = String(err?.message || err || 'unknown_error');
-      console.error('[hour-coffee-test-email] SMTP verify failed', { message });
-      return res.status(200).json({ success: false, error: message });
+      const code = String(err?.code || 'no_code');
+      const command = String(err?.command || 'no_command');
+      
+      console.error('[hour-coffee-test-email] SMTP verify failed', { message, code, command });
+      
+      return res.status(200).json({ 
+        success: false, 
+        error: message,
+        details: { code, command }
+      });
     }
   } catch (err: any) {
     const message = String(err?.message || err || 'unknown_error');

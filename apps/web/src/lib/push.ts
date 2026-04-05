@@ -1,11 +1,15 @@
 export const registerServiceWorker = async () => {
   if (typeof window === "undefined") return null;
-  if (!("serviceWorker" in navigator)) return null;
+  if (!("serviceWorker" in navigator)) {
+    console.warn("[push] service worker not supported in this browser");
+    return null;
+  }
   try {
     const registration = await navigator.serviceWorker.register("/sw.js");
+    console.log("[push] service worker registered", { scope: registration.scope });
     return registration;
   } catch (e) {
-    if (import.meta.env.DEV) console.log("[push] service worker register failed", e);
+    console.error("[push] service worker register failed", e);
     return null;
   }
 };
@@ -36,7 +40,7 @@ function isPushSupported() {
 }
 
 function pushDebug(label: string, data?: any) {
-  if (!import.meta.env.DEV) return;
+  // Always log important push events to console in both dev and prod for production diagnosis
   if (data === undefined) console.log(`[push] ${label}`);
   else console.log(`[push] ${label}`, data);
 }

@@ -296,7 +296,7 @@ export function VendorDashboard() {
                       {it.details.length > 0 ? (
                         <div className="mt-1 text-xs text-gray-600 space-y-1">
                           {it.details.map((d, idx) => (
-                            <div key={idx} className="truncate">
+                            <div key={idx} className="whitespace-normal break-words leading-relaxed">
                               {d}
                             </div>
                           ))}
@@ -304,7 +304,7 @@ export function VendorDashboard() {
                       ) : null}
                     </div>
                     <Button
-                      className="bg-green-600 text-white"
+                      className="bg-green-600 text-white shrink-0 w-[100px]"
                       onClick={async () => {
                         try {
                           await api.post('/orders/vendor/production/mark-ready', {
@@ -657,7 +657,7 @@ export function VendorDashboard() {
                             {formatItemDetails(item).length > 0 ? (
                               <div className="mt-2 text-xs text-neutral-600 space-y-1">
                                 {formatItemDetails(item).map((d, j) => (
-                                  <div key={j}>{d}</div>
+                                  <div key={j} className="whitespace-normal break-words leading-relaxed">{d}</div>
                                 ))}
                               </div>
                             ) : null}
@@ -686,16 +686,16 @@ export function VendorDashboard() {
             </>
           ) : (
             <div className="space-y-5">
-              {COLUMNS.map((status) => {
-                const list = getOrdersByStatus(status);
+              {(() => {
+                const list = getOrdersByStatus('READY');
                 return (
-                  <div key={status}>
+                  <div>
                     <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase mb-2">
-                      {status} ({list.length})
+                      READY ({list.length})
                     </div>
                     <div className="space-y-3">
                       {list.length === 0 ? (
-                        <div className="text-sm text-neutral-600">No orders.</div>
+                        <div className="text-sm text-neutral-600">No ready orders.</div>
                       ) : (
                         list.map((order) => (
                           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
@@ -724,7 +724,7 @@ export function VendorDashboard() {
                                   {formatItemDetails(item).length > 0 ? (
                                     <div className="mt-2 text-xs text-neutral-600 space-y-1">
                                       {formatItemDetails(item).map((d, j) => (
-                                        <div key={j}>{d}</div>
+                                        <div key={j} className="whitespace-normal break-words leading-relaxed">{d}</div>
                                       ))}
                                     </div>
                                   ) : null}
@@ -733,14 +733,9 @@ export function VendorDashboard() {
                             </div>
                             <button
                               onClick={() => markComplete(order.id)}
-                              disabled={
-                                order.status === 'COMPLETED' ||
-                                !order.items ||
-                                !order.items.every((it: any) => it.status === 'READY')
-                              }
-                              className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold disabled:opacity-40 active:scale-[0.99] transition"
+                              className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
                             >
-                              {order.status === 'COMPLETED' ? 'Completed' : 'Complete'}
+                              Mark Completed
                             </button>
                           </div>
                         ))
@@ -748,7 +743,7 @@ export function VendorDashboard() {
                     </div>
                   </div>
                 );
-              })}
+              })()}
             </div>
           )}
         </div>

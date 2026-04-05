@@ -39,11 +39,35 @@ export function getHourCoffeeEmailTransporter() {
   const user = String(process.env.SMTP_USER || '').trim();
   const pass = String(process.env.SMTP_PASS || '').trim();
 
+  console.log('[hour-coffee-email] initializing transporter', {
+    host,
+    port,
+    secure,
+    hasUser: !!user,
+    hasPass: !!pass,
+  });
+
+  if (!host) {
+    console.warn('[hour-coffee-email] transporter init: SMTP_HOST missing from env');
+  }
+
+  // Common port/secure checks
+  if (port === 465 && !secure) {
+    console.warn('[hour-coffee-email] warning: port 465 usually requires SMTP_SECURE=true');
+  }
+  if (port === 587 && secure) {
+    console.warn('[hour-coffee-email] warning: port 587 usually requires SMTP_SECURE=false (STARTTLS)');
+  }
+
   cachedTransporter = nodemailer.createTransport({
     host,
     port,
     secure,
     auth: user && pass ? { user, pass } : undefined,
+    // Add timeouts to prevent long hangs
+    connectionTimeout: 10000, // 10s
+    greetingTimeout: 10000,   // 10s
+    socketTimeout: 10000,     // 10s
   });
 
   return cachedTransporter;

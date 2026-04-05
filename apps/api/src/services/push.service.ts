@@ -52,6 +52,11 @@ export const sendReadyNotification = async (order: {
   sequence?: string | number | null;
 }) => {
   if (!publicKey || !privateKey || !subject) {
+    console.warn('[push] ready: VAPID keys or subject missing from env', {
+      hasPublic: !!publicKey,
+      hasPrivate: !!privateKey,
+      hasSubject: !!subject
+    });
     return;
   }
 
@@ -59,7 +64,10 @@ export const sendReadyNotification = async (order: {
     where: { customerId: order.customerId },
   });
 
-  if (!subs.length) return;
+  if (!subs.length) {
+    console.log('[push] ready: no subscriptions found for customer', { orderId: order.id, customerId: order.customerId });
+    return;
+  }
   console.log('[push] ready: subscriptions found', { orderId: order.id, count: subs.length });
 
   const computeDisplayNumber = (o: any) => {

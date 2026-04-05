@@ -34,6 +34,25 @@ export function CartPage() {
 
   const vendorTitle = cart.vendorName || 'Your Cart';
 
+  const guestId = useMemo(() => getOrCreateGuestId(), []);
+  const emailStorageKey = useMemo(() => {
+    if (!eventSlug) return '';
+    return `mx_customer_email_${eventSlug}`;
+  }, [eventSlug]);
+
+  const normalizeEmail = (email: string) => email.trim();
+  const isValidEmail = (email: string) =>
+    email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isValidNonEmptyEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  useEffect(() => {
+    if (!emailStorageKey) return;
+    try {
+      const saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
+      if (isValidNonEmptyEmail(saved)) setCustomerEmail(saved);
+    } catch {}
+  }, [emailStorageKey]);
+
   useEffect(() => {
     const run = async () => {
       try {
@@ -72,16 +91,12 @@ export function CartPage() {
   }, [activeOrders, vid]);
 
   const hasCheckoutBar = cart.lines.length > 0;
-  const normalizeEmail = (email: string) => email.trim();
-  const isValidEmail = (email: string) =>
-    email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const performCheckout = async (emailOverride?: string) => {
     if (!vid || cart.lines.length === 0) return;
     setIsPlacing(true);
     setError(null);
     try {
-      const guestId = getOrCreateGuestId();
       const normalizedEmail = normalizeEmail(typeof emailOverride === 'string' ? emailOverride : customerEmail);
       if (!isValidEmail(normalizedEmail)) {
         const msg = 'Please enter a valid email address';
@@ -114,6 +129,12 @@ export function CartPage() {
 
       const { order, estimatedMinutes } = res.data.data;
       const displayNumber = computeDisplayNumber(order);
+
+      if (emailStorageKey && isValidNonEmptyEmail(normalizedEmail)) {
+        try {
+          localStorage.setItem(emailStorageKey, normalizedEmail);
+        } catch {}
+      }
 
       addOrUpdate({
         orderId: order.id,
@@ -170,6 +191,17 @@ export function CartPage() {
     if (!vid || cart.lines.length === 0) return;
     const normalized = normalizeEmail(customerEmail);
     if (normalized === '') {
+      let saved = '';
+      if (emailStorageKey) {
+        try {
+          saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
+        } catch {}
+      }
+      if (isValidNonEmptyEmail(saved)) {
+        setCustomerEmail(saved);
+        await performCheckout(saved);
+        return;
+      }
       setEmailDraft('');
       setEmailDraftTouched(false);
       setEmailSheetOpen(true);

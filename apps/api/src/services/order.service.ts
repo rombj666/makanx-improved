@@ -153,6 +153,8 @@ export const createOrder = async (
 ) => {
   const { vendorId, items, paymentMode, guestId, customerEmail } = createOrderSchema.parse(input);
 
+  console.log('[order] create: incoming payload', { vendorId, itemsCount: items.length, guestId, customerEmail: customerEmail || null });
+
   // Use guestId as customerId if provided and no customerId from JWT
   const finalCustomerId = customerId || guestId;
   if (!finalCustomerId) throw new Error('Customer identity missing');
@@ -285,6 +287,14 @@ export const createOrder = async (
           items: { include: { menuItem: true } },
         },
       });
+
+      console.log('[order] create: saved', {
+        id: createdOrder.id,
+        displayNumber: createdOrder.displayNumber,
+        customerId: createdOrder.customerId,
+        customerEmail: createdOrder.customerEmail || null,
+      });
+
       const pendingCount = await tx.order.count({
         where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
       });
@@ -749,6 +759,14 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
     },
   });
 
+  console.log('[order] status update', {
+    orderId: updatedOrder.id,
+    oldStatus: order.status,
+    newStatus: updatedOrder.status,
+    customerEmail: updatedOrder.customerEmail || null,
+    customerId: updatedOrder.customerId
+  });
+
   await createAuditLog(
     AuditAction.ORDER_STATUS_CHANGE,
     order.id,
@@ -767,7 +785,11 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   });
 
   if (order.status !== OrderStatus.READY && status === OrderStatus.READY) {
-    console.log('[push] READY transition', { orderId: order.id, customerId: order.customerId });
+    console.log('[order] READY transition: trigger helpers', {
+      orderId: order.id,
+      customerId: order.customerId,
+      customerEmail: updatedOrder.customerEmail || null
+    });
     try {
       await sendReadyNotification(updatedOrder);
     } catch (err: any) {
