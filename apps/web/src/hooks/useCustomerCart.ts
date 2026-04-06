@@ -41,7 +41,7 @@ function newId() {
 
 function clampQuantity(q: number) {
   if (!Number.isFinite(q)) return 1;
-  return Math.max(1, Math.min(99, Math.floor(q)));
+  return Math.max(0, Math.min(99, Math.floor(q)));
 }
 
 function normalizeRemarksEnabled(val: any) {

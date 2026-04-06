@@ -13,6 +13,8 @@ import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
+import { CheckoutConfirmingOverlay } from '../../components/customer/CheckoutConfirmingOverlay';
+import { Minus, Plus, Trash2 } from 'lucide-react';
 
 interface MenuItem {
   id: string;
@@ -51,6 +53,7 @@ export function CustomerOrderPage() {
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
   const [emailDraftTouched, setEmailDraftTouched] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const emailStorageKey = useMemo(() => {
@@ -204,7 +207,7 @@ export function CustomerOrderPage() {
   };
 
   const requestCheckout = async () => {
-    if (isPlacing) return;
+    if (isPlacing || isConfirming) return;
     if (!vendorId || cart.totalItems <= 0) return;
     const normalized = normalizeEmail(customerEmail);
     if (normalized === '') {
@@ -216,7 +219,7 @@ export function CustomerOrderPage() {
       }
       if (isValidNonEmptyEmail(saved)) {
         setCustomerEmail(saved);
-        await performCheckout(saved);
+        setIsConfirming(true);
         return;
       }
       setEmailDraft('');
@@ -224,7 +227,7 @@ export function CustomerOrderPage() {
       setEmailSheetOpen(true);
       return;
     }
-    await performCheckout(normalized);
+    setIsConfirming(true);
   };
 
   const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
@@ -368,11 +371,20 @@ export function CustomerOrderPage() {
           }
           setCustomerEmail(normalized);
           setEmailSheetOpen(false);
-          await performCheckout(normalized);
+          setIsConfirming(true);
         }}
         onSkip={async () => {
           setEmailSheetOpen(false);
-          await performCheckout('');
+          setIsConfirming(true);
+        }}
+      />
+
+      <CheckoutConfirmingOverlay
+        open={isConfirming}
+        onCancel={() => setIsConfirming(false)}
+        onComplete={() => {
+          setIsConfirming(false);
+          performCheckout();
         }}
       />
 
@@ -415,33 +427,55 @@ export function CustomerOrderPage() {
                 {cart.lines.map((l) => (
                   <div key={l.id} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="text-sm font-semibold text-black">
-                        {l.quantity}x {l.name}
-                      </div>
-                      {!hidePrices ? (
+                      <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-black">
-                          RM{(l.price * l.quantity).toFixed(2)}
+                          {l.name}
                         </div>
-                      ) : null}
+                        {Array.isArray((l as any).selectedOptions) && (l as any).selectedOptions.length > 0 ? (
+                          <div className="mt-1 text-xs text-neutral-600">
+                            {(l as any).selectedOptions
+                              .map((s: any) => {
+                                const title = typeof s?.title === 'string' ? s.title : '';
+                                const labels = Array.isArray(s?.choiceLabels) ? s.choiceLabels.filter(Boolean) : [];
+                                if (!title || labels.length === 0) return '';
+                                return `${title}: ${labels.join(', ')}`;
+                              })
+                              .filter(Boolean)
+                              .join(' • ')}
+                          </div>
+                        ) : null}
+                        {l.remark && String(l.remark).trim() !== '' ? (
+                          <div className="mt-1 text-xs text-neutral-600">
+                            <span className="text-neutral-500">Remark:</span> {String(l.remark).trim()}
+                          </div>
+                        ) : null}
+                        {!hidePrices ? (
+                          <div className="mt-2 text-sm font-semibold text-black">
+                            RM{(l.price * l.quantity).toFixed(2)}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <div className="flex items-center gap-2 bg-neutral-100 rounded-xl p-1">
+                          <button
+                            onClick={() => cart.updateQuantity(l.id, l.quantity - 1)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition"
+                          >
+                            {l.quantity === 1 ? <Trash2 size={14} className="text-red-500" /> : <Minus size={14} />}
+                          </button>
+                          <span className="w-6 text-center text-sm font-bold tabular-nums">
+                            {l.quantity}
+                          </span>
+                          <button
+                            onClick={() => cart.updateQuantity(l.id, l.quantity + 1)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    {Array.isArray((l as any).selectedOptions) && (l as any).selectedOptions.length > 0 ? (
-                      <div className="mt-1 text-xs text-neutral-600">
-                        {(l as any).selectedOptions
-                          .map((s: any) => {
-                            const title = typeof s?.title === 'string' ? s.title : '';
-                            const labels = Array.isArray(s?.choiceLabels) ? s.choiceLabels.filter(Boolean) : [];
-                            if (!title || labels.length === 0) return '';
-                            return `${title}: ${labels.join(', ')}`;
-                          })
-                          .filter(Boolean)
-                          .join(' • ')}
-                      </div>
-                    ) : null}
-                    {l.remark && String(l.remark).trim() !== '' ? (
-                      <div className="mt-1 text-xs text-neutral-600">
-                        <span className="text-neutral-500">Remark:</span> {String(l.remark).trim()}
-                      </div>
-                    ) : null}
                   </div>
                 ))}
               </div>
@@ -467,63 +501,8 @@ export function CustomerOrderPage() {
               </button>
             </div>
           </div>
-        ) : mode === 'order' && selectedOrder ? (
-          <div>
-            {activeOrdersForVendor.length > 1 ? (
-              <div className="mb-3 flex items-center gap-2 overflow-x-auto">
-                {activeOrdersForVendor.map((o) => {
-                  const isSelected = String(o.orderId) === String(selectedOrder.orderId);
-                  return (
-                    <button
-                      key={o.orderId}
-                      type="button"
-                      onClick={() => setSelectedOrderId(String(o.orderId))}
-                      className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold border ${
-                        isSelected
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-black border-neutral-200'
-                      }`}
-                    >
-                      #{o.displayNumber}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            <div className="rounded-2xl border border-neutral-100 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-semibold text-black">Order #{selectedOrder.displayNumber}</div>
-                <div className="text-xs font-bold text-neutral-600">{String(selectedOrder.status || '').toUpperCase()}</div>
-              </div>
-              {selectedOrder.status === 'PREPARING' ? (
-                <div className="mt-1 text-sm text-neutral-600">Estimated prep time: ~{orderEta} min</div>
-              ) : selectedOrder.status === 'READY' ? (
-                <div className="mt-1 text-sm text-neutral-600">READY — Collect now</div>
-              ) : null}
-            </div>
-
-            {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {selectedOrder.items.map((it, idx) => (
-                  <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                    <div className="text-sm font-semibold text-black">
-                      {it.quantity}x {it.name || 'Item'}
-                    </div>
-                    {it.remark && String(it.remark).trim() !== '' ? (
-                      <div className="mt-1 text-xs text-neutral-600">
-                        <span className="text-neutral-500">Remark:</span> {String(it.remark).trim()}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-3 text-sm text-neutral-600">Summary unavailable.</div>
-            )}
-          </div>
         ) : (
-          <div className="text-sm text-neutral-600">No cart or active order.</div>
+          <div className="text-sm text-neutral-600">No items in cart.</div>
         )}
       </SummarySheet>
     </div>
