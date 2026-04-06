@@ -12,7 +12,6 @@ import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { CheckoutConfirmingOverlay } from '../../components/customer/CheckoutConfirmingOverlay';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 
 interface MenuItem {
@@ -51,7 +50,6 @@ export function CustomerBoothOrderPage() {
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
   const [emailDraftTouched, setEmailDraftTouched] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
 
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const emailStorageKey = useMemo(() => {
@@ -206,6 +204,7 @@ export function CustomerBoothOrderPage() {
           boothId,
           customerEmail: normalizedEmail || undefined,
           items: summaryItems,
+          newOrder: true, // Flag for inline countdown
         },
       });
     } catch (e: any) {
@@ -216,7 +215,7 @@ export function CustomerBoothOrderPage() {
   };
 
   const requestCheckout = async () => {
-    if (isPlacing || isConfirming) return;
+    if (isPlacing) return;
     if (!vendorId || cart.totalItems <= 0) return;
     const normalized = normalizeEmail(customerEmail);
     if (normalized === '') {
@@ -228,7 +227,7 @@ export function CustomerBoothOrderPage() {
       }
       if (isValidNonEmptyEmail(saved)) {
         setCustomerEmail(saved);
-        setIsConfirming(true);
+        await performCheckout(saved);
         return;
       }
       setEmailDraft('');
@@ -236,7 +235,7 @@ export function CustomerBoothOrderPage() {
       setEmailSheetOpen(true);
       return;
     }
-    setIsConfirming(true);
+    await performCheckout(normalized);
   };
    const hidePrices = booth?.showPrices === false;
    const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
@@ -385,20 +384,11 @@ export function CustomerBoothOrderPage() {
           }
           setCustomerEmail(normalized);
           setEmailSheetOpen(false);
-          setIsConfirming(true);
+          await performCheckout(normalized);
         }}
         onSkip={async () => {
           setEmailSheetOpen(false);
-          setIsConfirming(true);
-        }}
-      />
-
-      <CheckoutConfirmingOverlay
-        open={isConfirming}
-        onCancel={() => setIsConfirming(false)}
-        onComplete={() => {
-          setIsConfirming(false);
-          performCheckout();
+          await performCheckout('');
         }}
       />
 

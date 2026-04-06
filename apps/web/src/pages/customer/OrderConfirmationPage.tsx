@@ -19,6 +19,7 @@ interface OrderState {
   status?: string;
   customerEmail?: string;
   items?: { name: string; quantity: number; imageUrl?: string; remark?: string; selectedOptions?: any[] }[];
+  newOrder?: boolean;
 }
 
 export function OrderConfirmationPage() {
@@ -35,6 +36,25 @@ export function OrderConfirmationPage() {
   const [resolvedOrder, setResolvedOrder] = useState<OrderState | null>(orderFromState);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<string | null>(orderFromState?.status || null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (orderFromState?.newOrder && countdown === null) {
+      setCountdown(5);
+    }
+  }, [orderFromState]);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      setCountdown(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   useEffect(() => {
     if (orderFromState) {
@@ -378,11 +398,17 @@ export function OrderConfirmationPage() {
                   </>
                 ) : (
                   <>
-                    <div className="text-[26px] leading-tight font-extrabold tracking-tight">PREPARING</div>
-                    {eta > 0 ? (
+                    <div className="text-[26px] leading-tight font-extrabold tracking-tight">
+                      {countdown !== null ? `PREPARING IN ${countdown}` : 'PREPARING'}
+                    </div>
+                    {countdown === null && eta > 0 ? (
                       <div className="mt-3 text-base text-neutral-700">
                         Estimated prep time{' '}
                         <span className="font-extrabold text-black">~{eta} min</span>
+                      </div>
+                    ) : countdown !== null ? (
+                      <div className="mt-3 text-base text-neutral-700">
+                        Your order is being confirmed...
                       </div>
                     ) : null}
                   </>

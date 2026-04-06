@@ -13,7 +13,6 @@ import { useCustomerOrders } from '../../hooks/useCustomerOrders';
 import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { CheckoutConfirmingOverlay } from '../../components/customer/CheckoutConfirmingOverlay';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 
 interface MenuItem {
@@ -53,7 +52,6 @@ export function CustomerOrderPage() {
   const [emailSheetOpen, setEmailSheetOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
   const [emailDraftTouched, setEmailDraftTouched] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
 
   const guestId = useMemo(() => getOrCreateGuestId(), []);
   const emailStorageKey = useMemo(() => {
@@ -197,6 +195,7 @@ export function CustomerOrderPage() {
           vendorId,
           customerEmail: normalizedEmail || undefined,
           items: summaryItems,
+          newOrder: true, // Flag for inline countdown
         },
       });
     } catch (e: any) {
@@ -207,7 +206,7 @@ export function CustomerOrderPage() {
   };
 
   const requestCheckout = async () => {
-    if (isPlacing || isConfirming) return;
+    if (isPlacing) return;
     if (!vendorId || cart.totalItems <= 0) return;
     const normalized = normalizeEmail(customerEmail);
     if (normalized === '') {
@@ -219,7 +218,7 @@ export function CustomerOrderPage() {
       }
       if (isValidNonEmptyEmail(saved)) {
         setCustomerEmail(saved);
-        setIsConfirming(true);
+        await performCheckout(saved);
         return;
       }
       setEmailDraft('');
@@ -227,7 +226,7 @@ export function CustomerOrderPage() {
       setEmailSheetOpen(true);
       return;
     }
-    setIsConfirming(true);
+    await performCheckout(normalized);
   };
 
   const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
@@ -371,20 +370,11 @@ export function CustomerOrderPage() {
           }
           setCustomerEmail(normalized);
           setEmailSheetOpen(false);
-          setIsConfirming(true);
+          await performCheckout(normalized);
         }}
         onSkip={async () => {
           setEmailSheetOpen(false);
-          setIsConfirming(true);
-        }}
-      />
-
-      <CheckoutConfirmingOverlay
-        open={isConfirming}
-        onCancel={() => setIsConfirming(false)}
-        onComplete={() => {
-          setIsConfirming(false);
-          performCheckout();
+          await performCheckout('');
         }}
       />
 
