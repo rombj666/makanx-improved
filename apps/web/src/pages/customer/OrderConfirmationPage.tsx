@@ -535,25 +535,9 @@ export function OrderConfirmationPage() {
                       navigate(`/customer/event/${eventSlug}`);
                     });
                   }}
-                  className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-white border border-neutral-200 text-black"
-                >
-                  Back to Menu
-                </button>
-                <button
-                  onClick={() => {
-                    requestLeave(() => {
-                      if (!eventSlug || !vendorId) {
-                        if (eventSlug) navigate(`/customer/event/${eventSlug}`);
-                        else navigate('/', { replace: true });
-                        return;
-                      }
-                      const q = boothId ? `?boothId=${encodeURIComponent(boothId)}` : '';
-                      navigate(`/customer/event/${eventSlug}/order/${vendorId}/cart${q}`);
-                    });
-                  }}
                   className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white"
                 >
-                  View Cart
+                  Back to Menu
                 </button>
               </div>
             </div>

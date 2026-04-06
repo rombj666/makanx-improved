@@ -10,7 +10,9 @@ import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { toast } from 'react-hot-toast';
 import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes } from '../../lib/utils';
+import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
+import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
+import { getOrCreateGuestId } from '../../lib/guest';
 
 interface MenuItem {
   id: string;
@@ -42,6 +44,32 @@ export function CustomerOrderPage() {
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  // Checkout state
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [emailSheetOpen, setEmailSheetOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [emailDraftTouched, setEmailDraftTouched] = useState(false);
+
+  const guestId = useMemo(() => getOrCreateGuestId(), []);
+  const emailStorageKey = useMemo(() => {
+    if (!slug) return '';
+    return `mx_customer_email_${slug}`;
+  }, [slug]);
+
+  const normalizeEmail = (email: string) => email.trim();
+  const isValidEmail = (email: string) =>
+    email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isValidNonEmptyEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  useEffect(() => {
+    if (!emailStorageKey) return;
+    try {
+      const saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
+      if (isValidNonEmptyEmail(saved)) setCustomerEmail(saved);
+    } catch {}
+  }, [emailStorageKey]);
 
   useEffect(() => {
     const run = async () => {
@@ -76,6 +104,129 @@ export function CustomerOrderPage() {
     boothName: booth?.name || '',
   });
   const hidePrices = booth?.showPrices === false;
+
+  const { addOrUpdate } = useCustomerOrders(String(slug || ''));
+
+  const performCheckout = async (emailOverride?: string) => {
+    if (!vendorId || cart.lines.length === 0) return;
+    setIsPlacing(true);
+    try {
+      const normalizedEmail = normalizeEmail(typeof emailOverride === 'string' ? emailOverride : customerEmail);
+      if (!isValidEmail(normalizedEmail)) {
+        toast.error('Please enter a valid email address');
+        return;
+      }
+      const res = await api.post('/orders', {
+        vendorId,
+        items: cart.lines.map((l) => ({
+          menuItemId: l.menuItemId,
+          quantity: l.quantity,
+          remark: l.remarksEnabled === false ? '' : (l.remark || '').trim(),
+          selectedOptions: Array.isArray((l as any).selectedOptions)
+            ? (l as any).selectedOptions.map((s: any) => ({
+                groupId: String(s?.groupId || ''),
+                choiceIds: Array.isArray(s?.choiceIds) ? s.choiceIds.map(String).filter(Boolean) : [],
+              }))
+            : [],
+        })),
+        paymentMode: 'PAY_AT_BOOTH',
+        guestId,
+        customerEmail: normalizedEmail || undefined,
+      });
+
+      if (!res.data?.success) {
+        toast.error('Checkout failed');
+        return;
+      }
+
+      const { order, estimatedMinutes } = res.data.data;
+      const displayNumber = computeDisplayNumber(order);
+
+      if (emailStorageKey && isValidNonEmptyEmail(normalizedEmail)) {
+        try {
+          localStorage.setItem(emailStorageKey, normalizedEmail);
+        } catch {}
+      }
+
+      const summaryItems = cart.lines.map((l) => ({
+        name: l.name,
+        quantity: l.quantity,
+        imageUrl: l.imageUrl || '',
+        remark: l.remarksEnabled === false ? '' : (l.remark || '').trim(),
+        selectedOptions: Array.isArray((l as any).selectedOptions) ? (l as any).selectedOptions : [],
+      }));
+
+      addOrUpdate({
+        orderId: order.id,
+        vendorId: order.vendorId,
+        vendorName: order.vendor?.businessName || cart.vendorName || '',
+        status: order.status,
+        estimatedMinutes: Math.max(Number(estimatedMinutes ?? 0), 0),
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+        displayNumber,
+        items: summaryItems.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          imageUrl: it.imageUrl,
+          remark: it.remark,
+          selectedOptions: it.selectedOptions,
+        })),
+      } as any);
+
+      cart.clear();
+      setSummaryOpen(false);
+      setEmailDraft('');
+      setEmailDraftTouched(false);
+      try {
+        localStorage.setItem('mx_center_map', '1');
+      } catch {}
+
+      const nextUrl =
+        `/customer/order-confirmed?orderId=${encodeURIComponent(order.id)}` +
+        (slug ? `&eventSlug=${encodeURIComponent(slug)}` : '');
+      navigate(nextUrl, {
+        state: {
+          orderId: order.id,
+          orderNumber: displayNumber,
+          eta: estimatedMinutes,
+          eventSlug: slug,
+          vendorId,
+          customerEmail: normalizedEmail || undefined,
+          items: summaryItems,
+        },
+      });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Checkout failed');
+    } finally {
+      setIsPlacing(false);
+    }
+  };
+
+  const requestCheckout = async () => {
+    if (isPlacing) return;
+    if (!vendorId || cart.totalItems <= 0) return;
+    const normalized = normalizeEmail(customerEmail);
+    if (normalized === '') {
+      let saved = '';
+      if (emailStorageKey) {
+        try {
+          saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
+        } catch {}
+      }
+      if (isValidNonEmptyEmail(saved)) {
+        setCustomerEmail(saved);
+        await performCheckout(saved);
+        return;
+      }
+      setEmailDraft('');
+      setEmailDraftTouched(false);
+      setEmailSheetOpen(true);
+      return;
+    }
+    await performCheckout(normalized);
+  };
+
   const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
   const { orders } = useCustomerOrders(String(slug || ''));
   const activeOrdersForVendor = useMemo(() => {
@@ -156,20 +307,14 @@ export function CustomerOrderPage() {
               {activeOrdersForVendor.map((o) => {
                 const isSelected = String(o.orderId) === String(selectedOrder?.orderId || '');
                 return (
-                  <button
+                  <div
                     key={o.orderId}
-                    type="button"
-                    onClick={() => {
-                      setSelectedOrderId(String(o.orderId));
-                      setSummaryOpen(true);
-                    }}
                     className={`shrink-0 text-xs font-semibold ${
                       isSelected ? 'text-black underline underline-offset-4' : 'text-neutral-600'
                     }`}
-                    aria-label={`Open Order #${o.displayNumber}`}
                   >
                     Order #{o.displayNumber}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -189,10 +334,10 @@ export function CustomerOrderPage() {
                 : String(selectedOrder?.status || '')
             : undefined
         }
-        actionLabel={mode === 'cart' ? 'View Cart' : 'Summary'}
+        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Summary'}
         onViewCart={() => {
           if (mode === 'cart') {
-            navigate(`/customer/event/${slug}/order/${vendorId}/cart`);
+            setSummaryOpen(true);
             return;
           }
           if (!selectedOrder?.orderId) {
@@ -203,6 +348,31 @@ export function CustomerOrderPage() {
             `/customer/order-confirmed?orderId=${encodeURIComponent(String(selectedOrder.orderId))}` +
             (slug ? `&eventSlug=${encodeURIComponent(String(slug))}` : '');
           navigate(nextUrl);
+        }}
+      />
+
+      <EmailPromptSheet
+        open={emailSheetOpen}
+        emailDraft={emailDraft}
+        emailTouched={emailDraftTouched}
+        isEmailValid={isValidEmail(normalizeEmail(emailDraft))}
+        onEmailChange={(v) => setEmailDraft(v)}
+        onEmailBlur={() => setEmailDraftTouched(true)}
+        onClose={() => setEmailSheetOpen(false)}
+        onContinueWithEmail={async () => {
+          const normalized = normalizeEmail(emailDraft);
+          setEmailDraftTouched(true);
+          if (!isValidEmail(normalized) || normalized === '') {
+            toast.error('Please enter a valid email address');
+            return;
+          }
+          setCustomerEmail(normalized);
+          setEmailSheetOpen(false);
+          await performCheckout(normalized);
+        }}
+        onSkip={async () => {
+          setEmailSheetOpen(false);
+          await performCheckout('');
         }}
       />
 
@@ -234,7 +404,7 @@ export function CustomerOrderPage() {
       <SummarySheet
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
-        title={mode === 'cart' ? 'Cart Summary' : mode === 'order' ? 'Order Summary' : 'Summary'}
+        title={mode === 'cart' ? 'Order Summary' : mode === 'order' ? 'Current Order' : 'Summary'}
       >
         {mode === 'cart' ? (
           <div>
@@ -289,11 +459,11 @@ export function CustomerOrderPage() {
                 </div>
               ) : null}
               <button
-                onClick={() => navigate(`/customer/event/${slug}/order/${vendorId}/cart`)}
-                disabled={cart.totalItems <= 0}
+                onClick={requestCheckout}
+                disabled={cart.totalItems <= 0 || isPlacing}
                 className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white disabled:opacity-50"
               >
-                Go to Cart
+                {isPlacing ? 'Placing Order...' : 'Place New Order'}
               </button>
             </div>
           </div>
