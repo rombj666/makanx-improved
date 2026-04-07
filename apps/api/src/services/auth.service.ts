@@ -4,7 +4,8 @@ import { generateToken } from '../utils/jwt';
 import { Role } from '@makanx/shared';
 import { z } from 'zod';
 import { randomInt } from 'crypto';
-import { sendHourCoffeeEmail } from './hour-coffee-email.service';
+import { sendEmail } from './email/email.service';
+import { buildPasswordResetEmail } from './email/templates/email.templates';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -207,23 +208,10 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
-    console.log("[reset] Attempting to send OTP via Hour Coffee SMTP to:", email);
-    const html = `
-      <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 600px; margin: 0 auto; padding: 24px;">
-        <h2 style="margin: 0 0 12px; font-size: 22px; line-height: 1.2;">Reset Your Password</h2>
-        <p style="margin: 0; font-size: 14px; line-height: 1.6;">Your One-Time Password (OTP) is:</p>
-        <div style="background:#f3f4f6;padding:16px;text-align:center;border-radius:10px;margin:16px 0;">
-          <span style="font-size:26px;font-weight:700;letter-spacing:6px;">${otp}</span>
-        </div>
-        <p style="margin: 0; font-size: 14px; line-height: 1.6;">This code expires in 10 minutes.</p>
-      </div>
-    `.trim();
+    console.log("[reset] Attempting to send OTP via new email service to:", email);
+    const { subject, html, text } = buildPasswordResetEmail({ otp });
 
-    const result = await sendHourCoffeeEmail({
-      to: email,
-      subject: "MakanX Password Reset Code",
-      html,
-    });
+    const result = await sendEmail({ to: email, subject, html, text });
     console.log("[reset] email send result:", result);
   } catch (err) {
     console.error("[reset] Email send failed:", err);

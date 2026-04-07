@@ -5,7 +5,8 @@ import { OrderStatus, PaymentMode, PaymentStatus, AuditAction, Prisma } from '@p
 import { createAuditLog } from './audit.service';
 import { sendReadyNotification } from './push.service';
 import { sendOrderReadyMessage } from './whatsapp.service';
-import { sendHourCoffeeEmail } from './hour-coffee-email.service';
+import { sendEmail } from './email/email.service';
+import { buildOrderReadyEmail } from './email/templates/email.templates';
 
 const readyEmailSentCache = new Map<string, number>();
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30;
@@ -79,26 +80,25 @@ async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
     console.warn('[hour-coffee-email] READY booth lookup failed', { source, orderId, message: e?.message || e });
   }
 
-  const subject = `Hour Coffee — Order #${orderNumber} Ready`;
-  const text = `Your order #${orderNumber} is ready for pickup at Booth ${boothName}.`;
-  const html = `
-    <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 640px; margin: 0 auto; padding: 24px;">
-      <h1 style="margin: 0 0 12px; font-size: 22px; line-height: 1.2;">Order Ready for Pickup</h1>
-      <p style="margin: 0; font-size: 14px; line-height: 1.6;">
-        Your order <strong>#${orderNumber}</strong> is ready for pickup at <strong>Booth ${boothName}</strong>.
-      </p>
-    </div>
-  `.trim();
+  const customerOrderPageUrl = process.env.CLIENT_URL
+    ? `${process.env.CLIENT_URL}/customer/order-confirmed?orderId=${orderId}`
+    : undefined;
+
+  const { subject, html, text } = buildOrderReadyEmail({
+    orderNumber,
+    boothName,
+    customerOrderPageUrl,
+  });
 
   try {
-    const result = await sendHourCoffeeEmail({ to: customerEmail, subject, html, text });
+    const result = await sendEmail({ to: customerEmail, subject, html, text });
     if (result.ok) {
-      console.log('[hour-coffee-email] READY sent', { source, orderId, orderNumber, customerEmail, messageId: result.messageId || null });
+      console.log('[order] READY email sent', { source, orderId, orderNumber, customerEmail, messageId: result.messageId || null });
     } else {
-      console.error('[hour-coffee-email] READY send failed', { source, orderId, orderNumber, customerEmail, error: result.error });
+      console.error('[order] READY email send failed', { source, orderId, orderNumber, customerEmail, error: result.error });
     }
   } catch (e: any) {
-    console.error('[hour-coffee-email] READY send threw', { source, orderId, orderNumber, customerEmail, message: e?.message || e });
+    console.error('[order] READY email send threw', { source, orderId, orderNumber, customerEmail, message: e?.message || e });
   }
 }
 
