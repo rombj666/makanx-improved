@@ -8,6 +8,7 @@ import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
 import { useSocket } from '../../context/SocketContext';
 import { computeDisplayEtaMinutesFromQuantity } from '../../lib/utils';
 import OrderStatusStepper from '../../components/customer/OrderStatusStepper';
+import toast from 'react-hot-toast';
 
 interface OrderState {
   orderId?: string;
@@ -495,6 +496,7 @@ export function OrderConfirmationPage() {
                             {pushError}
                           </div>
                         ) : null}
+
                         <div className="mt-4 flex items-center gap-3">
                           <button
                             onClick={() => setNotifSheetOpen(true)}
@@ -521,100 +523,99 @@ export function OrderConfirmationPage() {
                     </div>
                   </div>
                 )}
-              </div>
 
-              <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
-                <div className="text-sm font-semibold text-black">Progress</div>
-                <div className="mt-4">
-                  <OrderStatusStepper status={status} />
+                <div className="mt-5 rounded-3xl border border-neutral-100 bg-white p-5 shadow-sm">
+                  <div className="text-sm font-semibold text-black">Progress</div>
+                  <div className="mt-4">
+                    <OrderStatusStepper status={status} />
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-5">
-                <div className="text-xs text-neutral-500 mb-2">
-                  {order?.customerEmail && String(order.customerEmail).trim() !== ''
-                    ? 'We’ll also send your order update by email when it’s ready.'
-                    : 'Keep this page open to receive order updates here.'}
-                </div>
-                <div className="text-sm font-semibold text-black">Order Summary</div>
-                {items.length === 0 ? (
-                  <div className="mt-2 text-sm text-neutral-600">Summary unavailable.</div>
-                ) : (
-                  <div className="mt-3 space-y-3">
-                    {items.map((it, idx) => (
-                      <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                        <div className="flex items-start gap-3">
-                          <div className="w-14 h-14 rounded-2xl overflow-hidden bg-neutral-100 shrink-0">
-                            {it.imageUrl && String(it.imageUrl).trim() !== '' ? (
-                              <img
-                                src={String(it.imageUrl)}
-                                alt={it.name || 'Item'}
-                                className="w-14 h-14 object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="w-14 h-14 bg-gradient-to-br from-neutral-100 to-neutral-200" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-black">
-                              {it.quantity}x {it.name || 'Item'}
+                <div className="mt-5">
+                  <div className="text-xs text-neutral-500 mb-2">
+                    {order?.customerEmail && String(order.customerEmail).trim() !== ''
+                      ? 'We’ll also send your order update by email when it’s ready.'
+                      : 'Keep this page open to receive order updates here.'}
+                  </div>
+                  <div className="text-sm font-semibold text-black">Order Summary</div>
+                  {items.length === 0 ? (
+                    <div className="mt-2 text-sm text-neutral-600">Summary unavailable.</div>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {items.map((it, idx) => (
+                        <div key={idx} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-neutral-100 shrink-0">
+                              {it.imageUrl && String(it.imageUrl).trim() !== '' ? (
+                                <img
+                                  src={String(it.imageUrl)}
+                                  alt={it.name || 'Item'}
+                                  className="w-14 h-14 object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-14 h-14 bg-gradient-to-br from-neutral-100 to-neutral-200" />
+                              )}
                             </div>
-                        {Array.isArray(it.selectedOptions) && it.selectedOptions.length > 0 ? (
-                          <div className="mt-1 text-xs text-neutral-600">
-                            {it.selectedOptions
-                              .map((s: any) => {
-                                const title = String(s?.title || '');
-                                const choices = Array.isArray(s?.choices) ? s.choices : [];
-                                const labels = choices.map((c: any) => String(c?.label || '')).filter(Boolean);
-                                if (!title || labels.length === 0) return '';
-                                return `${title}: ${labels.join(', ')}`;
-                              })
-                              .filter(Boolean)
-                              .join(' • ')}
-                          </div>
-                        ) : null}
-                        {it.remark && String(it.remark).trim() !== '' ? (
-                          <div className="mt-1 text-sm text-neutral-600">
-                            <span className="text-neutral-500">Remark:</span> {String(it.remark)}
-                          </div>
-                        ) : null}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-semibold text-black">
+                                {it.quantity}x {it.name || 'Item'}
+                              </div>
+                              {Array.isArray(it.selectedOptions) && it.selectedOptions.length > 0 ? (
+                                <div className="mt-1 text-xs text-neutral-600">
+                                  {it.selectedOptions
+                                    .map((s: any) => {
+                                      const title = String(s?.title || '');
+                                      const choices = Array.isArray(s?.choices) ? s.choices : [];
+                                      const labels = choices.map((c: any) => String(c?.label || '')).filter(Boolean);
+                                      if (!title || labels.length === 0) return '';
+                                      return `${title}: ${labels.join(', ')}`;
+                                    })
+                                    .filter(Boolean)
+                                    .join(' • ')}
+                                </div>
+                              ) : null}
+                              {it.remark && String(it.remark).trim() !== '' ? (
+                                <div className="mt-1 text-sm text-neutral-600">
+                                  <span className="text-neutral-500">Remark:</span> {String(it.remark)}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-              <div className="mt-4 space-y-3">
-                <button
-                  onClick={() => {
-                    requestLeave(() => {
-                      if (!eventSlug) {
-                        navigate('/', { replace: true });
-                        return;
-                      }
-                      if (boothId) {
-                        navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
-                        return;
-                      }
-                      if (vendorId) {
-                        navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
-                        return;
-                      }
-                      navigate(`/customer/event/${eventSlug}`);
-                    });
-                  }}
-                  className="w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white"
-                >
-                  Back to Menu
-                </button>
+                <div className="mt-6 space-y-3">
+                  <button
+                    onClick={() => {
+                      requestLeave(() => {
+                        if (!eventSlug) {
+                          navigate('/', { replace: true });
+                          return;
+                        }
+                        if (boothId) {
+                          navigate(`/customer/event/${eventSlug}/booth/${boothId}`);
+                          return;
+                        }
+                        if (vendorId) {
+                          navigate(`/customer/event/${eventSlug}/order/${vendorId}`);
+                          return;
+                        }
+                        navigate(`/customer/event/${eventSlug}`);
+                      });
+                    }}
+                    className="w-full rounded-2xl py-4 text-sm font-bold shadow-md active:scale-[0.98] transition bg-black text-white"
+                  >
+                    Back to Menu
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
       <NotificationPromptSheet
         open={notifSheetOpen}

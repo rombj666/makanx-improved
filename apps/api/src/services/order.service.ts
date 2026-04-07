@@ -1010,17 +1010,25 @@ export const cancelOrder = async (orderId: string, customerId: string) => {
     },
   });
 
-  await createAuditLog({
+  await createAuditLog(
+    AuditAction.ORDER_STATUS_CHANGE,
     orderId,
-    action: AuditAction.UPDATE_STATUS,
-    oldValue: order.status,
-    newValue: OrderStatus.CANCELLED,
-    actorId: customerId,
-  });
+    'Order',
+    customerId,
+    { oldStatus: order.status, newStatus: OrderStatus.CANCELLED }
+  );
 
   const io = getIO();
-  io.to(`order:${orderId}`).emit('order_updated', updatedOrder);
+  // Notify customer
+  io.to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
+  
+  // Notify vendor
   io.to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
+  io.to(`vendor:${order.vendorId}`).emit('vendor_orders_changed', {
+    orderId: updatedOrder.id,
+    status: updatedOrder.status,
+    updatedAt: updatedOrder.updatedAt,
+  });
 
   return updatedOrder;
 };

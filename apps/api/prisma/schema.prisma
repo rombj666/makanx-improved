@@ -199,6 +199,7 @@ enum OrderStatus {
   PREPARING
   READY
   COMPLETED
+  CANCELLED
 }
 
 enum OrderItemStatus {
