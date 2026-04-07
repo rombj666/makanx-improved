@@ -31,6 +31,7 @@ router.post(
   orderController.markOrderItemsReady
 );
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
+router.post('/:id/cancel', optionalAuth, orderController.cancelOrder);
 router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
 
 export default router;

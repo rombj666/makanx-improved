@@ -748,7 +748,10 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   // Only set timestamps if they are null
   if (status === OrderStatus.PREPARING && !order.acceptedAt) (data as any).acceptedAt = now;
   if (status === OrderStatus.READY && !order.readyAt) (data as any).readyAt = now;
-  if (status === OrderStatus.COMPLETED && !order.completedAt) (data as any).completedAt = now;
+  if (status === OrderStatus.COMPLETED) {
+    if (!order.completedAt) (data as any).completedAt = now;
+    data.paymentStatus = PaymentStatus.PAID;
+  }
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
@@ -984,6 +987,44 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
 
   return updatedOrder;
 };
+
+export const cancelOrder = async (orderId: string, customerId: string) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  });
+
+  if (!order) throw new Error('Order not found');
+  if (order.customerId !== customerId) throw new Error('Not authorized to cancel this order');
+  
+  // Only allow cancellation if order is in PREPARING status
+  if (order.status !== OrderStatus.PREPARING) {
+    throw new Error('Order can only be cancelled while preparing');
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: OrderStatus.CANCELLED },
+    include: {
+      items: { include: { menuItem: true } },
+      vendor: { select: { businessName: true } },
+    },
+  });
+
+  await createAuditLog({
+    orderId,
+    action: AuditAction.UPDATE_STATUS,
+    oldValue: order.status,
+    newValue: OrderStatus.CANCELLED,
+    actorId: customerId,
+  });
+
+  const io = getIO();
+  io.to(`order:${orderId}`).emit('order_updated', updatedOrder);
+  io.to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
+
+  return updatedOrder;
+};
+
 /**
  * Bulk status update (vendor only)
  */
