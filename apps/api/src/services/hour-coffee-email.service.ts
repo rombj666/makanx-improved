@@ -25,7 +25,7 @@ function parseBool(val: unknown) {
 }
 
 function buildFrom() {
-  const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || 'no-reply@hourcoffee.local';
+  const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || 'no-reply@hourcoffee.com.my';
   const fromName = process.env.EMAIL_FROM_NAME || 'Hour Coffee';
   return `${fromName} <${fromAddress}>`;
 }
