@@ -181,9 +181,9 @@ export const requestPasswordReset = async (input: unknown) => {
   const email = normalizeEmail(parsed.email);
 
   console.log("[reset] Request received for:", email);
-  console.log("[reset] Hour Coffee SMTP ENV check:", {
-    SMTP_HOST: process.env.SMTP_HOST,
-    SMTP_PORT: process.env.SMTP_PORT,
+  console.log("[reset] Resend ENV check:", {
+    RESEND_API_KEY_EXISTS: !!process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
   });
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -207,7 +207,7 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
-    console.log("[reset] Attempting to send OTP via SMTP to:", email);
+    console.log("[reset] Attempting to send OTP via Resend to:", email);
     const result = await sendPasswordResetEmail(email, otp);
     console.log("[reset] email send result:", result);
   } catch (err) {

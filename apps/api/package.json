@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "build":"npx prisma generate && tsc",
+    "build": "npx prisma generate && tsc",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:seed": "npx prisma db seed",
@@ -17,7 +17,7 @@
   "prisma": {
     "seed": "ts-node-dev prisma/seed.ts"
   },
-  "dependencies": { 
+  "dependencies": {
     "@makanx/shared": "*",
     "@prisma/client": "^5.0.0",
     "@types/express-rate-limit": "^6.0.2",
@@ -32,6 +32,7 @@
     "jsonwebtoken": "^9.0.0",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
+    "resend": "^6.10.0",
     "socket.io": "^4.7.2",
     "web-push": "^3.6.7",
     "zod": "^4.3.6"

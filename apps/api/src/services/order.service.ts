@@ -4,9 +4,9 @@ import { getIO } from '../socket';
 import { OrderStatus, PaymentMode, PaymentStatus, AuditAction, Prisma } from '@prisma/client';
 import { createAuditLog } from './audit.service';
 import { sendReadyNotification } from './push.service';
-import { sendOrderReadyMessage } from './whatsapp.service';
+import { sendOrderReadyMessage } from './whatsapp.service';```
 import { sendHourCoffeeReadyEmail } from './email/email.service';
-
+```
 const readyEmailSentCache = new Map<string, number>();
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30;
 
@@ -33,9 +33,9 @@ function isValidEmail(val: string): boolean {
   if (!val) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 }
-
-async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
-  const orderId = String(order?.id || '');
+```
+async function _sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
+```  const orderId = String(order?.id || '');
   const customerEmail = normalizeEmail(order?.customerEmail);
   console.log('[hour-coffee-email] READY trigger entered', { source, orderId, customerEmail: customerEmail || null });
 
@@ -80,6 +80,7 @@ async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
   }
 
   try {
+    // Attempt to send ready email
     const result = await sendHourCoffeeReadyEmail(customerEmail, orderNumber, boothName, orderId);
     if (result.ok) {
       console.log('[order] READY email sent', { source, orderId, orderNumber, customerEmail, messageId: result.messageId || null });

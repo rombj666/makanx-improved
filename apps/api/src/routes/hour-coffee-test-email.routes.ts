@@ -7,10 +7,10 @@ router.get('/verify', async (_req, res) => {
   try {
     const result = await emailService.verifyEmailConfig();
     if (result.ok) {
-      console.log('[email-test-route] SMTP verified successfully:', result.message);
+      console.log('[email-test-route] Resend config verified successfully:', result.message);
       return res.status(200).json({ success: true, message: result.message });
     } else {
-      console.error('[email-test-route] SMTP verification failed:', result.message, result.detail);
+      console.error('[email-test-route] Resend config verification failed:', result.message, result.detail);
       return res.status(200).json({ 
         success: false, 
         error: result.message,
