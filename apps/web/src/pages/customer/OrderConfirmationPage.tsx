@@ -8,7 +8,6 @@ import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
 import { useSocket } from '../../context/SocketContext';
 import { computeDisplayEtaMinutesFromQuantity } from '../../lib/utils';
 import OrderStatusStepper from '../../components/customer/OrderStatusStepper';
-import toast from 'react-hot-toast';
 
 interface OrderState {
   orderId?: string;
