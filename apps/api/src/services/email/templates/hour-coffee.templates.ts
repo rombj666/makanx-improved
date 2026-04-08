@@ -54,7 +54,7 @@ export function buildPasswordResetEmail({ otp }: { otp: string }) {
 export function buildTestEmail() {
   const subject = 'Hour Coffee Test Email';
   const html = `
-    <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 600px; margin: 0 auto; padding: 24px;">
+    <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 640px; margin: 0 auto; padding: 24px;">
       <h2 style="margin: 0 0 12px; font-size: 22px; line-height: 1.2;">Test Email from Hour Coffee</h2>
       <p style="margin: 0; font-size: 14px; line-height: 1.6;">
         This is a test email sent from the Hour Coffee email service.

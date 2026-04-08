@@ -5,8 +5,7 @@ import { OrderStatus, PaymentMode, PaymentStatus, AuditAction, Prisma } from '@p
 import { createAuditLog } from './audit.service';
 import { sendReadyNotification } from './push.service';
 import { sendOrderReadyMessage } from './whatsapp.service';
-import { sendEmail } from './email/email.service';
-import { buildOrderReadyEmail } from './email/templates/email.templates';
+import { sendHourCoffeeReadyEmail } from './email/email.service';
 
 const readyEmailSentCache = new Map<string, number>();
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30;
@@ -80,18 +79,8 @@ async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
     console.warn('[hour-coffee-email] READY booth lookup failed', { source, orderId, message: e?.message || e });
   }
 
-  const customerOrderPageUrl = process.env.CLIENT_URL
-    ? `${process.env.CLIENT_URL}/customer/order-confirmed?orderId=${orderId}`
-    : undefined;
-
-  const { subject, html, text } = buildOrderReadyEmail({
-    orderNumber,
-    boothName,
-    customerOrderPageUrl,
-  });
-
   try {
-    const result = await sendEmail({ to: customerEmail, subject, html, text });
+    const result = await sendHourCoffeeReadyEmail(customerEmail, orderNumber, boothName, orderId);
     if (result.ok) {
       console.log('[order] READY email sent', { source, orderId, orderNumber, customerEmail, messageId: result.messageId || null });
     } else {

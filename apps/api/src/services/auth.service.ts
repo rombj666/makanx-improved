@@ -4,8 +4,7 @@ import { generateToken } from '../utils/jwt';
 import { Role } from '@makanx/shared';
 import { z } from 'zod';
 import { randomInt } from 'crypto';
-import { sendEmail } from './email/email.service';
-import { buildPasswordResetEmail } from './email/templates/email.templates';
+import { sendPasswordResetEmail } from './email/email.service';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -208,10 +207,8 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
-    console.log("[reset] Attempting to send OTP via new email service to:", email);
-    const { subject, html, text } = buildPasswordResetEmail({ otp });
-
-    const result = await sendEmail({ to: email, subject, html, text });
+    console.log("[reset] Attempting to send OTP via SMTP to:", email);
+    const result = await sendPasswordResetEmail(email, otp);
     console.log("[reset] email send result:", result);
   } catch (err) {
     console.error("[reset] Email send failed:", err);
