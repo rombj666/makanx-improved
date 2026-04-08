@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../context/SocketContext';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -44,6 +44,85 @@ export function VendorDashboard() {
   const [groupMinutes, setGroupMinutes] = useState(2);
   const [productionOrders, setProductionOrders] = useState<Order[]>([]);
 
+  // Request deduplication and backoff
+  const isFetchingRef = useRef(false);
+  const lastFetchRef = useRef(0);
+  const [isThrottled, setIsThrottled] = useState(false);
+
+  const fetchOrders = useCallback(async () => {
+    if (isFetchingRef.current || isThrottled) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 2000) return; // Minimum 2s between fetches
+
+    isFetchingRef.current = true;
+    lastFetchRef.current = now;
+    try {
+      const { data } = await api.get('/orders/vendor-live');
+      if (data.success) {
+        setOrders(data.data || []);
+      }
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        setIsThrottled(true);
+        setTimeout(() => setIsThrottled(false), 30000); // 30s backoff
+        toast.error('Too many requests. Retrying in 30s...');
+      }
+      console.error(error);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [isThrottled]);
+
+  const fetchProductionBatch = useCallback(async () => {
+    if (isFetchingRef.current || isThrottled) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 2000) return;
+
+    isFetchingRef.current = true;
+    lastFetchRef.current = now;
+    try {
+      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
+      if (res.data.success) {
+        setProductionOrders(res.data.data || []);
+      }
+    } catch (err: any) {
+      if (err.response?.status === 429) {
+        setIsThrottled(true);
+        setTimeout(() => setIsThrottled(false), 30000);
+      }
+      console.error("Production fetch error:", err);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [isThrottled]);
+
+  const refetchAll = useCallback(async () => {
+    if (isFetchingRef.current || isThrottled) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 2000) return;
+
+    isFetchingRef.current = true;
+    lastFetchRef.current = now;
+    try {
+      const [liveRes, prodRes] = await Promise.all([
+        api.get('/orders/vendor-live'),
+        api.get(`/orders/vendor/production-batch?groupByWindow=false`)
+      ]);
+      
+      if (liveRes.data.success) setOrders(liveRes.data.data || []);
+      if (prodRes.data.success) setProductionOrders(prodRes.data.data || []);
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        setIsThrottled(true);
+        setTimeout(() => setIsThrottled(false), 30000);
+        toast.error('Rate limited. Waiting 30s...');
+      }
+      console.error('Refetch error:', error);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [isThrottled]);
+
   const groupedProduction = useMemo(() => {
     const windowMs = groupMinutes * 60 * 1000;
     const grouped = new Map<number, Order[]>();
@@ -78,13 +157,17 @@ export function VendorDashboard() {
         clearTimeout(t);
         t = setTimeout(() => {
           void refetchAll();
-        }, 200);
+        }, 1000); // Increased debounce to 1s
       };
 
       socket.on('connect', scheduleRefetch);
 
       socket.on('order_created', (newOrder: Order) => {
-        setOrders((prev) => [newOrder, ...prev]);
+        // Optimistic update
+        setOrders((prev) => {
+          if (prev.find(o => o.id === newOrder.id)) return prev;
+          return [newOrder, ...prev];
+        });
         toast.success('New Order Received!');
         scheduleRefetch();
       });
@@ -113,7 +196,7 @@ export function VendorDashboard() {
         socket.off('vendor_orders_changed');
       }
     };
-  }, [socket]);
+  }, [socket, refetchAll]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -128,46 +211,21 @@ export function VendorDashboard() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, []);
+  }, [refetchAll]);
 
   useEffect(() => {
     const poll = setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible' || isThrottled) return;
       void fetchOrders();
       if (viewMode === 'kitchen') void fetchProductionBatch();
-    }, 5000);
+    }, 30000); // Slowed to 30s
     return () => clearInterval(poll);
-  }, [viewMode]);
-
-  const fetchOrders = async () => {
-    try {
-      const { data } = await api.get('/orders/vendor-live');
-      if (data.success) {
-        const list: Order[] = data.data || [];
-        setOrders(list);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  }, [viewMode, fetchOrders, fetchProductionBatch, isThrottled]);
 
   const getOrdersByStatus = (status: string) => {
     return orders.filter(o => o.status === status);
   };
 
-  const fetchProductionBatch = async () => {
-    try {
-      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
-      if (res.data.success) {
-        setProductionOrders(res.data.data);
-      }
-    } catch (err) {
-      console.error("Production fetch error:", err);
-    }
-  };
-  const refetchAll = async () => {
-    await Promise.all([fetchOrders(), fetchProductionBatch()]);
-  };
   const markComplete = async (id: string) => {
     const snapshot = orders.find((o) => o.id === id);
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: 'COMPLETED' } : o)));
@@ -521,8 +579,7 @@ export function VendorDashboard() {
             <Button
               variant="outline"
               onClick={() => {
-                fetchOrders();
-                fetchProductionBatch();
+                refetchAll();
               }}
             >
               Refresh
@@ -551,8 +608,7 @@ export function VendorDashboard() {
           </div>
           <button
             onClick={() => {
-              fetchOrders();
-              fetchProductionBatch();
+              refetchAll();
             }}
             className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
           >

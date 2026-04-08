@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { toast } from 'react-hot-toast';
 import { Loader2, ChevronDown, ChevronRight} from 'lucide-react';
@@ -49,8 +49,18 @@ export function VendorOrders() {
   const [openSection, setOpenSection] = useState<OrderStatus | null>('PREPARING');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
+  // Request deduplication
+  const isFetchingRef = useRef(false);
+  const lastFetchRef = useRef(0);
+
   // 3.4 Live waiting timer
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 2000) return;
+
+    isFetchingRef.current = true;
+    lastFetchRef.current = now;
     try {
       const { data } = await api.get('/orders/vendor-orders');
       if (data.success) {
@@ -68,24 +78,34 @@ export function VendorOrders() {
         }));
         setOrders(normalized);
       }
-    } catch (error) {
-      toast.error('Failed to load orders');
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        toast.error('Too many requests. Please wait.');
+      } else {
+        toast.error('Failed to load orders');
+      }
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchOrders();
     // Poll every 30s to keep fresh
     const poll = setInterval(fetchOrders, 30000);
     return () => clearInterval(poll);
-  }, []);
+  }, [fetchOrders]);
+
 useEffect(() => {
   if (!socket) return;
 
+  let t: any;
   const handleNewOrder = () => {
-    fetchOrders();
+    clearTimeout(t);
+    t = setTimeout(() => {
+      fetchOrders();
+    }, 1000);
     toast.success("New order received!");
   };
 
@@ -94,7 +114,7 @@ useEffect(() => {
   return () => {
     socket.off("order_created", handleNewOrder);
   };
-}, [socket]);
+}, [socket, fetchOrders]);
 
   // 3.3 Summary Stats
   const stats = useMemo(() => {
