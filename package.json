@@ -13,10 +13,8 @@
     "build:web": "npm run build -w apps/web"
   },
   "dependencies": {
-    "@types/nodemailer": "^8.0.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.577.0",
-    "nodemailer": "^8.0.4",
     "numeral": "^2.0.6",
     "push": "^0.1.1",
     "qrcode.react": "^4.2.0",

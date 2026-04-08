@@ -20,7 +20,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   try {
-    console.log('[EmailService] Sending email via Resend:', { to, subject, from });
+    console.log(`[EmailService] Attempting to send email to ${to} with subject: "${subject}"...`);
+    
     const emailPayload: {
       from: string;
       to: string;
@@ -43,14 +44,14 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     const result = await resend.emails.send(emailPayload as any);
 
     if (result.error) {
-      console.error('[EmailService] Resend API error:', result.error);
+      console.error(`[EmailService] Resend API error for ${to}:`, result.error);
       return { ok: false, error: 'Resend API error', detail: result.error };
     }
 
-    console.log('[EmailService] Email sent successfully, ID:', result.data?.id);
+    console.log(`[EmailService] Email sent successfully to ${to}, Message ID: ${result.data?.id}`);
     return { ok: true, messageId: result.data?.id };
   } catch (err: any) {
-    console.error('[EmailService] Exception during email send:', err);
+    console.error(`[EmailService] Exception while sending email to ${to}:`, err?.message || err);
     return { ok: false, error: 'Exception during send', detail: err?.message || err };
   }
 }
