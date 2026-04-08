@@ -38,7 +38,6 @@ export function OrderConfirmationPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<string | null>(orderFromState?.status || null);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     if (orderFromState?.newOrder && countdown === null && liveStatus !== 'CANCELLED') {
@@ -57,32 +56,6 @@ export function OrderConfirmationPage() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
-
-  const handleCancelOrder = async () => {
-    const orderId = resolvedOrder?.orderId || orderIdFromQuery;
-    if (!orderId || isCancelling) return;
-
-    try {
-      setIsCancelling(true);
-      const guestId = getOrCreateGuestId();
-      await api.post(`/orders/${orderId}/cancel`, { guestId });
-      
-      setCountdown(null);
-      setLiveStatus('CANCELLED');
-      toast.success('Order cancelled successfully');
-      
-      // Navigate back to menu after a short delay
-      setTimeout(() => {
-        const slug = resolvedOrder?.eventSlug || eventSlugFromQuery;
-        if (slug) navigate(`/customer/event/${slug}`);
-        else navigate('/');
-      }, 1500);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to cancel order');
-    } finally {
-      setIsCancelling(false);
-    }
-  };
 
   useEffect(() => {
     if (orderFromState) {
@@ -441,24 +414,10 @@ export function OrderConfirmationPage() {
                         Estimated prep time{' '}
                         <span className="font-extrabold text-black">~{eta} min</span>
                       </div>
-                    ) : countdown !== null ? (
-                      <div className="mt-3 text-sm font-medium text-neutral-500">
-                        Need to make a change? Cancel now.
-                      </div>
                     ) : null}
                   </>
                 )}
               </div>
-
-              {countdown !== null && status === 'PREPARING' && (
-                <button
-                  onClick={handleCancelOrder}
-                  disabled={isCancelling}
-                  className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold border border-neutral-200 bg-neutral-50 text-neutral-600 active:scale-[0.98] transition disabled:opacity-50"
-                >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Order'}
-                </button>
-              )}
 
                 {!hasActiveOrder || pushUiState === 'enabled' ? null : (
                   <div

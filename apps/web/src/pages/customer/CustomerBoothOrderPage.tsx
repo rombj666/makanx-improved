@@ -501,7 +501,7 @@ export function CustomerBoothOrderPage() {
                 disabled={cart.totalItems <= 0 || isPlacing}
                 className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white disabled:opacity-50"
               >
-                {isPlacing ? 'Placing Order...' : 'Place New Order'}
+                {isPlacing ? 'Checking Out...' : 'Check Out'}
               </button>
             </div>
           </div>
