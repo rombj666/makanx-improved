@@ -56,30 +56,38 @@ export const requireRole = (roles: Role[]) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const tokenRole = req.user.role;
-    console.log('[auth] requireRole check', { 
+    // Normalize roles for comparison
+    const requiredRoles = roles.map(r => String(r).toUpperCase());
+    const tokenRole = String(req.user.role || '').toUpperCase();
+
+    console.log('[auth] requireRole check started', { 
       userId: req.user.userId, 
       tokenRole, 
-      requiredRoles: roles 
+      requiredRoles,
+      originalPath: req.originalUrl
     });
 
-    if (roles.includes(tokenRole)) {
+    if (tokenRole && requiredRoles.includes(tokenRole)) {
+      console.log('[auth] role matched from token', { userId: req.user.userId, role: tokenRole });
       return next();
     }
 
-    let dbRole: Role | null = null;
+    let dbRole: string | null = null;
     try {
       const found = await prisma.user.findUnique({
         where: { id: req.user.userId },
         select: { role: true },
       });
-      dbRole = (found?.role as Role) || null;
+      dbRole = found?.role ? String(found.role).toUpperCase() : null;
     } catch (e: any) {
       console.error('[auth] dbRole lookup failed', { userId: req.user.userId, error: e.message });
     }
 
-    if (dbRole && roles.includes(dbRole)) {
-      req.user.role = dbRole;
+    console.log('[auth] dbRole lookup result', { userId: req.user.userId, dbRole });
+
+    if (dbRole && requiredRoles.includes(dbRole)) {
+      console.log('[auth] role matched from database', { userId: req.user.userId, role: dbRole });
+      req.user.role = dbRole as Role;
       return next();
     }
 
@@ -87,7 +95,7 @@ export const requireRole = (roles: Role[]) => {
       userId: req.user.userId,
       tokenRole,
       dbRole,
-      requiredRoles: roles,
+      requiredRoles,
       method: req.method,
       path: req.originalUrl,
     });

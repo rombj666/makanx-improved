@@ -57,8 +57,7 @@ export const getVendorProductionBatch = async (req: Request, res: Response) => {
 
     const groupByWindow = req.query.groupByWindow === "true";
     
-    console.log("Production batch requested by vendor:", req.user?.userId);
-    console.log("Group by window:", groupByWindow);
+    console.log("[order] getVendorProductionBatch request", { userId: req.user.userId, groupByWindow });
 
     // Get vendor profile first to get vendorId
     const vendorProfile = await prisma.vendorProfile.findUnique({ 
@@ -66,17 +65,21 @@ export const getVendorProductionBatch = async (req: Request, res: Response) => {
     });
     
     if (!vendorProfile) {
+      console.warn("[order] getVendorProductionBatch: vendor profile not found", { userId: req.user.userId });
       return res.status(404).json({ success: false, error: 'Vendor profile not found' });
     }
+
+    console.log("[order] getVendorProductionBatch profile found", { vendorProfileId: vendorProfile.id });
 
     const result = await orderService.getVendorProductionBatch(
       vendorProfile.id,
       groupByWindow
     );
-    console.log("Returning production batch count:", result.length);
+    console.log("[order] getVendorProductionBatch: success", { vendorProfileId: vendorProfile.id, count: result.length });
 
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
+    console.error("[order] getVendorProductionBatch error", { userId: req.user?.userId, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
@@ -100,14 +103,24 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 export const getOrderById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    console.log('[order] getOrderById request', { id, guestId: req.query.guestId, userId: req.user?.userId });
+    
+    if (!id || id === 'undefined' || id === 'null') {
+      console.warn('[order] getOrderById: invalid ID received', { id });
+      return res.status(400).json({ success: false, error: 'Invalid order ID' });
+    }
+
     const result = await orderService.getOrderById(id);
     
     if (!result) {
+      console.warn('[order] getOrderById: order not found in DB', { id });
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
 
+    console.log('[order] getOrderById: order found', { id, status: result.status });
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
+    console.error('[order] getOrderById error', { id: req.params.id, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };

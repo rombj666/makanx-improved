@@ -5,12 +5,8 @@ import { Role } from '@makanx/shared';
 
 const router = Router();
 
-// Customer
-router.post('/', optionalAuth, orderController.createOrder);
-router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
-router.get('/:id', optionalAuth, orderController.getOrderById);
-
-// Vendor
+console.log('[order] Registering vendor specific routes');
+// Vendor (Move these above all parameterized routes to avoid collision)
 router.get('/vendor-live', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorLiveOrders);
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
 router.get(
@@ -25,6 +21,15 @@ router.post(
   requireRole([Role.VENDOR]),
   orderController.markBatchItemsReady
 );
+router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
+
+console.log('[order] Registering customer specific routes');
+// Customer
+router.post('/', optionalAuth, orderController.createOrder);
+router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
+
+console.log('[order] Registering order specific actions');
+// Order specific actions (keep above generic /:id)
 router.post(
   '/:id/items/mark-ready',
   requireAuth,
@@ -33,6 +38,9 @@ router.post(
 );
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
 router.post('/:id/cancel', optionalAuth, orderController.cancelOrder);
-router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
+
+console.log('[order] Registering generic order lookup (must be last)');
+// Generic order lookup MUST be last to avoid catching specific string routes
+router.get('/:id', optionalAuth, orderController.getOrderById);
 
 export default router;
