@@ -6,7 +6,6 @@ import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getExistingPushSubscription, subscribeToPush } from '../../lib/push';
 import { useSocket } from '../../context/SocketContext';
-import { computeDisplayEtaMinutesFromQuantity } from '../../lib/utils';
 import OrderStatusStepper from '../../components/customer/OrderStatusStepper';
 
 interface OrderState {
@@ -36,25 +35,6 @@ export function OrderConfirmationPage() {
   const [resolvedOrder, setResolvedOrder] = useState<OrderState | null>(orderFromState);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<string | null>(orderFromState?.status || null);
-  const [countdown, setCountdown] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (orderFromState?.newOrder && countdown === null && liveStatus !== 'CANCELLED') {
-      setCountdown(5);
-    }
-  }, [orderFromState, liveStatus]);
-
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown === 0) {
-      setCountdown(null);
-      return;
-    }
-    const timer = setTimeout(() => {
-      setCountdown((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [countdown]);
 
   useEffect(() => {
     if (orderFromState) {
@@ -135,9 +115,6 @@ export function OrderConfirmationPage() {
   const orderId = order?.orderId || orderIdFromQuery;
   const orderNumber = order?.orderNumber || (orderId ? orderId.slice(-4).toUpperCase() : 'Unknown');
   const items = useMemo(() => (Array.isArray(order?.items) ? order!.items! : []), [order]);
-  const qty = items.reduce((sum, it) => sum + Math.max(0, Number(it.quantity || 0)), 0);
-  const computedEta = computeDisplayEtaMinutesFromQuantity(qty);
-  const eta = Number.isFinite(computedEta) && computedEta > 0 ? computedEta : order?.eta ?? 0;
   const eventSlug = order?.eventSlug || eventSlugFromQuery || '';
   const vendorId = order?.vendorId || '';
   const boothId = order?.boothId || boothIdFromQuery || '';
@@ -402,14 +379,11 @@ export function OrderConfirmationPage() {
                 ) : (
                   <>
                     <div className="text-[26px] leading-tight font-extrabold tracking-tight">
-                      {countdown !== null ? `Preparing your order in ${countdown}` : 'PREPARING'}
+                      Preparing your order
                     </div>
-                    {countdown === null && eta > 0 ? (
-                      <div className="mt-3 text-base text-neutral-700">
-                        Estimated prep time{' '}
-                        <span className="font-extrabold text-black">~{eta} min</span>
-                      </div>
-                    ) : null}
+                    <div className="mt-3 text-base text-neutral-700">
+                      Your order is being prepared now.
+                    </div>
                   </>
                 )}
               </div>
