@@ -57,6 +57,12 @@ export const requireRole = (roles: Role[]) => {
     }
 
     const tokenRole = req.user.role;
+    console.log('[auth] requireRole check', { 
+      userId: req.user.userId, 
+      tokenRole, 
+      requiredRoles: roles 
+    });
+
     if (roles.includes(tokenRole)) {
       return next();
     }
@@ -68,21 +74,22 @@ export const requireRole = (roles: Role[]) => {
         select: { role: true },
       });
       dbRole = (found?.role as Role) || null;
-    } catch {}
+    } catch (e: any) {
+      console.error('[auth] dbRole lookup failed', { userId: req.user.userId, error: e.message });
+    }
 
     if (dbRole && roles.includes(dbRole)) {
       req.user.role = dbRole;
       return next();
     }
 
-    console.warn('[auth] 403 forbidden', {
+    console.warn('[auth] 403 forbidden - exact mismatch', {
       userId: req.user.userId,
       tokenRole,
       dbRole,
       requiredRoles: roles,
       method: req.method,
       path: req.originalUrl,
-      boothId: (req.params as any)?.id || null,
     });
 
     return res.status(403).json({ success: false, error: 'Forbidden: Insufficient permissions' });

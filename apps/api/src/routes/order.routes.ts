@@ -8,6 +8,7 @@ const router = Router();
 // Customer
 router.post('/', optionalAuth, orderController.createOrder);
 router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
+router.get('/:id', optionalAuth, orderController.getOrderById);
 
 // Vendor
 router.get('/vendor-live', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorLiveOrders);

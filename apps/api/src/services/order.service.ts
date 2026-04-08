@@ -409,6 +409,7 @@ export const createOrder = async (
  */
 export const getVendorOrders = async (userId: string) => {
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  console.log('[order] getVendorOrders auth check', { userId, vendorProfileId: vendorProfile?.id });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
   try {
@@ -416,42 +417,10 @@ export const getVendorOrders = async (userId: string) => {
     const orders = await prisma.order.findMany({
       where: { vendorId: vendorProfile.id },
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        displayNumber: true,
-        customerId: true,
-        vendorId: true,
-        status: true,
-        paymentMode: true,
-        paymentStatus: true,
-        totalAmount: true,
-        createdAt: true,
-        updatedAt: true,
-        acceptedAt: true,
-        readyAt: true,
-        completedAt: true,
+      take: 150,
+      include: {
         items: {
-          select: {
-            id: true,
-            orderId: true,
-            menuItemId: true,
-            quantity: true,
-            price: true,
-            remark: true,
-            status: true,
-            selectedOptions: true,
-            menuItem: {
-              select: {
-                id: true,
-                vendorId: true,
-                name: true,
-                description: true,
-                price: true,
-                imageUrl: true,
-                isAvailable: true,
-              },
-            },
-          },
+          include: { menuItem: true },
         },
       },
     });
@@ -512,6 +481,7 @@ export const getVendorOrders = async (userId: string) => {
 
 export const getVendorLiveOrders = async (userId: string) => {
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  console.log('[order] getVendorLiveOrders auth check', { userId, vendorProfileId: vendorProfile?.id });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
   const recentCompletedSince = new Date(Date.now() - 2 * 60 * 60 * 1000);
@@ -528,31 +498,9 @@ export const getVendorLiveOrders = async (userId: string) => {
       },
       orderBy: { createdAt: 'desc' },
       take: 150,
-      select: {
-        id: true,
-        displayNumber: true,
-        customerId: true,
-        vendorId: true,
-        status: true,
-        paymentMode: true,
-        paymentStatus: true,
-        totalAmount: true,
-        createdAt: true,
-        updatedAt: true,
-        acceptedAt: true,
-        readyAt: true,
-        completedAt: true,
+      include: {
         items: {
-          select: {
-            id: true,
-            orderId: true,
-            menuItemId: true,
-            quantity: true,
-            remark: true,
-            status: true,
-            selectedOptions: true,
-            menuItem: { select: { id: true, name: true } },
-          },
+          include: { menuItem: true },
         },
       },
     });
@@ -732,6 +680,24 @@ export const getVendorProductionBatch = async (
 /**
  * Customer Orders (for customer "My Orders")
  */
+export const getOrderById = async (orderId: string) => {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          menuItem: true,
+        },
+      },
+      vendor: {
+        select: {
+          businessName: true,
+        },
+      },
+    },
+  });
+};
+
 export const getCustomerOrders = async (customerId: string) => {
   const orders = await prisma.order.findMany({
     where: { 
@@ -768,6 +734,7 @@ export const getCustomerOrders = async (customerId: string) => {
  * Update status (vendor only)
  */
 export const updateOrderStatus = async (orderId: string, userId: string, status: OrderStatus) => {
+  console.log('[order] updateOrderStatus request', { orderId, userId, status });
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { vendor: true, items: true },
@@ -775,7 +742,20 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
   if (!order) throw new Error('Order not found');
 
   const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
-  if (!vendorProfile || vendorProfile.id !== order.vendorId) throw new Error('Unauthorized');
+  console.log('[order] updateOrderStatus auth check', { 
+    userId, 
+    vendorProfileId: vendorProfile?.id, 
+    orderVendorId: order.vendorId 
+  });
+
+  if (!vendorProfile || vendorProfile.id !== order.vendorId) {
+    console.error('[order] Unauthorized status update', {
+      userId,
+      vendorProfileId: vendorProfile?.id,
+      orderVendorId: order.vendorId
+    });
+    throw new Error('Unauthorized');
+  }
 
   if (status === OrderStatus.COMPLETED) {
     const allReady = Array.isArray(order.items) && order.items.every((it: any) => it.status === 'READY');

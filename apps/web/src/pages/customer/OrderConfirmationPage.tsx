@@ -71,10 +71,8 @@ export function OrderConfirmationPage() {
 
     const run = async () => {
       try {
-        const guestId = getOrCreateGuestId();
-        const { data } = await api.get('/orders/my-orders', { params: { guestId } });
-        const list: any[] = Array.isArray(data?.data) ? data.data : [];
-        const found = list.find((o) => String(o?.id || '') === String(orderIdFromQuery));
+        const { data } = await api.get(`/orders/${orderIdFromQuery}`);
+        const found = data?.data;
         if (!found) {
           setLoadError('Order not found.');
           setResolvedOrder(null);
@@ -126,7 +124,7 @@ export function OrderConfirmationPage() {
         if (status) setLiveStatus(status);
         setLoadError(null);
       } catch (err: any) {
-        setLoadError(err?.message || 'Failed to load order.');
+        setLoadError(err?.response?.data?.error || err?.message || 'Failed to load order.');
         setResolvedOrder(null);
       }
     };
@@ -325,10 +323,8 @@ export function OrderConfirmationPage() {
     if (status === 'COMPLETED') return;
     const interval = setInterval(async () => {
       try {
-        const guestId = getOrCreateGuestId();
-        const { data } = await api.get('/orders/my-orders', { params: { guestId } });
-        const list: any[] = Array.isArray(data?.data) ? data.data : [];
-        const found = list.find((o) => String(o?.id || '') === String(orderId));
+        const { data } = await api.get(`/orders/${orderId}`);
+        const found = data?.data;
         if (!found?.status) return;
         setLiveStatus(String(found.status));
         setResolvedOrder((prev) => ({

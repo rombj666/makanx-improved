@@ -29,9 +29,11 @@ export const getVendorOrders = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
+    console.log('[order] getVendorOrders: user', req.user.userId);
     const result = await orderService.getVendorOrders(req.user.userId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
+    console.error('[order] getVendorOrders error', { userId: req.user?.userId, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
@@ -40,9 +42,11 @@ export const getVendorLiveOrders = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
+    console.log('[order] getVendorLiveOrders: user', req.user.userId);
     const result = await orderService.getVendorLiveOrders(req.user.userId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
+    console.error('[order] getVendorLiveOrders error', { userId: req.user?.userId, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
@@ -87,6 +91,21 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
     }
 
     const result = await orderService.getCustomerOrders(customerId);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+  }
+};
+
+export const getOrderById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await orderService.getOrderById(id);
+    
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });

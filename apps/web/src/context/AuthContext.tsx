@@ -37,8 +37,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('Logged in user (/auth/me):', data.data);
             setUser(data.data);
           }
-        } catch (error) {
-          localStorage.removeItem('token');
+        } catch (error: any) {
+          // Only remove token on 401/403.
+          // Do NOT remove on 429 (Too Many Requests) or network errors.
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            console.warn('Auth failed, removing token:', error.response?.status);
+            localStorage.removeItem('token');
+            setUser(null);
+          } else {
+            console.error('Auth check error (kept token):', error.response?.status || error.message);
+          }
         }
       }
       setIsLoading(false);

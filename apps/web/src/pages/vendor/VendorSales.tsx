@@ -6,6 +6,8 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
+import { toast } from 'react-hot-toast';
 
 interface Summary {
   revenue: number;
@@ -74,6 +76,41 @@ export function VendorSales() {
     }
   };
 
+  const handleExport = () => {
+    if (orders.length === 0) {
+      toast.error('No completed orders to export');
+      return;
+    }
+
+    const totalQuantity = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + it.qty, 0), 0);
+    const totalAmount = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+    const data = [
+      ['Total Quantity', totalQuantity],
+      ['Total Amount', formatCurrency(totalAmount)],
+      [], // empty row
+      ['Order', 'Created', 'Completed', 'Quantity', 'Amount', 'Items']
+    ];
+
+    orders.forEach((o) => {
+      const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
+      const itemsSummary = o.items.map((it) => `${it.qty}x ${it.productName}`).join(', ');
+      data.push([
+        o.orderNumber,
+        new Date(o.createdAt).toLocaleTimeString(),
+        o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
+        orderQty,
+        formatCurrency(o.totalAmount),
+        itemsSummary
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Completed Orders');
+    XLSX.writeFile(wb, `vendor-sales-report-${date}.xlsx`);
+  };
+
   useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,6 +145,9 @@ export function VendorSales() {
           </div>
           <Button onClick={fetchAll} disabled={loading}>
             Refresh
+          </Button>
+          <Button variant="outline" onClick={handleExport} disabled={loading}>
+            Export
           </Button>
         </div>
 
@@ -279,13 +319,22 @@ export function VendorSales() {
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
             <div className="text-2xl font-semibold text-black">Sales</div>
           </div>
-          <button
-            onClick={fetchAll}
-            disabled={loading}
-            className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={fetchAll}
+              disabled={loading}
+              className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={loading}
+              className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+            >
+              Export
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">

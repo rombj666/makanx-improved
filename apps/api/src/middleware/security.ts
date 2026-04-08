@@ -15,10 +15,10 @@ export const configureSecurity = (app: Express) => {
     message: { error: 'Too many requests, please try again later.' }
   });
 
-  // Stricter rate limiting for auth endpoints
+  // Stricter rate limiting for auth sensitive actions (login, register, password reset)
   const authLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // Limit each IP to 10 login/register attempts per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // Limit each IP to 20 login/register attempts per 15 minutes
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many login attempts, please try again later.' }
@@ -32,7 +32,16 @@ export const configureSecurity = (app: Express) => {
     legacyHeaders: false,
   });
 
+  // Apply general API limiter to all /api/
   app.use('/api/', apiLimiter);
-  app.use('/api/auth/', authLimiter);
+
+  // Apply stricter limiter ONLY to sensitive auth routes
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/password/reset/*', authLimiter);
+  app.use('/api/auth/invite/accept', authLimiter);
+
+  // Note: /api/auth/me is now under apiLimiter (100 per 15 mins), which is safe.
+  
   app.use('/api/webhooks/', webhookLimiter);
 };
