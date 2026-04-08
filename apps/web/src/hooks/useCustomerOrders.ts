@@ -108,7 +108,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         };
       });
       const active = normalized.filter(
-        (o) => o.status !== 'PENDING' && o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
+        (o) => o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
       );
       if (active.length === 0) {
         try {
@@ -190,13 +190,13 @@ export function useCustomerOrders(eventSlug: string | undefined) {
             becameCompleted = true;
             displayNum = merged.displayNumber;
           }
-          if (merged.status === 'CANCELLED' || merged.status === 'COMPLETED' || merged.status === 'PENDING') {
+          if (merged.status === 'CANCELLED' || merged.status === 'COMPLETED') {
             next.splice(idx, 1);
           } else {
             next[idx] = merged;
           }
         } else {
-          if (upd.orderId && upd.status !== 'CANCELLED' && upd.status !== 'PENDING' && upd.status !== 'COMPLETED') {
+          if (upd.orderId && upd.status !== 'CANCELLED' && upd.status !== 'COMPLETED') {
             const newEntry = {
               orderId: upd.orderId!,
               vendorId: upd.vendorId || '',
@@ -246,8 +246,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
 
         const shouldRemove =
           order.status === 'COMPLETED' ||
-          order.status === 'CANCELLED' ||
-          order.status === 'PENDING';
+          order.status === 'CANCELLED';
 
         if (shouldRemove) {
           if (idx >= 0) {

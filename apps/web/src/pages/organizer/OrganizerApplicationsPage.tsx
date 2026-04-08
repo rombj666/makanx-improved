@@ -24,7 +24,7 @@ export function OrganizerApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('PENDING');
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACCOUNT_CREATED'>('ALL');
   const [eventName, setEventName] = useState<string>('');
   const [inviteUrl, setInviteUrl] = useState<string>('');
   const [inviteEmail, setInviteEmail] = useState<string>('');

@@ -45,7 +45,7 @@ export const createOrder = async (customerId: string, input: z.infer<typeof crea
       customerId,
       vendorId,
       totalAmount,
-      status: 'PENDING',
+      status: 'PREPARING',
       paymentMode,
       paymentStatus,
       items: {
@@ -65,7 +65,7 @@ export const createOrder = async (customerId: string, input: z.infer<typeof crea
     order.id,
     'Order',
     customerId,
-    { status: 'PENDING', paymentStatus, paymentMode }
+    { status: 'PREPARING', paymentStatus, paymentMode }
   );
 
   // Emit Realtime Event to Vendor
@@ -249,7 +249,7 @@ export const cancelOrder = async (orderId: string, customerId: string) => {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error('Order not found');
   if (order.customerId !== customerId) throw new Error('Unauthorized');
-  if (order.status !== 'PENDING' && order.status !== 'PREPARING') {
+  if (order.status !== 'PREPARING') {
     throw new Error('Order cannot be cancelled at this stage');
   }
 
