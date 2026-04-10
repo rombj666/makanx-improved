@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { api } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -6,8 +6,11 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
-import * as XLSX from 'xlsx';
 import { toast } from 'react-hot-toast';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import { toPng } from 'html-to-image';
+import { useAuth } from '../../context/AuthContext';
 
 interface Summary {
   revenue: number;
@@ -52,6 +55,10 @@ export function VendorSales() {
   const [products, setProducts] = useState<ProductPerf[]>([]);
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
 
+  const trendChartRef = useRef<HTMLDivElement>(null);
+  const topProductsChartRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
   const MOBILE_COLORS = ['#111827', '#374151', '#6B7280', '#9CA3AF', '#D1D5DB', '#E5E7EB'];
 
@@ -76,39 +83,160 @@ export function VendorSales() {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (orders.length === 0) {
       toast.error('No completed orders to export');
       return;
     }
 
-    const totalQuantity = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + it.qty, 0), 0);
-    const totalAmount = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+    const toastId = toast.loading('Generating professional report...');
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Sales Report');
 
-    const data = [
-      ['Total Quantity', totalQuantity],
-      ['Total Amount', formatCurrency(totalAmount)],
-      [], // empty row
-      ['Order', 'Created', 'Completed', 'Quantity', 'Amount', 'Items']
-    ];
+      // 1. Column Configuration
+      worksheet.columns = [
+        { header: 'A', key: 'a', width: 20 },
+        { header: 'B', key: 'b', width: 25 },
+        { header: 'C', key: 'c', width: 20 },
+        { header: 'D', key: 'd', width: 15 },
+        { header: 'E', key: 'e', width: 15 },
+        { header: 'F', key: 'f', width: 45 },
+      ];
 
-    orders.forEach((o) => {
-      const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
-      const itemsSummary = o.items.map((it) => `${it.qty}x ${it.productName}`).join(', ');
-      data.push([
-        o.orderNumber,
-        new Date(o.createdAt).toLocaleTimeString(),
-        o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
-        orderQty,
-        formatCurrency(o.totalAmount),
-        itemsSummary
+      // 2. Report Header
+      const titleCell = worksheet.getCell('A1');
+      titleCell.value = 'Vendor Sales Analytics Report';
+      titleCell.font = { name: 'Arial', size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.mergeCells('A1:F2');
+
+      // 3. Metadata Section
+      worksheet.addRow([]);
+      const metaStart = worksheet.lastRow!.number + 1;
+      worksheet.addRow(['Vendor Name:', user?.vendorProfile?.businessName || 'N/A']);
+      worksheet.addRow(['Report Date:', date]);
+      worksheet.addRow(['Generated At:', format(new Date(), 'yyyy-MM-dd HH:mm:ss')]);
+      
+      for (let i = metaStart; i < metaStart + 3; i++) {
+        worksheet.getCell(`A${i}`).font = { bold: true };
+      }
+
+      // 4. KPI Summary Section
+      worksheet.addRow([]);
+      worksheet.addRow(['KPI SUMMARY']).font = { bold: true, size: 14 };
+      const kpiHeaderRow = worksheet.addRow(['Revenue', 'Total Orders', 'Avg Order Value']);
+      kpiHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      kpiHeaderRow.eachCell(c => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF444444' } };
+        c.alignment = { horizontal: 'center' };
+      });
+
+      const kpiValueRow = worksheet.addRow([
+        formatCurrency(summary?.revenue ?? 0),
+        summary?.orders ?? 0,
+        formatCurrency(summary?.avgOrder ?? 0)
       ]);
-    });
+      kpiValueRow.alignment = { horizontal: 'center' };
+      kpiValueRow.font = { size: 12 };
 
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Completed Orders');
-    XLSX.writeFile(wb, `vendor-sales-report-${date}.xlsx`);
+      // 5. Chart Capture and Embedding
+      worksheet.addRow([]);
+      worksheet.addRow([]);
+      const chartRow = worksheet.lastRow!.number + 1;
+      
+      // Capture charts
+      let trendImageId, topProductsImageId;
+      
+      if (trendChartRef.current) {
+        const trendDataUrl = await toPng(trendChartRef.current, { backgroundColor: '#ffffff' });
+        trendImageId = workbook.addImage({
+          base64: trendDataUrl,
+          extension: 'png',
+        });
+      }
+
+      if (topProductsChartRef.current) {
+        const topProductsDataUrl = await toPng(topProductsChartRef.current, { backgroundColor: '#ffffff' });
+        topProductsImageId = workbook.addImage({
+          base64: topProductsDataUrl,
+          extension: 'png',
+        });
+      }
+
+      // Position charts
+      if (trendImageId !== undefined) {
+        worksheet.getCell(`A${chartRow}`).value = 'Product Trend Analysis';
+        worksheet.getCell(`A${chartRow}`).font = { bold: true, size: 12 };
+        worksheet.addImage(trendImageId, {
+          tl: { col: 0, row: chartRow },
+          ext: { width: 450, height: 250 }
+        });
+      }
+
+      if (topProductsImageId !== undefined) {
+        worksheet.getCell(`D${chartRow}`).value = 'Top Products Distribution';
+        worksheet.getCell(`D${chartRow}`).font = { bold: true, size: 12 };
+        worksheet.addImage(topProductsImageId, {
+          tl: { col: 3, row: chartRow },
+          ext: { width: 350, height: 250 }
+        });
+      }
+
+      // Skip rows for charts
+      for (let i = 0; i < 15; i++) worksheet.addRow([]);
+
+      // 6. Data Tables
+      // Product Performance Table
+      worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
+      const prodHeader = worksheet.addRow(['Product', 'Quantity Sold', 'Total Revenue']);
+      prodHeader.font = { bold: true };
+      prodHeader.eachCell(c => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
+        c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      });
+
+      products.forEach(p => {
+        const r = worksheet.addRow([p.productName, p.qtySold, formatCurrency(p.revenue)]);
+        r.getCell(3).alignment = { horizontal: 'right' };
+      });
+
+      worksheet.addRow([]);
+
+      // Detailed Orders Table
+      worksheet.addRow(['COMPLETED ORDERS DETAILS']).font = { bold: true, size: 14 };
+      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Completed Time', 'Total Quantity', 'Total Amount', 'Items Summary']);
+      orderHeader.font = { bold: true };
+      orderHeader.eachCell(c => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
+        c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      });
+
+      orders.forEach(o => {
+        const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
+        const itemsSummary = o.items.map((it) => `${it.qty}x ${it.productName}`).join(', ');
+        const r = worksheet.addRow([
+          o.orderNumber,
+          new Date(o.createdAt).toLocaleTimeString(),
+          o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
+          orderQty,
+          formatCurrency(o.totalAmount),
+          itemsSummary
+        ]);
+        r.getCell(5).alignment = { horizontal: 'right' };
+      });
+
+      // Styling cleanups
+      worksheet.views = [{ state: 'frozen', ySplit: 2 }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `vendor-sales-report-${date}.xlsx`);
+      toast.success('Report exported successfully!', { id: toastId });
+    } catch (err) {
+      console.error('Export error:', err);
+      toast.error('Failed to export report.', { id: toastId });
+    }
   };
 
   useEffect(() => {
@@ -182,7 +310,7 @@ export function VendorSales() {
           <CardHeader>
             <CardTitle>Product Trend</CardTitle>
           </CardHeader>
-          <CardContent className="h-80 w-full">
+          <CardContent className="h-80 w-full" ref={trendChartRef}>
             {productTrend.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-gray-500">No completed orders for selected date.</div>
             ) : (
@@ -212,7 +340,7 @@ export function VendorSales() {
           <CardHeader>
             <CardTitle>Top Products</CardTitle>
           </CardHeader>
-          <CardContent className="h-80 w-full">
+          <CardContent className="h-80 w-full" ref={topProductsChartRef}>
             {products.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-gray-500">No product data.</div>
             ) : (
