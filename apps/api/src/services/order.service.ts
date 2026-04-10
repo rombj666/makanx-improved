@@ -493,10 +493,7 @@ export const getVendorLiveOrders = async (userId: string) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendorProfile.id,
-        OR: [
-          { status: { in: ['PREPARING', 'READY'] } },
-          { status: 'COMPLETED', completedAt: { gte: recentCompletedSince } },
-        ],
+        status: { in: ['PREPARING', 'READY'] },
       },
       orderBy: { createdAt: 'desc' },
       take: 150,
@@ -515,10 +512,7 @@ export const getVendorLiveOrders = async (userId: string) => {
       const orders = await prisma.order.findMany({
         where: {
           vendorId: vendorProfile.id,
-          OR: [
-            { status: { in: ['PREPARING', 'READY'] } },
-            { status: 'COMPLETED', completedAt: { gte: recentCompletedSince } },
-          ],
+          status: { in: ['PREPARING', 'READY'] },
         },
         orderBy: { createdAt: 'desc' },
         take: 150,
@@ -771,7 +765,14 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
 
   // Only set timestamps if they are null
   if (status === OrderStatus.PREPARING && !order.acceptedAt) (data as any).acceptedAt = now;
-  if (status === OrderStatus.READY && !order.readyAt) (data as any).readyAt = now;
+  
+  // READY is now the final vendor action, so we treat it as COMPLETED for sales/analytics
+  if (status === OrderStatus.READY) {
+    if (!order.readyAt) (data as any).readyAt = now;
+    if (!order.completedAt) (data as any).completedAt = now;
+    data.paymentStatus = PaymentStatus.PAID;
+  }
+
   if (status === OrderStatus.COMPLETED) {
     if (!order.completedAt) (data as any).completedAt = now;
     data.paymentStatus = PaymentStatus.PAID;
@@ -894,7 +895,14 @@ export const markBatchItemsReady = async (
     if (o.status !== nextStatus) {
       const updatedOrder = await prisma.order.update({
         where: { id: o.id },
-        data: { status: nextStatus, ...(nextStatus === OrderStatus.READY ? { readyAt: new Date() } : {}) },
+        data: { 
+          status: nextStatus, 
+          ...(nextStatus === OrderStatus.READY ? { 
+            readyAt: new Date(),
+            completedAt: new Date(),
+            paymentStatus: PaymentStatus.PAID
+          } : {}) 
+        },
         include: {
           items: { include: { menuItem: true } },
           vendor: { select: { businessName: true } },
@@ -977,7 +985,14 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
       ? refreshed
       : await prisma.order.update({
           where: { id: orderId },
-          data: { status: nextStatus, ...(nextStatus === OrderStatus.READY ? { readyAt: new Date() } : {}) },
+          data: { 
+            status: nextStatus, 
+            ...(nextStatus === OrderStatus.READY ? { 
+              readyAt: new Date(),
+              completedAt: new Date(),
+              paymentStatus: PaymentStatus.PAID
+            } : {}) 
+          },
           include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
         });
 
@@ -1067,9 +1082,14 @@ export const bulkStatusUpdate = async (userId: string, orderIds: string[], statu
   const now = new Date();
 
   // 1) Update status for all
+  const data: any = { status };
+  if (status === OrderStatus.READY) {
+    data.paymentStatus = 'PAID';
+  }
+  
   const updateResult = await prisma.order.updateMany({
     where: { id: { in: orderIds }, vendorId: vendorProfile.id },
-    data: { status },
+    data,
   });
 
   // 2) Conditionally set timestamps only where null
@@ -1084,8 +1104,7 @@ export const bulkStatusUpdate = async (userId: string, orderIds: string[], statu
       where: { id: { in: orderIds }, vendorId: vendorProfile.id, readyAt: null },
       data: { readyAt: now },
     });
-  }
-  if (status === OrderStatus.COMPLETED) {
+    // Also set completedAt for READY since it's now the final state
     await prisma.order.updateMany({
       where: { id: { in: orderIds }, vendorId: vendorProfile.id, completedAt: null },
       data: { completedAt: now },

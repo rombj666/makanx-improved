@@ -19,7 +19,7 @@ export const organizerDailySummary = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
         vendor: {
           booths: { some: { eventId } },
@@ -47,7 +47,7 @@ export const organizerVendorRevenue = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -91,7 +91,7 @@ export const organizerProductPerformance = async (req: Request, res: Response) =
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: 'COMPLETED',
+          status: { in: ['READY', 'COMPLETED'] },
           createdAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -148,7 +148,7 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -182,7 +182,7 @@ export const vendorSalesSummary = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
       },
       select: { totalAmount: true },
@@ -211,7 +211,7 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
       where: {
         order: {
           vendorId: vendor.id,
-          status: 'COMPLETED',
+          status: { in: ['READY', 'COMPLETED'] },
           createdAt: { gte: start, lte: end },
         },
       },
@@ -278,7 +278,7 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
       },
       select: { createdAt: true, totalAmount: true },
@@ -311,7 +311,7 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: 'COMPLETED',
+        status: { in: ['READY', 'COMPLETED'] },
         createdAt: { gte: start, lte: end },
       },
       include: {
@@ -351,7 +351,7 @@ export const organizerProductTrend = async (req: Request, res: Response) => {
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: 'COMPLETED',
+          status: { in: ['READY', 'COMPLETED'] },
           completedAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -419,7 +419,7 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
       where: {
         order: {
           vendorId: vendor.id,
-          status: 'COMPLETED',
+          status: { in: ['READY', 'COMPLETED'] },
           completedAt: { gte: start, lte: end },
         },
       },

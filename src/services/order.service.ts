@@ -282,9 +282,18 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
     throw new Error('Unauthorized');
   }
 
+  const now = new Date();
+  const updateData: any = { status };
+
+  if (status === OrderStatus.READY) {
+    updateData.readyAt = now;
+    updateData.completedAt = now;
+    updateData.paymentStatus = PaymentStatus.PAID;
+  }
+
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
-    data: { status },
+    data: updateData,
     include: {
       items: { include: { menuItem: true } },
       vendor: { select: { businessName: true } }

@@ -29,7 +29,7 @@ interface Order {
   items: OrderItem[];
 }
 
-const ORDER_STATUSES = ['PREPARING', 'READY', 'COMPLETED'] as const;
+const ORDER_STATUSES = ['PREPARING', 'READY'] as const;
 type OrderStatus = typeof ORDER_STATUSES[number];
 
 // Helpers
@@ -121,7 +121,7 @@ useEffect(() => {
     const totalOrders = orders.length;
     const revenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
     
-    const completedOrders = orders.filter(o => o.status === 'COMPLETED' && o.completedAt);
+    const completedOrders = orders.filter(o => o.status === 'READY' && o.completedAt);
     const totalWaitTime = completedOrders.reduce((sum, o) => {
       const start = new Date(o.createdAt).getTime();
       const end = new Date(o.completedAt!).getTime();
@@ -136,7 +136,7 @@ useEffect(() => {
 
   // Group orders
   const groupedOrders = useMemo(() => {
-    const groups: Record<string, Order[]> = { PREPARING: [], READY: [], COMPLETED: [] };
+    const groups: Record<string, Order[]> = { PREPARING: [], READY: [] };
     orders.forEach(o => {
       if (groups[o.status]) groups[o.status].push(o);
     });
@@ -203,9 +203,6 @@ return (
             <Button size="sm" onClick={() => handleBulkUpdate('READY')}>
               Ready
             </Button>
-            <Button size="sm" onClick={() => handleBulkUpdate('COMPLETED')}>
-              Done
-            </Button>
           </div>
         </div>
       )}
@@ -253,7 +250,7 @@ return (
                               <div className="font-bold text-zinc-900">Order #{num}</div>
                               <div className="text-xs text-gray-500">
                                 Created {created}
-                                {order.status === 'COMPLETED' && completed ? ` • Completed ${completed}` : ''}
+                                {order.status === 'READY' && completed ? ` • Completed ${completed}` : ''}
                               </div>
                             </div>
                             <div className="text-right shrink-0">

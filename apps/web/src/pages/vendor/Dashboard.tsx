@@ -33,7 +33,7 @@ interface Order {
   vendorId: string;
 }
 
-const COLUMNS = ['PREPARING', 'READY', 'COMPLETED'] as const;
+const COLUMNS = ['PREPARING', 'READY'] as const;
 type Column = (typeof COLUMNS)[number];
 
 export function VendorDashboard() {
@@ -226,27 +226,12 @@ export function VendorDashboard() {
     return orders.filter(o => o.status === status);
   };
 
-  const markComplete = async (id: string) => {
-    const snapshot = orders.find((o) => o.id === id);
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: 'COMPLETED' } : o)));
-    try {
-      await api.patch(`/orders/${id}/status`, { status: 'COMPLETED' });
-      toast.success('Order completed');
-    } catch (e: any) {
-      if (snapshot) {
-        setOrders((prev) => prev.map((o) => (o.id === id ? snapshot : o)));
-      }
-      toast.error(e?.response?.data?.error || 'Failed to complete order');
-    } finally {
-      await refetchAll();
-    }
-  };
   const markOrderReady = async (id: string) => {
     await api.post(`/orders/${id}/items/mark-ready`);
     await refetchAll();
   };
 
-  const formatItemDetails = (it: OrderItem) => {
+  const formatItemDetails = (it: OrderItem, simplified = false) => {
     const parts: string[] = [];
     const opts = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
     for (const s of opts) {
@@ -254,10 +239,18 @@ export function VendorDashboard() {
       const choices = Array.isArray(s?.choices) ? s.choices : [];
       const labels = choices.map((c: any) => String(c?.label || '')).filter(Boolean);
       if (!title || labels.length === 0) continue;
-      parts.push(`${title}: ${labels.join(', ')}`);
+      if (simplified) {
+        // In simplified mode (Kitchen View), we only show the selected values
+        parts.push(labels.join(', '));
+      } else {
+        parts.push(`${title}: ${labels.join(', ')}`);
+      }
     }
     const remark = String(it.remark || '').trim();
-    if (remark) parts.push(`Note: ${remark}`);
+    if (remark) {
+      // For remarks, we also simplify in simplified mode
+      parts.push(simplified ? remark : `Note: ${remark}`);
+    }
     return parts;
   };
 
@@ -348,13 +341,13 @@ export function VendorDashboard() {
                   <li key={it.key} className="flex items-start justify-between rounded border p-3 bg-white gap-4">
                     <div className="min-w-0">
                       <div>
-                        <span className="font-medium">{it.name}</span>{' '}
-                        <span className="font-semibold">x{it.quantity}</span>
+                        <span className="font-bold text-lg">{it.name}</span>{' '}
+                        <span className="font-extrabold text-xl">x{it.quantity}</span>
                       </div>
-                      {it.details.length > 0 ? (
-                        <div className="mt-1 text-xs text-gray-600 space-y-1">
-                          {it.details.map((d, idx) => (
-                            <div key={idx} className="whitespace-normal break-words leading-relaxed">
+                      {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
+                        <div className="mt-2 text-base text-black font-bold space-y-2">
+                          {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).map((d, idx) => (
+                            <div key={idx} className="whitespace-normal break-words leading-tight bg-neutral-200 px-3 py-2 rounded-lg">
                               {d}
                             </div>
                           ))}
@@ -441,26 +434,16 @@ export function VendorDashboard() {
                           </li>
                         ))}
                       </ul>
-                      <div className="mt-2">
-                        <Button
-                          onClick={() => markComplete(order.id)}
-                          disabled={
-                            order.status === 'COMPLETED' ||
-                            !order.items ||
-                            !order.items.every((it: any) => it.status === 'READY')
-                          }
-                          className="bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={
-                            order.status === 'COMPLETED'
-                              ? 'Completed'
-                              : !order.items || !order.items.every((it: any) => it.status === 'READY')
-                                ? 'Waiting for remaining items'
-                                : 'Hand to Customer'
-                          }
-                        >
-                          {order.status === 'COMPLETED' ? 'Completed' : 'Complete'}
-                        </Button>
-                      </div>
+                      {status === 'PREPARING' && (
+                        <div className="mt-2">
+                          <Button
+                            onClick={() => markOrderReady(order.id)}
+                            className="bg-green-600 text-white px-3 py-1 rounded w-full"
+                          >
+                            Mark Ready
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -497,24 +480,28 @@ export function VendorDashboard() {
             {order.items.map((item: any, idx: number) => (
               <div key={idx} className="text-sm py-1">
                 <div className="flex justify-between items-center">
-                  <span>
+                  <span className="font-bold text-lg">
                     {item.quantity}x {item.menuItem.name}
                   </span>
-                  <span className="text-xs">
-                    {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-                  </span>
+                  {item.status === 'READY' ? (
+                    <span className="text-green-600 font-bold">READY</span>
+                  ) : (
+                    <span className="text-amber-600 font-bold animate-pulse">PREPARING</span>
+                  )}
                 </div>
-                {formatItemDetails(item).length > 0 ? (
-                  <div className="mt-1 text-xs text-gray-600 space-y-1">
-                    {formatItemDetails(item).map((d, j) => (
-                      <div key={j}>{d}</div>
+                {formatItemDetails(item, true).length > 0 ? (
+                  <div className="mt-2 text-base text-black font-bold space-y-2">
+                    {formatItemDetails(item, true).map((d, j) => (
+                      <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">
+                        {d}
+                      </div>
                     ))}
                   </div>
                 ) : null}
               </div>
             ))}
           </div>
-          {order.status !== 'COMPLETED' && (
+          {order.status !== 'READY' && (
             <div className="mt-3">
               <Button
                 onClick={async () => {
@@ -703,24 +690,24 @@ export function VendorDashboard() {
                         {order.items.map((item: any, idx: number) => (
                           <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
                             <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm font-semibold text-black">
+                              <div className="text-lg font-bold text-black">
                                 {item.quantity}x {item.menuItem.name}
                               </div>
-                              <div className="text-xs text-neutral-600">
-                                {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
+                              <div className={`text-sm font-bold ${item.status === 'READY' ? 'text-green-600' : 'text-amber-600 animate-pulse'}`}>
+                                {item.status === 'READY' ? 'READY' : 'PREPARING'}
                               </div>
                             </div>
-                            {formatItemDetails(item).length > 0 ? (
-                              <div className="mt-2 text-xs text-neutral-600 space-y-1">
-                                {formatItemDetails(item).map((d, j) => (
-                                  <div key={j} className="whitespace-normal break-words leading-relaxed">{d}</div>
+                            {formatItemDetails(item, true).length > 0 ? (
+                              <div className="mt-2 text-base text-black font-bold space-y-2">
+                                {formatItemDetails(item, true).map((d, j) => (
+                                  <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">{d}</div>
                                 ))}
                               </div>
                             ) : null}
                           </div>
                         ))}
                       </div>
-                      {order.status !== 'COMPLETED' ? (
+                      {order.status !== 'READY' ? (
                         <button
                           onClick={async () => {
                             try {
@@ -742,16 +729,16 @@ export function VendorDashboard() {
             </>
           ) : (
             <div className="space-y-5">
-              {(() => {
-                const list = getOrdersByStatus('READY');
+              {['PREPARING', 'READY'].map((status) => {
+                const list = getOrdersByStatus(status);
                 return (
-                  <div>
+                  <div key={status}>
                     <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase mb-2">
-                      READY ({list.length})
+                      {status} ({list.length})
                     </div>
                     <div className="space-y-3">
                       {list.length === 0 ? (
-                        <div className="text-sm text-neutral-600">No ready orders.</div>
+                        <div className="text-sm text-neutral-600">No {status.toLowerCase()} orders.</div>
                       ) : (
                         list.map((order) => (
                           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
@@ -787,19 +774,28 @@ export function VendorDashboard() {
                                 </div>
                               ))}
                             </div>
-                            <button
-                              onClick={() => markComplete(order.id)}
-                              className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
-                            >
-                              Mark Completed
-                            </button>
+                            {status === 'PREPARING' && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await markOrderReady(order.id);
+                                    toast.success('Order items marked ready');
+                                  } catch (e: any) {
+                                    toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                                  }
+                                }}
+                                className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
+                              >
+                                Mark Ready
+                              </button>
+                            )}
                           </div>
                         ))
                       )}
                     </div>
                   </div>
                 );
-              })()}
+              })}
             </div>
           )}
         </div>
