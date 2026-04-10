@@ -218,11 +218,11 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
       select: { menuItemId: true, quantity: true, price: true, menuItem: { select: { name: true } } },
     });
 
-    const byProduct: Record<string, { productName: string; qtySold: number; revenue: number }> = {};
+    const byProduct: Record<string, { productName: string; qtySold: number; revenue: number; price: number }> = {};
     for (const it of items) {
       const id = it.menuItemId;
       if (!byProduct[id]) {
-        byProduct[id] = { productName: it.menuItem?.name || 'Unknown', qtySold: 0, revenue: 0 };
+        byProduct[id] = { productName: it.menuItem?.name || 'Unknown', qtySold: 0, revenue: 0, price: Number(it.price) };
       }
       byProduct[id].qtySold += it.quantity;
       byProduct[id].revenue += Number(it.price) * it.quantity;

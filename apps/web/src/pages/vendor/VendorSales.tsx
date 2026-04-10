@@ -20,6 +20,7 @@ interface Summary {
 
 interface ProductPerf {
   productName: string;
+  price: number;
   qtySold: number;
   revenue: number;
 }
@@ -170,27 +171,27 @@ export function VendorSales() {
         worksheet.getCell(`A${chartRow}`).value = 'Product Trend Analysis';
         worksheet.getCell(`A${chartRow}`).font = { bold: true, size: 12 };
         worksheet.addImage(trendImageId, {
-          tl: { col: 0, row: chartRow },
-          ext: { width: 450, height: 250 }
+          tl: { col: 0.2, row: chartRow + 1 },
+          ext: { width: 550, height: 300 }
         });
       }
 
       if (topProductsImageId !== undefined) {
-        worksheet.getCell(`D${chartRow}`).value = 'Top Products Distribution';
-        worksheet.getCell(`D${chartRow}`).font = { bold: true, size: 12 };
+        worksheet.getCell(`E${chartRow}`).value = 'Top Products Distribution';
+        worksheet.getCell(`E${chartRow}`).font = { bold: true, size: 12 };
         worksheet.addImage(topProductsImageId, {
-          tl: { col: 3, row: chartRow },
-          ext: { width: 350, height: 250 }
+          tl: { col: 4.2, row: chartRow + 1 },
+          ext: { width: 350, height: 300 }
         });
       }
 
       // Skip rows for charts
-      for (let i = 0; i < 15; i++) worksheet.addRow([]);
+      for (let i = 0; i < 18; i++) worksheet.addRow([]);
 
       // 6. Data Tables
       // Product Performance Table
       worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-      const prodHeader = worksheet.addRow(['Product', 'Quantity Sold', 'Total Revenue']);
+      const prodHeader = worksheet.addRow(['Product', 'Amount', 'Quantity Sold', 'Total Revenue']);
       prodHeader.font = { bold: true };
       prodHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -198,8 +199,9 @@ export function VendorSales() {
       });
 
       products.forEach(p => {
-        const r = worksheet.addRow([p.productName, p.qtySold, formatCurrency(p.revenue)]);
-        r.getCell(3).alignment = { horizontal: 'right' };
+        const r = worksheet.addRow([p.productName, formatCurrency(p.price), p.qtySold, formatCurrency(p.revenue)]);
+        r.getCell(2).alignment = { horizontal: 'right' };
+        r.getCell(4).alignment = { horizontal: 'right' };
       });
 
       worksheet.addRow([]);
@@ -380,6 +382,7 @@ export function VendorSales() {
                 <thead>
                   <tr className="text-left border-b">
                     <th className="p-2">Product</th>
+                    <th className="p-2">Amount</th>
                     <th className="p-2">Qty</th>
                     <th className="p-2">Revenue</th>
                   </tr>
@@ -388,6 +391,7 @@ export function VendorSales() {
                   {products.map((p, idx) => (
                     <tr key={idx} className="border-b">
                       <td className="p-2">{p.productName}</td>
+                      <td className="p-2">{formatCurrency(p.price)}</td>
                       <td className="p-2">{p.qtySold}</td>
                       <td className="p-2">{formatCurrency(p.revenue)}</td>
                     </tr>
