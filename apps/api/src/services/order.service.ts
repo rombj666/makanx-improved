@@ -254,10 +254,12 @@ export const createOrder = async (
 
       const selectedChoices = selected.map((cid) => {
         const c = choiceMap.get(cid);
+        const delta = typeof c?.priceDelta === 'number' ? c.priceDelta : 0;
+        totalAmountNumber += delta * item.quantity;
         return {
           id: String(c?.id || cid),
           label: String(c?.label || ''),
-          priceDelta: typeof c?.priceDelta === 'number' ? c.priceDelta : 0,
+          priceDelta: delta,
         };
       });
 

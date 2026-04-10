@@ -22,6 +22,7 @@ interface ProductPerf {
   productName: string;
   price: number;
   qtySold: number;
+  totalBaseAmount: number;
   revenue: number;
 }
 
@@ -98,10 +99,10 @@ export function VendorSales() {
       // 1. Column Configuration
       worksheet.columns = [
         { header: 'A', key: 'a', width: 20 },
-        { header: 'B', key: 'b', width: 25 },
-        { header: 'C', key: 'c', width: 20 },
-        { header: 'D', key: 'd', width: 15 },
-        { header: 'E', key: 'e', width: 15 },
+        { header: 'B', key: 'b', width: 20 },
+        { header: 'C', key: 'c', width: 15 },
+        { header: 'D', key: 'd', width: 25 },
+        { header: 'E', key: 'e', width: 25 },
         { header: 'F', key: 'f', width: 45 },
       ];
 
@@ -191,7 +192,7 @@ export function VendorSales() {
       // 6. Data Tables
       // Product Performance Table
       worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-      const prodHeader = worksheet.addRow(['Product', 'Amount', 'Quantity Sold', 'Total Revenue']);
+      const prodHeader = worksheet.addRow(['Product', 'Amount', 'Quantity Sold', 'Product Total Amount', 'Total Revenue']);
       prodHeader.font = { bold: true };
       prodHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -199,9 +200,17 @@ export function VendorSales() {
       });
 
       products.forEach(p => {
-        const r = worksheet.addRow([p.productName, formatCurrency(p.price), p.qtySold, formatCurrency(p.revenue)]);
+        const r = worksheet.addRow([
+          p.productName, 
+          formatCurrency(p.price), 
+          p.qtySold, 
+          formatCurrency(p.totalBaseAmount),
+          formatCurrency(p.revenue)
+        ]);
         r.getCell(2).alignment = { horizontal: 'right' };
+        r.getCell(3).alignment = { horizontal: 'right' };
         r.getCell(4).alignment = { horizontal: 'right' };
+        r.getCell(5).alignment = { horizontal: 'right' };
       });
 
       worksheet.addRow([]);
@@ -382,18 +391,20 @@ export function VendorSales() {
                 <thead>
                   <tr className="text-left border-b">
                     <th className="p-2">Product</th>
-                    <th className="p-2">Amount</th>
-                    <th className="p-2">Qty</th>
-                    <th className="p-2">Revenue</th>
+                    <th className="p-2 text-right">Amount</th>
+                    <th className="p-2 text-right">Qty</th>
+                    <th className="p-2 text-right">Product Total Amount</th>
+                    <th className="p-2 text-right">Revenue</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.map((p, idx) => (
                     <tr key={idx} className="border-b">
                       <td className="p-2">{p.productName}</td>
-                      <td className="p-2">{formatCurrency(p.price)}</td>
-                      <td className="p-2">{p.qtySold}</td>
-                      <td className="p-2">{formatCurrency(p.revenue)}</td>
+                      <td className="p-2 text-right">{formatCurrency(p.price)}</td>
+                      <td className="p-2 text-right">{p.qtySold}</td>
+                      <td className="p-2 text-right">{formatCurrency(p.totalBaseAmount)}</td>
+                      <td className="p-2 text-right">{formatCurrency(p.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>

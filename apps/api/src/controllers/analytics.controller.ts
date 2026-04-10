@@ -215,17 +215,48 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
           createdAt: { gte: start, lte: end },
         },
       },
-      select: { menuItemId: true, quantity: true, price: true, menuItem: { select: { name: true } } },
+      select: { 
+        menuItemId: true, 
+        quantity: true, 
+        price: true, 
+        selectedOptions: true,
+        menuItem: { select: { name: true } } 
+      },
     });
 
-    const byProduct: Record<string, { productName: string; qtySold: number; revenue: number; price: number }> = {};
+    const byProduct: Record<string, { productName: string; qtySold: number; revenue: number; price: number; totalBaseAmount: number }> = {};
     for (const it of items) {
       const id = it.menuItemId;
+      const unitPrice = Number(it.price);
+      
+      // Calculate total options price delta
+      let optionsPriceDelta = 0;
+      const selectedOptions = (it.selectedOptions as any) || [];
+      if (Array.isArray(selectedOptions)) {
+        selectedOptions.forEach((opt: any) => {
+          if (Array.isArray(opt.choices)) {
+            opt.choices.forEach((c: any) => {
+              optionsPriceDelta += typeof c.priceDelta === 'number' ? c.priceDelta : 0;
+            });
+          }
+        });
+      }
+
+      const totalItemRevenue = (unitPrice + optionsPriceDelta) * it.quantity;
+      const totalItemBaseAmount = unitPrice * it.quantity;
+
       if (!byProduct[id]) {
-        byProduct[id] = { productName: it.menuItem?.name || 'Unknown', qtySold: 0, revenue: 0, price: Number(it.price) };
+        byProduct[id] = { 
+          productName: it.menuItem?.name || 'Unknown', 
+          qtySold: 0, 
+          revenue: 0, 
+          price: unitPrice,
+          totalBaseAmount: 0
+        };
       }
       byProduct[id].qtySold += it.quantity;
-      byProduct[id].revenue += Number(it.price) * it.quantity;
+      byProduct[id].revenue += totalItemRevenue;
+      byProduct[id].totalBaseAmount += totalItemBaseAmount;
     }
     const data = Object.values(byProduct);
     res.json({ success: true, data });
