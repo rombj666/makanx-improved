@@ -33,13 +33,8 @@ interface Order {
   vendorId: string;
 }
 
-const COLUMNS = ['PREPARING', 'READY'] as const;
-type Column = (typeof COLUMNS)[number];
-
 export function VendorDashboard() {
   const { socket } = useSocket();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [viewMode, setViewMode] = useState<'kitchen' | 'fulfillment'>('kitchen');
   const [groupByWindow, setGroupByWindow] = useState(false);
   const [groupMinutes, setGroupMinutes] = useState(2);
   const [productionOrders, setProductionOrders] = useState<Order[]>([]);
@@ -48,30 +43,6 @@ export function VendorDashboard() {
   const isFetchingRef = useRef(false);
   const lastFetchRef = useRef(0);
   const [isThrottled, setIsThrottled] = useState(false);
-
-  const fetchOrders = useCallback(async () => {
-    if (isFetchingRef.current || isThrottled) return;
-    const now = Date.now();
-    if (now - lastFetchRef.current < 2000) return; // Minimum 2s between fetches
-
-    isFetchingRef.current = true;
-    lastFetchRef.current = now;
-    try {
-      const { data } = await api.get('/orders/vendor-live');
-      if (data.success) {
-        setOrders(data.data || []);
-      }
-    } catch (error: any) {
-      if (error.response?.status === 429) {
-        setIsThrottled(true);
-        setTimeout(() => setIsThrottled(false), 30000); // 30s backoff
-        toast.error('Too many requests. Retrying in 30s...');
-      }
-      console.error(error);
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, [isThrottled]);
 
   const fetchProductionBatch = useCallback(async () => {
     if (isFetchingRef.current || isThrottled) return;
@@ -104,12 +75,7 @@ export function VendorDashboard() {
     isFetchingRef.current = true;
     lastFetchRef.current = now;
     try {
-      const [liveRes, prodRes] = await Promise.all([
-        api.get('/orders/vendor-live'),
-        api.get(`/orders/vendor/production-batch?groupByWindow=false`)
-      ]);
-      
-      if (liveRes.data.success) setOrders(liveRes.data.data || []);
+      const prodRes = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
       if (prodRes.data.success) setProductionOrders(prodRes.data.data || []);
     } catch (error: any) {
       if (error.response?.status === 429) {
@@ -164,7 +130,7 @@ export function VendorDashboard() {
 
       socket.on('order_created', (newOrder: Order) => {
         // Optimistic update
-        setOrders((prev) => {
+        setProductionOrders((prev) => {
           if (prev.find(o => o.id === newOrder.id)) return prev;
           return [newOrder, ...prev];
         });
@@ -173,7 +139,7 @@ export function VendorDashboard() {
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
-        setOrders((prev) => {
+        setProductionOrders((prev) => {
           const idx = prev.findIndex((o) => o.id === updatedOrder.id);
           if (idx >= 0) {
             const next = prev.slice();
@@ -216,15 +182,10 @@ export function VendorDashboard() {
   useEffect(() => {
     const poll = setInterval(() => {
       if (document.visibilityState !== 'visible' || isThrottled) return;
-      void fetchOrders();
-      if (viewMode === 'kitchen') void fetchProductionBatch();
+      void fetchProductionBatch();
     }, 30000); // Slowed to 30s
     return () => clearInterval(poll);
-  }, [viewMode, fetchOrders, fetchProductionBatch, isThrottled]);
-
-  const getOrdersByStatus = (status: string) => {
-    return orders.filter(o => o.status === status);
-  };
+  }, [fetchProductionBatch, isThrottled]);
 
   const markOrderReady = async (id: string) => {
     await api.post(`/orders/${id}/items/mark-ready`);
@@ -345,7 +306,7 @@ export function VendorDashboard() {
                         <span className="font-extrabold text-xl">x{it.quantity}</span>
                       </div>
                       {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
-                        <div className="mt-2 text-base text-black font-bold space-y-2">
+                        <div className="mt-2 text-lg text-black font-bold space-y-2">
                           {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).map((d, idx) => (
                             <div key={idx} className="whitespace-normal break-words leading-tight bg-neutral-200 px-3 py-2 rounded-lg">
                               {d}
@@ -384,80 +345,9 @@ export function VendorDashboard() {
     );
   };
 
-  const FulfillmentBoardView = ({
-    orders,
-    COLUMNS,
-    getOrdersByStatus,
-  }: {
-    orders: Order[];
-    COLUMNS: readonly Column[];
-    getOrdersByStatus: (status: string) => Order[];
-  }) => {
-    void orders;
-    return (
-      <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-4 h-full min-w-[1000px]">
-          {COLUMNS.map((status) => (
-            <div key={status} className="flex-1 bg-gray-50 rounded-lg p-4 flex flex-col">
-              <h3 className="font-bold text-lg mb-4 text-center sticky top-0 bg-gray-50 pb-2 border-b">
-                {status} ({getOrdersByStatus(status).length})
-              </h3>
-              <div className="flex-1 overflow-y-auto space-y-4">
-                {getOrdersByStatus(status).map((order) => (
-                  <Card key={order.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-bold">#{computeDisplayNumber(order)}</span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(order.createdAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium mb-2">{order.customer?.name ?? 'Guest'}</p>
-                      <ul className="text-sm space-y-1 mb-3">
-                        {order.items.map((item, idx) => (
-                          <li key={idx} className="py-1">
-                            <div className="flex justify-between">
-                              <span>
-                                {item.quantity}x {item.menuItem.name}
-                              </span>
-                              <span className="text-xs">
-                                {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-                              </span>
-                            </div>
-                            {formatItemDetails(item).length > 0 ? (
-                              <div className="mt-1 text-xs text-gray-600 space-y-1">
-                                {formatItemDetails(item).map((d, j) => (
-                                  <div key={j}>{d}</div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                      {status === 'PREPARING' && (
-                        <div className="mt-2">
-                          <Button
-                            onClick={() => markOrderReady(order.id)}
-                            className="bg-green-600 text-white px-3 py-1 rounded w-full"
-                          >
-                            Mark Ready
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   useEffect(() => {
     fetchProductionBatch();
-  }, [groupByWindow]);
+  }, [groupByWindow, fetchProductionBatch]);
 
   const SingleOrderList = ({ data }: { data: Order[] }) => (
     <>
@@ -490,7 +380,7 @@ export function VendorDashboard() {
                   )}
                 </div>
                 {formatItemDetails(item, true).length > 0 ? (
-                  <div className="mt-2 text-base text-black font-bold space-y-2">
+                  <div className="mt-2 text-lg text-black font-bold space-y-2">
                     {formatItemDetails(item, true).map((d, j) => (
                       <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">
                         {d}
@@ -529,22 +419,6 @@ export function VendorDashboard() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Live Orders</h1>
           <div className="flex items-center gap-3">
-            <div className="inline-flex rounded-md border bg-white overflow-hidden">
-              <Button
-                variant={viewMode === 'kitchen' ? 'default' : 'outline'}
-                className={viewMode === 'kitchen' ? 'bg-orange-500 text-white' : 'bg-white'}
-                onClick={() => setViewMode('kitchen')}
-              >
-                Kitchen View
-              </Button>
-              <Button
-                variant={viewMode === 'fulfillment' ? 'default' : 'outline'}
-                className={viewMode === 'fulfillment' ? 'bg-gray-200' : 'bg-white'}
-                onClick={() => setViewMode('fulfillment')}
-              >
-                Order Fulfillment
-              </Button>
-            </div>
             <select
               value={groupMinutes}
               onChange={(e) => setGroupMinutes(Number(e.target.value))}
@@ -573,18 +447,12 @@ export function VendorDashboard() {
             </Button>
           </div>
         </div>
-        {viewMode === 'kitchen' && (
-          <div className="mt-4">
-            {groupByWindow && groupedProduction.length === 0 && <p>No grouped production data.</p>}
-            {!groupByWindow && productionOrders.length === 0 && <p>No live orders.</p>}
-            {groupByWindow && <GroupedProduction data={groupedProduction} />}
-            {!groupByWindow && <SingleOrderList data={productionOrders} />}
-          </div>
-        )}
-
-        {viewMode === 'fulfillment' && (
-          <FulfillmentBoardView orders={orders} COLUMNS={COLUMNS} getOrdersByStatus={getOrdersByStatus} />
-        )}
+        <div className="mt-4">
+          {groupByWindow && groupedProduction.length === 0 && <p>No grouped production data.</p>}
+          {!groupByWindow && productionOrders.length === 0 && <p>No live orders.</p>}
+          {groupByWindow && <GroupedProduction data={groupedProduction} />}
+          {!groupByWindow && <SingleOrderList data={productionOrders} />}
+        </div>
       </div>
 
       <div className="hidden [@media(pointer:coarse)]:flex flex-col min-h-[100dvh] bg-neutral-50 px-4 pt-5 pb-6">
@@ -600,27 +468,6 @@ export function VendorDashboard() {
             className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
           >
             Refresh
-          </button>
-        </div>
-
-        <div className="mt-4 inline-flex rounded-2xl border border-neutral-200 bg-white overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setViewMode('kitchen')}
-            className={`h-11 px-4 text-sm font-semibold ${
-              viewMode === 'kitchen' ? 'bg-black text-white' : 'bg-white text-black'
-            }`}
-          >
-            Kitchen
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('fulfillment')}
-            className={`h-11 px-4 text-sm font-semibold ${
-              viewMode === 'fulfillment' ? 'bg-black text-white' : 'bg-white text-black'
-            }`}
-          >
-            Fulfillment
           </button>
         </div>
 
@@ -651,151 +498,77 @@ export function VendorDashboard() {
         </div>
 
         <div className="mt-4 flex-1 overflow-y-auto">
-          {viewMode === 'kitchen' ? (
-            <>
-              {groupByWindow ? (
-                groupedProduction.length === 0 ? (
-                  <div className="text-sm text-neutral-600">No grouped production data.</div>
-                ) : (
-                  <div className="space-y-5">
-                    {groupedProduction.map((block) => (
-                      <div key={block.windowStart} className="space-y-3">
-                        <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">
-                          {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} –{' '}
-                          {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+          {groupByWindow ? (
+            groupedProduction.length === 0 ? (
+              <div className="text-sm text-neutral-600">No grouped production data.</div>
+            ) : (
+              <div className="space-y-5">
+                {groupedProduction.map((block) => (
+                  <div key={block.windowStart} className="space-y-3">
+                    <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">
+                      {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} –{' '}
+                      {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                    <GroupedProduction data={[block]} showWindowHeader={false} />
+                  </div>
+                ))}
+              </div>
+            )
+          ) : productionOrders.length === 0 ? (
+            <div className="text-sm text-neutral-600">No live orders.</div>
+          ) : (
+            <div className="space-y-4">
+              {productionOrders.map((order) => (
+                <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
+                      <div className="text-xs text-neutral-500">
+                        {new Date(order.createdAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
+                      {order.status}
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {order.items.map((item: any, idx: number) => (
+                      <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-lg font-bold text-black">
+                            {item.quantity}x {item.menuItem.name}
+                          </div>
+                          <div className={`text-sm font-bold ${item.status === 'READY' ? 'text-green-600' : 'text-amber-600 animate-pulse'}`}>
+                            {item.status === 'READY' ? 'READY' : 'PREPARING'}
+                          </div>
                         </div>
-                        <GroupedProduction data={[block]} showWindowHeader={false} />
+                        {formatItemDetails(item, true).length > 0 ? (
+                          <div className="mt-2 text-lg text-black font-bold space-y-2">
+                            {formatItemDetails(item, true).map((d, j) => (
+                              <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">{d}</div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
-                )
-              ) : productionOrders.length === 0 ? (
-                <div className="text-sm text-neutral-600">No live orders.</div>
-              ) : (
-                <div className="space-y-4">
-                  {productionOrders.map((order) => (
-                    <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                          <div className="text-xs text-neutral-500">
-                            {new Date(order.createdAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
-                          {order.status}
-                        </div>
-                      </div>
-                      <div className="mt-3 space-y-3">
-                        {order.items.map((item: any, idx: number) => (
-                          <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-lg font-bold text-black">
-                                {item.quantity}x {item.menuItem.name}
-                              </div>
-                              <div className={`text-sm font-bold ${item.status === 'READY' ? 'text-green-600' : 'text-amber-600 animate-pulse'}`}>
-                                {item.status === 'READY' ? 'READY' : 'PREPARING'}
-                              </div>
-                            </div>
-                            {formatItemDetails(item, true).length > 0 ? (
-                              <div className="mt-2 text-base text-black font-bold space-y-2">
-                                {formatItemDetails(item, true).map((d, j) => (
-                                  <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">{d}</div>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                      {order.status !== 'READY' ? (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await markOrderReady(order.id);
-                              toast.success('Order items marked ready');
-                            } catch (e: any) {
-                              toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                            }
-                          }}
-                          className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
-                        >
-                          Mark Ready
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
+                  {order.status !== 'READY' ? (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await markOrderReady(order.id);
+                          toast.success('Order items marked ready');
+                        } catch (e: any) {
+                          toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                        }
+                      }}
+                      className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
+                    >
+                      Mark Ready
+                    </button>
+                  ) : null}
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-5">
-              {['PREPARING', 'READY'].map((status) => {
-                const list = getOrdersByStatus(status);
-                return (
-                  <div key={status}>
-                    <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase mb-2">
-                      {status} ({list.length})
-                    </div>
-                    <div className="space-y-3">
-                      {list.length === 0 ? (
-                        <div className="text-sm text-neutral-600">No {status.toLowerCase()} orders.</div>
-                      ) : (
-                        list.map((order) => (
-                          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                                <div className="text-xs text-neutral-500">
-                                  {new Date(order.createdAt).toLocaleTimeString()}
-                                </div>
-                              </div>
-                              <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
-                                {order.status}
-                              </div>
-                            </div>
-                            <div className="mt-3 space-y-3">
-                              {order.items.map((item: any, idx: number) => (
-                                <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="text-sm font-semibold text-black">
-                                      {item.quantity}x {item.menuItem.name}
-                                    </div>
-                                    <div className="text-xs text-neutral-600">
-                                      {item.status === 'READY' ? '✓ Ready' : 'Preparing'}
-                                    </div>
-                                  </div>
-                                  {formatItemDetails(item).length > 0 ? (
-                                    <div className="mt-2 text-xs text-neutral-600 space-y-1">
-                                      {formatItemDetails(item).map((d, j) => (
-                                        <div key={j} className="whitespace-normal break-words leading-relaxed">{d}</div>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ))}
-                            </div>
-                            {status === 'PREPARING' && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await markOrderReady(order.id);
-                                    toast.success('Order items marked ready');
-                                  } catch (e: any) {
-                                    toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                                  }
-                                }}
-                                className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
-                              >
-                                Mark Ready
-                              </button>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              ))}
             </div>
           )}
         </div>

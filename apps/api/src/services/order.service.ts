@@ -486,14 +486,12 @@ export const getVendorLiveOrders = async (userId: string) => {
   console.log('[order] getVendorLiveOrders auth check', { userId, vendorProfileId: vendorProfile?.id });
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
-  const recentCompletedSince = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
   try {
     const t0 = Date.now();
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendorProfile.id,
-        status: { in: ['PREPARING', 'READY'] },
+        status: "PREPARING",
       },
       orderBy: { createdAt: 'desc' },
       take: 150,
@@ -512,7 +510,7 @@ export const getVendorLiveOrders = async (userId: string) => {
       const orders = await prisma.order.findMany({
         where: {
           vendorId: vendorProfile.id,
-          status: { in: ['PREPARING', 'READY'] },
+          status: "PREPARING",
         },
         orderBy: { createdAt: 'desc' },
         take: 150,
