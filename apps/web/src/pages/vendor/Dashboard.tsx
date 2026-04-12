@@ -407,74 +407,86 @@ export function VendorDashboard() {
 
   const SingleOrderList = ({ data }: { data: Order[] }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {data.map((order) => (
-        <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-black">Order #{computeDisplayNumber(order)}</h3>
-              <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
+      {data.map((order) => {
+        const isMultiType = order.items.length > 1;
+        const allItemsReady = order.items.every(it => it.status === 'READY');
+
+        return (
+          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-black">Order #{computeDisplayNumber(order)}</h3>
+                <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
+              </div>
+              <div className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
+                {order.status}
+              </div>
             </div>
-            <div className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
-              {order.status}
-            </div>
-          </div>
-          <div className="flex-1 space-y-4">
-            {order.items.map((item, idx) => (
-              <div key={idx} className="border-b border-neutral-50 pb-4 last:border-0 last:pb-0">
-                <div className="flex justify-between items-start">
-                  <div className="min-w-0">
-                    <div className="font-bold text-lg text-black">
-                      {item.quantity}x {item.menuItem.name}
-                    </div>
-                    {formatItemDetails(item, true).length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {formatItemDetails(item, true).map((d, i) => (
-                          <div key={i} className="text-sm bg-neutral-100 px-2 py-1 rounded text-neutral-700">
-                            {d}
-                          </div>
-                        ))}
+            <div className="flex-1 space-y-4">
+              {order.items.map((item, idx) => (
+                <div key={idx} className="border-b border-neutral-50 pb-4 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0">
+                      <div className="font-bold text-lg text-black">
+                        {item.quantity}x {item.menuItem.name}
                       </div>
+                      {formatItemDetails(item, true).length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {formatItemDetails(item, true).map((d, i) => (
+                            <div key={i} className="text-sm bg-neutral-100 px-2 py-1 rounded text-neutral-700">
+                              {d}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {isMultiType && (
+                      item.status !== 'READY' ? (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
+                              toast.success(`${item.menuItem.name} marked ready`);
+                              await refetchAll();
+                            } catch (e: any) {
+                              toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                            }
+                          }}
+                          className="ml-4 px-3 py-1 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-black transition"
+                        >
+                          Mark Ready
+                        </button>
+                      ) : (
+                        <span className="ml-4 text-green-600 text-xs font-bold uppercase shrink-0">✓ Ready</span>
+                      )
                     )}
                   </div>
-                  {item.status !== 'READY' ? (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
-                          toast.success(`${item.menuItem.name} marked ready`);
-                          await refetchAll();
-                        } catch (e: any) {
-                          toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                        }
-                      }}
-                      className="ml-4 px-3 py-1 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-black transition"
-                    >
-                      Mark Ready
-                    </button>
-                  ) : (
-                    <span className="ml-4 text-green-600 text-xs font-bold uppercase">Ready</span>
-                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            {order.status !== 'READY' && (
+              <button
+                disabled={isMultiType && !allItemsReady}
+                onClick={async () => {
+                  try {
+                    await markOrderReady(order.id);
+                    toast.success('Order items marked ready');
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                  }
+                }}
+                className={`mt-4 w-full h-12 rounded-2xl font-semibold active:scale-[0.99] transition ${
+                  isMultiType && !allItemsReady 
+                    ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed' 
+                    : 'bg-black text-white'
+                }`}
+              >
+                Ready
+              </button>
+            )}
           </div>
-                  {order.status !== 'READY' && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await markOrderReady(order.id);
-                          toast.success('Order items marked ready');
-                        } catch (e: any) {
-                          toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                        }
-                      }}
-                      className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
-                    >
-                      Ready
-                    </button>
-                  )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 

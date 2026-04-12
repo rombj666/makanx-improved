@@ -952,12 +952,12 @@ export const markBatchItemsReady = async (
 };
 
 export const getVendorServingOrder = async (vendorId: string) => {
-  const lastReady = await prisma.order.findFirst({
-    where: { vendorId, status: OrderStatus.READY },
-    orderBy: { readyAt: 'desc' },
+  const earliestPreparing = await prisma.order.findFirst({
+    where: { vendorId, status: OrderStatus.PREPARING },
+    orderBy: { createdAt: 'asc' },
     select: { id: true, displayNumber: true, vendorId: true },
   });
-  return lastReady;
+  return earliestPreparing;
 };
 
 export const markOrderItemReady = async (userId: string, orderId: string, itemId: string) => {
@@ -1009,9 +1009,10 @@ export const markOrderItemReady = async (userId: string, orderId: string, itemId
   io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
   
   if (nextStatus === OrderStatus.READY && refreshed.status !== OrderStatus.READY) {
+    const nextServing = await getVendorServingOrder(updatedOrder.vendorId);
     io.emit('vendor_serving_updated', {
       vendorId: updatedOrder.vendorId,
-      displayNumber: updatedOrder.displayNumber,
+      displayNumber: nextServing?.displayNumber || null,
     });
     try { await sendReadyNotification(updatedOrder); } catch {}
     try { await sendOrderReadyMessage(updatedOrder); } catch {}
@@ -1074,13 +1075,26 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
   });
 
   if (nextStatus === OrderStatus.READY && refreshed.status !== OrderStatus.READY) {
+    const nextServing = await getVendorServingOrder(updatedOrder.vendorId);
     io.emit('vendor_serving_updated', {
       vendorId: updatedOrder.vendorId,
-      displayNumber: updatedOrder.displayNumber,
+      displayNumber: nextServing?.displayNumber || null,
     });
-    try { await sendReadyNotification(updatedOrder); } catch {}
-    try { await sendOrderReadyMessage(updatedOrder); } catch {}
-    try { await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemsReady'); } catch {}
+    try {
+      await sendReadyNotification(updatedOrder);
+    } catch (err: any) {
+      console.error('[push] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
+    }
+    try {
+      await sendOrderReadyMessage(updatedOrder);
+    } catch (err: any) {
+      console.error('[whatsapp] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
+    }
+    try {
+      await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemsReady');
+    } catch (err: any) {
+      console.error('[hour-coffee-email] READY trigger failed', { orderId: updatedOrder.id, message: err?.message || err });
+    }
   }
 
   return updatedOrder;

@@ -343,7 +343,7 @@ export function CustomerBoothOrderPage() {
               ? 'READY — Collect now'
               : servingOrder 
                 ? `Now serving #${servingOrder}` 
-                : `Preparing your order`
+                : 'Preparing your order'
             : `${cart.totalItems} ${cart.totalItems === 1 ? 'item' : 'items'}`
         }
         bottomText={
