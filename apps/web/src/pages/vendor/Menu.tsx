@@ -199,7 +199,7 @@ export function VendorMenu() {
     setMenuItems(prev => prev.map(it => it.id === item.id ? { ...it, isAvailable: nextStatus } : it));
 
     try {
-      const res = await api.patch(`/menu-items/${item.id}`, { isAvailable: nextStatus });
+      const res = await api.put(`/menu-items/${item.id}`, { isAvailable: nextStatus });
       if (res.data.success) {
         toast.success(`${item.name} is now ${nextStatus ? 'available' : 'sold out'}`);
       } else {

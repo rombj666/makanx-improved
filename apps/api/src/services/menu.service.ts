@@ -148,7 +148,7 @@ export const getVendorMenu = async (userId: string) => {
 
   try {
     return await prisma.menuItem.findMany({
-      where: { vendorId: vendorProfile.id, isAvailable: true },
+      where: { vendorId: vendorProfile.id },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -172,7 +172,7 @@ export const getVendorMenu = async (userId: string) => {
       isMissingColumnError(e, 'displayOrder')
     ) {
       const items = await prisma.menuItem.findMany({
-        where: { vendorId: vendorProfile.id, isAvailable: true },
+        where: { vendorId: vendorProfile.id },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
