@@ -409,7 +409,6 @@ export function VendorDashboard() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {data.map((order) => {
         const isMultiType = order.items.length > 1;
-        const allItemsReady = order.items.every(it => it.status === 'READY');
 
         return (
           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
