@@ -9,10 +9,11 @@ import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { toast } from 'react-hot-toast';
 import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
+import { computeDisplayEtaMinutesFromQuantity, computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { Minus, Plus, Trash2 } from 'lucide-react';
+import { useSocket } from '../../context/SocketContext';
 
 interface MenuItem {
   id: string;
@@ -22,6 +23,7 @@ interface MenuItem {
   imageUrl: string;
   optionGroups?: any[];
   remarksEnabled?: boolean;
+  isAvailable?: boolean;
 }
 
 interface Booth {
@@ -38,11 +40,13 @@ interface Booth {
 export function CustomerBoothOrderPage() {
   const { slug, boothId } = useParams();
   const navigate = useNavigate();
+  const { socket } = useSocket();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [servingOrder, setServingOrder] = useState<string | null>(null);
 
   // Checkout state
   const [isPlacing, setIsPlacing] = useState(false);
@@ -103,8 +107,28 @@ export function CustomerBoothOrderPage() {
       ...m,
       price: Number(m.price),
       imageUrl: m.imageUrl || '',
+      isAvailable: m.isAvailable !== false,
     }));
   }, [booth]);
+
+  useEffect(() => {
+    if (!vendorId) return;
+    const fetchServing = async () => {
+      try {
+        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
+        if (data.success) setServingOrder(data.data.displayNumber);
+      } catch {}
+    };
+    fetchServing();
+    if (socket) {
+      socket.on('vendor_serving_updated', (data: any) => {
+        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
+      });
+    }
+    return () => {
+      if (socket) socket.off('vendor_serving_updated');
+    };
+  }, [vendorId, socket]);
 
   const cart = useCustomerCart({
     eventSlug: String(slug || ''),
@@ -260,9 +284,6 @@ export function CustomerBoothOrderPage() {
 
   const mode: 'cart' | 'order' | 'empty' =
     cart.totalItems > 0 ? 'cart' : selectedOrder ? 'order' : 'empty';
-  const orderEta = selectedOrder
-    ? roundUpToNearest5Minutes(Math.max(Number(selectedOrder.estimatedMinutes ?? 0), 0))
-    : 0;
 
   if (!booth) {
     return (
@@ -273,27 +294,6 @@ export function CustomerBoothOrderPage() {
       </div>
     );
   }
-
-  const [servingOrder, setServingOrder] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!vendorId) return;
-    const fetchServing = async () => {
-      try {
-        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
-        if (data.success) setServingOrder(data.data.displayNumber);
-      } catch {}
-    };
-    fetchServing();
-    if (socket) {
-      socket.on('vendor_serving_updated', (data: any) => {
-        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
-      });
-    }
-    return () => {
-      if (socket) socket.off('vendor_serving_updated');
-    };
-  }, [vendorId, socket]);
 
   return (
     <div className="w-full h-full bg-white flex flex-col">

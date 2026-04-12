@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { api } from '../../lib/api';
-import { formatCurrency } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -190,11 +189,11 @@ export function VendorSales() {
       });
 
       products.forEach(p => {
-        const r = worksheet.addRow([
+        const row = worksheet.addRow([
           p.productName, 
           p.qtySold
         ]);
-        r.getCell(2).alignment = { horizontal: 'right' };
+        row.getCell(2).alignment = { horizontal: 'right' };
       });
 
       // Total row for products
@@ -223,7 +222,7 @@ export function VendorSales() {
       orders.forEach(o => {
         const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
         const itemsSummary = o.items.map((it) => `${it.qty}x ${it.productName}`).join(', ');
-        const r = worksheet.addRow([
+        worksheet.addRow([
           o.orderNumber,
           new Date(o.createdAt).toLocaleTimeString(),
           o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
