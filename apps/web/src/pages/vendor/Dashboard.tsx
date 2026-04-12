@@ -244,7 +244,7 @@ export function VendorDashboard() {
   }, [fetchProductionBatch, fetchHistoryOrders, isThrottled]);
 
   const markOrderReady = async (id: string) => {
-    await api.post(`/orders/${id}/mark-ready`);
+    await api.post(`/orders/${id}/items/mark-ready`);
     await refetchAll();
   };
 
@@ -445,8 +445,12 @@ export function VendorDashboard() {
                         <button
                           onClick={async () => {
                             try {
-                              await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
-                              toast.success(`${item.menuItem.name} marked ready`);
+                              const res = await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
+                              if (res.data.success && res.data.data.status === 'READY') {
+                                toast.success('Order is fully ready!');
+                              } else {
+                                toast.success(`${item.menuItem.name} marked ready`);
+                              }
                               await refetchAll();
                             } catch (e: any) {
                               toast.error(e?.response?.data?.error || 'Failed to mark ready');
@@ -464,9 +468,8 @@ export function VendorDashboard() {
                 </div>
               ))}
             </div>
-            {order.status !== 'READY' && (
+            {!isMultiType && order.status !== 'READY' && (
               <button
-                disabled={isMultiType && !allItemsReady}
                 onClick={async () => {
                   try {
                     await markOrderReady(order.id);
@@ -475,11 +478,7 @@ export function VendorDashboard() {
                     toast.error(e?.response?.data?.error || 'Failed to mark ready');
                   }
                 }}
-                className={`mt-4 w-full h-12 rounded-2xl font-semibold active:scale-[0.99] transition ${
-                  isMultiType && !allItemsReady 
-                    ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed' 
-                    : 'bg-black text-white'
-                }`}
+                className="mt-4 w-full h-12 rounded-2xl font-semibold bg-black text-white active:scale-[0.99] transition"
               >
                 Ready
               </button>
