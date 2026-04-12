@@ -31,6 +31,12 @@ router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
 console.log('[order] Registering order specific actions');
 // Order specific actions (keep above generic /:id)
 router.post(
+  '/:orderId/items/:itemId/mark-ready',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  orderController.markOrderItemReady
+);
+router.post(
   '/:id/items/mark-ready',
   requireAuth,
   requireRole([Role.VENDOR]),

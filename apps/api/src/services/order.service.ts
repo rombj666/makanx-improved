@@ -951,6 +951,63 @@ export const markBatchItemsReady = async (
   return { updatedCount: result.count ?? 0 };
 };
 
+export const markOrderItemReady = async (userId: string, orderId: string, itemId: string) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+  });
+  if (!order) throw new Error('Order not found');
+
+  const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendorProfile || vendorProfile.id !== order.vendorId) throw new Error('Unauthorized');
+
+  const item = order.items.find((it: any) => it.id === itemId);
+  if (!item) throw new Error('Item not found');
+  if (item.status === 'READY') return order;
+
+  await (prisma as any).orderItem.update({
+    where: { id: itemId },
+    data: { status: 'READY' },
+  });
+
+  const refreshed = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+  });
+  if (!refreshed) throw new Error('Order not found');
+
+  const allReady = refreshed.items.every((it: any) => it.status === 'READY');
+  const nextStatus: OrderStatus = allReady ? OrderStatus.READY : OrderStatus.PREPARING;
+
+  const updatedOrder =
+    refreshed.status === nextStatus
+      ? refreshed
+      : await prisma.order.update({
+          where: { id: orderId },
+          data: { 
+            status: nextStatus, 
+            ...(nextStatus === OrderStatus.READY ? { 
+              readyAt: new Date(),
+              completedAt: new Date(),
+              paymentStatus: PaymentStatus.PAID
+            } : {}) 
+          },
+          include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+        });
+
+  const io = getIO();
+  io.to(`user:${updatedOrder.customerId}`).emit('order_updated', updatedOrder);
+  io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
+  
+  if (nextStatus === OrderStatus.READY && refreshed.status !== OrderStatus.READY) {
+    try { await sendReadyNotification(updatedOrder); } catch {}
+    try { await sendOrderReadyMessage(updatedOrder); } catch {}
+    try { await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemReady'); } catch {}
+  }
+
+  return updatedOrder;
+};
+
 /**
  * Mark all items for an order as READY (ungrouped kitchen)
  */

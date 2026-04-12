@@ -198,6 +198,17 @@ export const markBatchItemsReady = async (req: Request, res: Response) => {
   }
 };
 
+export const markOrderItemReady = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const { orderId, itemId } = req.params;
+    const result = await orderService.markOrderItemReady(req.user.userId, orderId, itemId);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+  }
+};
+
 export const markOrderItemsReady = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
