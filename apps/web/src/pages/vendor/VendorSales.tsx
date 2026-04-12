@@ -13,16 +13,12 @@ import { toPng } from 'html-to-image';
 import { useAuth } from '../../context/AuthContext';
 
 interface Summary {
-  revenue: number;
   orders: number;
-  avgOrder: number;
 }
 
 interface ProductPerf {
   productName: string;
-  price: number;
   qtySold: number;
-  revenue: number;
 }
 
 interface ProductTrendPoint {
@@ -38,11 +34,9 @@ interface ProductTrendSeries {
 interface CompletedOrderItem {
   productName: string;
   qty: number;
-  price: number;
 }
 interface CompletedOrder {
   orderNumber: string;
-  totalAmount: number;
   createdAt: string;
   completedAt?: string;
   items: CompletedOrderItem[];
@@ -126,7 +120,7 @@ export function VendorSales() {
       // 4. KPI Summary Section
       worksheet.addRow([]);
       worksheet.addRow(['KPI SUMMARY']).font = { bold: true, size: 14 };
-      const kpiHeaderRow = worksheet.addRow(['Revenue', 'Total Orders', 'Avg Order Value']);
+      const kpiHeaderRow = worksheet.addRow(['Total Orders']);
       kpiHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       kpiHeaderRow.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF444444' } };
@@ -134,9 +128,7 @@ export function VendorSales() {
       });
 
       const kpiValueRow = worksheet.addRow([
-        formatCurrency(summary?.revenue ?? 0),
-        summary?.orders ?? 0,
-        formatCurrency(summary?.avgOrder ?? 0)
+        summary?.orders ?? 0
       ]);
       kpiValueRow.alignment = { horizontal: 'center' };
       kpiValueRow.font = { size: 12 };
@@ -190,7 +182,7 @@ export function VendorSales() {
       // 6. Data Tables
       // Product Performance Table
       worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-      const prodHeader = worksheet.addRow(['Product', 'Amount', 'Quantity Sold', 'Total Revenue']);
+      const prodHeader = worksheet.addRow(['Product', 'Quantity Sold']);
       prodHeader.font = { bold: true };
       prodHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -200,35 +192,28 @@ export function VendorSales() {
       products.forEach(p => {
         const r = worksheet.addRow([
           p.productName, 
-          formatCurrency(p.price), 
-          p.qtySold, 
-          formatCurrency(p.revenue)
+          p.qtySold
         ]);
         r.getCell(2).alignment = { horizontal: 'right' };
-        r.getCell(3).alignment = { horizontal: 'right' };
-        r.getCell(4).alignment = { horizontal: 'right' };
       });
 
       // Total row for products
       const prodTotalRow = worksheet.addRow([
         'Total',
-        '-',
-        productTotals.qty,
-        formatCurrency(productTotals.revenue)
+        productTotals.qty
       ]);
       prodTotalRow.font = { bold: true };
       prodTotalRow.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
         c.border = { top: { style: 'medium' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
       });
-      prodTotalRow.getCell(3).alignment = { horizontal: 'right' };
-      prodTotalRow.getCell(4).alignment = { horizontal: 'right' };
+      prodTotalRow.getCell(2).alignment = { horizontal: 'right' };
 
       worksheet.addRow([]);
 
       // Detailed Orders Table
       worksheet.addRow(['COMPLETED ORDERS DETAILS']).font = { bold: true, size: 14 };
-      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Completed Time', 'Total Quantity', 'Total Amount', 'Items Summary']);
+      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Completed Time', 'Total Quantity', 'Items Summary']);
       orderHeader.font = { bold: true };
       orderHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -243,10 +228,8 @@ export function VendorSales() {
           new Date(o.createdAt).toLocaleTimeString(),
           o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
           orderQty,
-          formatCurrency(o.totalAmount),
           itemsSummary
         ]);
-        r.getCell(5).alignment = { horizontal: 'right' };
       });
 
       // Styling cleanups
@@ -287,9 +270,8 @@ export function VendorSales() {
     return products.reduce(
       (acc, p) => ({
         qty: acc.qty + p.qtySold,
-        revenue: acc.revenue + p.revenue,
       }),
-      { qty: 0, revenue: 0 }
+      { qty: 0 }
     );
   }, [products]);
 
@@ -311,29 +293,13 @@ export function VendorSales() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
-          <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <CardHeader>
-              <CardTitle>Revenue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{formatCurrency(summary?.revenue ?? 0)}</div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-6">
           <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <CardHeader>
               <CardTitle>Orders</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{summary?.orders ?? 0}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <CardHeader>
-              <CardTitle>Average Order Value</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{formatCurrency(summary?.avgOrder ?? 0)}</div>
             </CardContent>
           </Card>
         </div>
@@ -412,26 +378,20 @@ export function VendorSales() {
                 <thead>
                   <tr className="text-left border-b">
                     <th className="p-2">Product</th>
-                    <th className="p-2 text-right">Amount</th>
-                    <th className="p-2 text-right">Qty</th>
-                    <th className="p-2 text-right">Revenue</th>
+                    <th className="p-2 text-right">Qty Sold</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.map((p, idx) => (
                     <tr key={idx} className="border-b">
                       <td className="p-2">{p.productName}</td>
-                      <td className="p-2 text-right">{formatCurrency(p.price)}</td>
                       <td className="p-2 text-right">{p.qtySold}</td>
-                      <td className="p-2 text-right">{formatCurrency(p.revenue)}</td>
                     </tr>
                   ))}
                   {products.length > 0 && (
                     <tr className="bg-neutral-50 font-bold border-t-2 border-neutral-200">
                       <td className="p-2">Total</td>
-                      <td className="p-2 text-right">-</td>
                       <td className="p-2 text-right">{productTotals.qty}</td>
-                      <td className="p-2 text-right">{formatCurrency(productTotals.revenue)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -451,25 +411,23 @@ export function VendorSales() {
                   <th className="p-2">Order</th>
                   <th className="p-2">Created</th>
                   <th className="p-2">Completed</th>
-                  <th className="p-2">Amount</th>
                   <th className="p-2">Items</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length === 0 ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-sm text-gray-500">No completed orders.</td></tr>
+                  <tr><td colSpan={4} className="p-6 text-center text-sm text-gray-500">No completed orders.</td></tr>
                 ) : (
                   orders.map((o, idx) => (
                     <tr key={idx} className="border-b align-top">
                       <td className="p-2">{o.orderNumber}</td>
                       <td className="p-2">{new Date(o.createdAt).toLocaleTimeString()}</td>
                       <td className="p-2">{o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-'}</td>
-                      <td className="p-2">{formatCurrency(o.totalAmount)}</td>
                       <td className="p-2">
                         <ul>
                           {o.items.map((it, i) => (
                             <li key={i}>
-                              {it.qty}x {it.productName} ({formatCurrency(it.price)})
+                              {it.qty}x {it.productName}
                             </li>
                           ))}
                         </ul>
@@ -512,18 +470,10 @@ export function VendorSales() {
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mt-2" />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 [@media(orientation:landscape)]:grid-cols-2">
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Revenue</div>
-            <div className="mt-2 text-2xl font-semibold text-black">{formatCurrency(summary?.revenue ?? 0)}</div>
-          </div>
+        <div className="mt-4 grid grid-cols-1 gap-3">
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Orders</div>
             <div className="mt-2 text-2xl font-semibold text-black">{summary?.orders ?? 0}</div>
-          </div>
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 [@media(orientation:landscape)]:col-span-2">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Average Order</div>
-            <div className="mt-2 text-2xl font-semibold text-black">{formatCurrency(summary?.avgOrder ?? 0)}</div>
           </div>
         </div>
 
@@ -593,7 +543,7 @@ export function VendorSales() {
                 <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
                   <div className="text-sm font-semibold text-black">{p.productName}</div>
                   <div className="mt-1 text-xs text-neutral-600">
-                    Qty: {p.qtySold} • Revenue: {formatCurrency(p.revenue)}
+                    Qty: {p.qtySold}
                   </div>
                 </div>
               ))
@@ -617,12 +567,11 @@ export function VendorSales() {
                         {o.completedAt ? ` • Completed ${new Date(o.completedAt).toLocaleTimeString()}` : ''}
                       </div>
                     </div>
-                    <div className="text-sm font-semibold text-black">{formatCurrency(o.totalAmount)}</div>
                   </div>
                   <div className="mt-3 space-y-1">
                     {o.items.map((it, i) => (
                       <div key={i} className="text-xs text-neutral-700">
-                        {it.qty}x {it.productName} ({formatCurrency(it.price)})
+                        {it.qty}x {it.productName}
                       </div>
                     ))}
                   </div>

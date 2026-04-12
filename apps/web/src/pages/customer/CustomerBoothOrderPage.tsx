@@ -274,6 +274,27 @@ export function CustomerBoothOrderPage() {
     );
   }
 
+  const [servingOrder, setServingOrder] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vendorId) return;
+    const fetchServing = async () => {
+      try {
+        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
+        if (data.success) setServingOrder(data.data.displayNumber);
+      } catch {}
+    };
+    fetchServing();
+    if (socket) {
+      socket.on('vendor_serving_updated', (data: any) => {
+        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
+      });
+    }
+    return () => {
+      if (socket) socket.off('vendor_serving_updated');
+    };
+  }, [vendorId, socket]);
+
   return (
     <div className="w-full h-full bg-white flex flex-col">
       <BoothHeader
@@ -303,6 +324,7 @@ export function CustomerBoothOrderPage() {
                 name={item.name}
                 price={item.price}
                 image={item.imageUrl}
+                isAvailable={item.isAvailable}
                 onClick={() => setActiveItem(item)}
                 className="border-neutral-900/15 shadow-none h-full"
                 hidePrice={hidePrices}
@@ -319,19 +341,11 @@ export function CustomerBoothOrderPage() {
         topNode={
           mode === 'order' ? (
             <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1">
-              {activeOrdersForVendor.map((o) => {
-                const isSelected = String(o.orderId) === String(selectedOrder?.orderId || '');
-                return (
-                  <div
-                    key={o.orderId}
-                    className={`shrink-0 text-xs font-semibold ${
-                      isSelected ? 'text-black underline underline-offset-4' : 'text-neutral-600'
-                    }`}
-                  >
-                    Order #{o.displayNumber}
-                  </div>
-                );
-              })}
+              <div
+                className="shrink-0 text-xs font-semibold text-black underline underline-offset-4"
+              >
+                Order #{selectedOrder?.displayNumber}
+              </div>
             </div>
           ) : undefined
         }
@@ -345,11 +359,13 @@ export function CustomerBoothOrderPage() {
             ? selectedOrder?.status === 'READY'
               ? 'READY — Collect now'
               : selectedOrder?.status === 'PREPARING'
-                ? `~${orderEta} min`
+                ? servingOrder 
+                  ? `Now serving #${servingOrder}` 
+                  : `Preparing your order`
                 : String(selectedOrder?.status || '')
             : undefined
         }
-        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Summary'}
+        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Progress'}
         onViewCart={() => {
           if (mode === 'cart') {
             setSummaryOpen(true);

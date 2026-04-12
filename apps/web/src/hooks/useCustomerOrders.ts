@@ -288,5 +288,9 @@ export function useCustomerOrders(eventSlug: string | undefined) {
     });
   }, [key]);
 
-  return { orders, isLoading, addOrUpdate, remove, decrementEta };
+  const activeOrders = useMemo(() => {
+    return orders.filter((o) => o.status === 'PREPARING' || o.status === 'READY');
+  }, [orders]);
+
+  return { orders: activeOrders, isLoading, addOrUpdate, remove, decrementEta };
 }

@@ -193,6 +193,25 @@ export function VendorMenu() {
     setIsModalOpen(true);
   };
 
+  const toggleAvailability = async (item: MenuItem) => {
+    const nextStatus = !item.isAvailable;
+    // Optimistic update
+    setMenuItems(prev => prev.map(it => it.id === item.id ? { ...it, isAvailable: nextStatus } : it));
+
+    try {
+      const res = await api.patch(`/menu-items/${item.id}`, { isAvailable: nextStatus });
+      if (res.data.success) {
+        toast.success(`${item.name} is now ${nextStatus ? 'available' : 'sold out'}`);
+      } else {
+        throw new Error();
+      }
+    } catch (error) {
+      // Rollback on failure
+      setMenuItems(prev => prev.map(it => it.id === item.id ? { ...it, isAvailable: !nextStatus } : it));
+      toast.error('Failed to update availability');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this item?')) return;
     try {
@@ -302,6 +321,22 @@ export function VendorMenu() {
                 <div className="mt-2 font-bold text-orange-600">${item.price.toFixed(2)}</div>
                 <div className="mt-1 text-xs text-gray-500">
                   {(Array.isArray(item.optionGroups) && item.optionGroups.length > 0) ? `${item.optionGroups.length} groups` : 'No customizations'}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={item.isAvailable ? 'outline' : 'default'}
+                    className={item.isAvailable ? '' : 'bg-red-600 text-white'}
+                    onClick={() => toggleAvailability(item)}
+                  >
+                    {item.isAvailable ? 'Mark Sold Out' : 'Mark Available'}
+                  </Button>
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="px-3 py-1 rounded-full text-xs font-bold bg-neutral-100 text-neutral-600 border border-neutral-200"
+                  >
+                    Edit
+                  </button>
                 </div>
               </div>
             </div>

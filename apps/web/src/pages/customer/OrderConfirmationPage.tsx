@@ -346,27 +346,18 @@ export function OrderConfirmationPage() {
 
               <div
                 className={`mt-5 rounded-3xl p-6 shadow-xl border ${
-                  status === 'READY'
+                  status === 'READY' || status === 'COMPLETED'
                     ? 'bg-black border-black text-white'
-                    : status === 'COMPLETED'
-                      ? 'bg-neutral-50 border-neutral-200 text-black'
-                      : 'bg-white border-neutral-200 text-black'
+                    : 'bg-white border-neutral-200 text-black'
                 }`}
               >
-                {status === 'READY' ? (
+                {status === 'READY' || status === 'COMPLETED' ? (
                   <>
                     <div className="text-[28px] leading-tight font-extrabold tracking-tight">
                       READY FOR PICKUP
                     </div>
                     <div className="mt-3 text-base font-semibold text-white/90">
                       Please collect at the booth now
-                    </div>
-                  </>
-                ) : status === 'COMPLETED' ? (
-                  <>
-                    <div className="text-[26px] leading-tight font-extrabold tracking-tight">COMPLETED</div>
-                    <div className="mt-3 text-base text-neutral-700">
-                      Thanks — enjoy your order.
                     </div>
                   </>
                 ) : status === 'CANCELLED' ? (
