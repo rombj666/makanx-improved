@@ -9,7 +9,7 @@ import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { toast } from 'react-hot-toast';
 import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { computeDisplayEtaMinutesFromQuantity, computeDisplayNumber } from '../../lib/utils';
+import { computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { Minus, Plus, Trash2 } from 'lucide-react';

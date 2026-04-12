@@ -4,7 +4,6 @@ type Props = {
   vendorName?: string | null;
   description?: string | null;
   heroImageUrl?: string | null;
-  prepTimeMinutes?: number | null;
   onBack?: (() => void) | null;
   showBackButton?: boolean;
   variant?: 'default' | 'minimal';
@@ -17,7 +16,6 @@ export function BoothHeader({
   vendorName,
   description,
   heroImageUrl,
-  prepTimeMinutes,
   onBack,
   showBackButton = true,
   variant = 'default',

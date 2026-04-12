@@ -10,10 +10,11 @@ import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { toast } from 'react-hot-toast';
 import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
 import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { computeDisplayEtaMinutesFromQuantity, roundUpToNearest5Minutes, computeDisplayNumber } from '../../lib/utils';
+import { computeDisplayNumber } from '../../lib/utils';
 import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { Minus, Plus, Trash2 } from 'lucide-react';
+import { useSocket } from '../../context/SocketContext';
 
 interface MenuItem {
   id: string;
@@ -40,11 +41,32 @@ interface Booth {
 export function CustomerOrderPage() {
   const { slug, vendorId } = useParams();
   const navigate = useNavigate();
+  const { socket } = useSocket();
   const [booth, setBooth] = useState<Booth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [servingOrder, setServingOrder] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vendorId) return;
+    const fetchServing = async () => {
+      try {
+        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
+        if (data.success) setServingOrder(data.data.displayNumber);
+      } catch {}
+    };
+    fetchServing();
+    if (socket) {
+      socket.on('vendor_serving_updated', (data: any) => {
+        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
+      });
+    }
+    return () => {
+      if (socket) socket.off('vendor_serving_updated');
+    };
+  }, [vendorId, socket]);
 
   // Checkout state
   const [isPlacing, setIsPlacing] = useState(false);
@@ -229,7 +251,6 @@ export function CustomerOrderPage() {
     await performCheckout(normalized);
   };
 
-  const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
   const { orders } = useCustomerOrders(String(slug || ''));
   const activeOrdersForVendor = useMemo(() => {
     return orders
@@ -252,9 +273,6 @@ export function CustomerOrderPage() {
 
   const mode: 'cart' | 'order' | 'empty' =
     cart.totalItems > 0 ? 'cart' : selectedOrder ? 'order' : 'empty';
-  const orderEta = selectedOrder
-    ? roundUpToNearest5Minutes(Math.max(Number(selectedOrder.estimatedMinutes ?? 0), 0))
-    : 0;
 
   if (!booth) {
     return (
@@ -274,7 +292,6 @@ export function CustomerOrderPage() {
         vendorName={booth.vendor?.businessName || null}
         description={null}
         heroImageUrl={null}
-        prepTimeMinutes={prepTimeMinutes}
         onBack={() => navigate(`/customer/event/${slug}`)}
       />
 
@@ -303,40 +320,24 @@ export function CustomerOrderPage() {
         totalItems={cart.totalItems}
         totalPrice={cart.total}
         hidePrices={hidePrices}
-        topNode={
-          mode === 'order' ? (
-            <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1">
-              {activeOrdersForVendor.map((o) => {
-                const isSelected = String(o.orderId) === String(selectedOrder?.orderId || '');
-                return (
-                  <div
-                    key={o.orderId}
-                    className={`shrink-0 text-xs font-semibold ${
-                      isSelected ? 'text-black underline underline-offset-4' : 'text-neutral-600'
-                    }`}
-                  >
-                    Order #{o.displayNumber}
-                  </div>
-                );
-              })}
-            </div>
-          ) : undefined
-        }
+        topNode={undefined}
         topText={
           mode === 'order'
-            ? `Order #${selectedOrder?.displayNumber || '—'}`
+            ? selectedOrder?.status === 'READY'
+              ? 'READY — Collect now'
+              : servingOrder 
+                ? `Now serving #${servingOrder}` 
+                : `Preparing your order`
             : `${cart.totalItems} ${cart.totalItems === 1 ? 'item' : 'items'}`
         }
         bottomText={
           mode === 'order'
             ? selectedOrder?.status === 'READY'
-              ? 'READY — Collect now'
-              : selectedOrder?.status === 'PREPARING'
-                ? `~${orderEta} min`
-                : String(selectedOrder?.status || '')
+              ? 'Please head to the booth'
+              : `Your number is #${selectedOrder?.displayNumber || '—'}`
             : undefined
         }
-        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Summary'}
+        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Progress'}
         onViewCart={() => {
           if (mode === 'cart') {
             setSummaryOpen(true);
