@@ -70,7 +70,9 @@ export function VendorDashboard() {
     try {
       const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
       if (res.data.success) {
-        setProductionOrders(res.data.data || []);
+        // Only PREPARING orders for the kitchen view
+        const preparing = (res.data.data || []).filter((o: Order) => o.status === 'PREPARING');
+        setProductionOrders(preparing);
       }
     } catch (err: any) {
       if (err.response?.status === 429) {
@@ -95,7 +97,10 @@ export function VendorDashboard() {
         api.get(`/orders/vendor/production-batch?groupByWindow=false`),
         api.get('/orders/vendor-live')
       ]);
-      if (prodRes.data.success) setProductionOrders(prodRes.data.data || []);
+      if (prodRes.data.success) {
+        const preparing = (prodRes.data.data || []).filter((o: Order) => o.status === 'PREPARING');
+        setProductionOrders(preparing);
+      }
       if (liveRes.data.success) {
         const ready = (liveRes.data.data || []).filter((o: Order) => o.status === 'READY');
         setHistoryOrders(ready);
@@ -152,24 +157,52 @@ export function VendorDashboard() {
       socket.on('connect', scheduleRefetch);
 
       socket.on('order_created', (newOrder: Order) => {
-        // Optimistic update
-        setProductionOrders((prev) => {
-          if (prev.find(o => o.id === newOrder.id)) return prev;
-          return [newOrder, ...prev];
-        });
+        if (newOrder.status === 'PREPARING') {
+          setProductionOrders((prev) => {
+            if (prev.find(o => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+        } else if (newOrder.status === 'READY') {
+          setHistoryOrders((prev) => {
+            if (prev.find(o => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+        }
         toast.success('New Order Received!');
         scheduleRefetch();
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
+        // Update production orders
         setProductionOrders((prev) => {
-          const idx = prev.findIndex((o) => o.id === updatedOrder.id);
-          if (idx >= 0) {
-            const next = prev.slice();
-            next[idx] = updatedOrder;
-            return next;
+          if (updatedOrder.status === 'PREPARING') {
+            const idx = prev.findIndex((o) => o.id === updatedOrder.id);
+            if (idx >= 0) {
+              const next = prev.slice();
+              next[idx] = updatedOrder;
+              return next;
+            }
+            return [updatedOrder, ...prev];
+          } else {
+            // If it's no longer preparing, remove it
+            return prev.filter((o) => o.id !== updatedOrder.id);
           }
-          return [updatedOrder, ...prev];
+        });
+
+        // Update history orders
+        setHistoryOrders((prev) => {
+          if (updatedOrder.status === 'READY') {
+            const idx = prev.findIndex((o) => o.id === updatedOrder.id);
+            if (idx >= 0) {
+              const next = prev.slice();
+              next[idx] = updatedOrder;
+              return next;
+            }
+            return [updatedOrder, ...prev];
+          } else {
+            // If it's no longer ready, remove it
+            return prev.filter((o) => o.id !== updatedOrder.id);
+          }
         });
         scheduleRefetch();
       });
@@ -447,12 +480,12 @@ export function VendorDashboard() {
   );
 
   const HistoryOrderList = ({ data }: { data: Order[] }) => (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {data.length === 0 ? (
-        <div className="text-sm text-neutral-600">No previous orders.</div>
+        <div className="text-sm text-neutral-600 col-span-full">No previous orders.</div>
       ) : (
         data.map((order) => (
-          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 h-fit">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
@@ -460,15 +493,15 @@ export function VendorDashboard() {
                   {new Date(order.createdAt).toLocaleTimeString()}
                 </div>
               </div>
-              <div className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100">
+              <div className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 uppercase tracking-tight">
                 READY
               </div>
             </div>
             <div className="mt-3 space-y-2">
               {order.items.map((item, idx) => (
                 <div key={idx} className="flex justify-between items-center text-sm">
-                  <span className="font-medium text-black">{item.quantity}x {item.menuItem.name}</span>
-                  <span className="text-green-600 font-bold text-xs uppercase">Ready</span>
+                  <span className="font-medium text-black truncate pr-2">{item.quantity}x {item.menuItem.name}</span>
+                  <span className="text-green-600 font-bold text-[10px] uppercase shrink-0">Ready</span>
                 </div>
               ))}
             </div>
@@ -539,32 +572,7 @@ export function VendorDashboard() {
               {!groupByWindow && <SingleOrderList data={productionOrders} />}
             </>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {historyOrders.length === 0 ? (
-                <div className="text-neutral-600">No ready orders.</div>
-              ) : (
-                historyOrders.map((order) => (
-                  <Card key={order.id} className="p-4 border border-neutral-100 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h5 className="font-bold">Order #{computeDisplayNumber(order)}</h5>
-                        <p className="text-xs text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 uppercase">
-                        READY
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-sm">
-                          <span className="font-medium">{item.quantity}x {item.menuItem.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                ))
-              )}
-            </div>
+            <HistoryOrderList data={historyOrders} />
           )}
         </div>
       </div>

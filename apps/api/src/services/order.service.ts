@@ -491,7 +491,7 @@ export const getVendorLiveOrders = async (userId: string) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendorProfile.id,
-        status: "PREPARING",
+        status: { in: ["PREPARING", "READY"] },
       },
       orderBy: { createdAt: 'desc' },
       take: 150,
@@ -510,7 +510,7 @@ export const getVendorLiveOrders = async (userId: string) => {
       const orders = await prisma.order.findMany({
         where: {
           vendorId: vendorProfile.id,
-          status: "PREPARING",
+          status: { in: ["PREPARING", "READY"] },
         },
         orderBy: { createdAt: 'desc' },
         take: 150,
@@ -951,6 +951,15 @@ export const markBatchItemsReady = async (
   return { updatedCount: result.count ?? 0 };
 };
 
+export const getVendorServingOrder = async (vendorId: string) => {
+  const lastReady = await prisma.order.findFirst({
+    where: { vendorId, status: OrderStatus.READY },
+    orderBy: { readyAt: 'desc' },
+    select: { id: true, displayNumber: true, vendorId: true },
+  });
+  return lastReady;
+};
+
 export const markOrderItemReady = async (userId: string, orderId: string, itemId: string) => {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -1000,6 +1009,10 @@ export const markOrderItemReady = async (userId: string, orderId: string, itemId
   io.to(`vendor:${updatedOrder.vendorId}`).emit('order_updated', updatedOrder);
   
   if (nextStatus === OrderStatus.READY && refreshed.status !== OrderStatus.READY) {
+    io.emit('vendor_serving_updated', {
+      vendorId: updatedOrder.vendorId,
+      displayNumber: updatedOrder.displayNumber,
+    });
     try { await sendReadyNotification(updatedOrder); } catch {}
     try { await sendOrderReadyMessage(updatedOrder); } catch {}
     try { await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemReady'); } catch {}
@@ -1059,24 +1072,15 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
     status: updatedOrder.status,
     updatedAt: updatedOrder.updatedAt,
   });
-  if (nextStatus === OrderStatus.READY) {
-    try {
-      await sendReadyNotification(updatedOrder);
-    } catch (err: any) {
-      console.error('[push] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
-    }
-    if (refreshed.status !== nextStatus) {
-      try {
-        await sendOrderReadyMessage(updatedOrder);
-      } catch (err: any) {
-        console.error('[whatsapp] READY send failed', { orderId: updatedOrder.id, message: err?.message || err });
-      }
-      try {
-        await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemsReady');
-      } catch (err: any) {
-        console.error('[hour-coffee-email] READY trigger failed', { orderId: updatedOrder.id, message: err?.message || err });
-      }
-    }
+
+  if (nextStatus === OrderStatus.READY && refreshed.status !== OrderStatus.READY) {
+    io.emit('vendor_serving_updated', {
+      vendorId: updatedOrder.vendorId,
+      displayNumber: updatedOrder.displayNumber,
+    });
+    try { await sendReadyNotification(updatedOrder); } catch {}
+    try { await sendOrderReadyMessage(updatedOrder); } catch {}
+    try { await sendHourCoffeeReadyEmailIfNeeded(updatedOrder, 'markOrderItemsReady'); } catch {}
   }
 
   return updatedOrder;

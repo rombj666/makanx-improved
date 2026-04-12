@@ -262,7 +262,6 @@ export function CustomerBoothOrderPage() {
     await performCheckout(normalized);
   };
    const hidePrices = booth?.showPrices === false;
-   const prepTimeMinutes = computeDisplayEtaMinutesFromQuantity(cart.totalItems);
   const activeOrdersForVendor = useMemo(() => {
     return orders
       .filter((o) => o.vendorId === vendorId && (o.status === 'PREPARING' || o.status === 'READY'))
@@ -303,7 +302,6 @@ export function CustomerBoothOrderPage() {
         vendorName={null}
         description={null}
         heroImageUrl={null}
-        prepTimeMinutes={prepTimeMinutes}
         onBack={handleBack}
         showBackButton={false}
         variant="minimal"
@@ -338,31 +336,21 @@ export function CustomerBoothOrderPage() {
         totalItems={cart.totalItems}
         totalPrice={cart.total}
         hidePrices={hidePrices}
-        topNode={
-          mode === 'order' ? (
-            <div className="flex items-center gap-2 overflow-x-auto -mx-1 px-1">
-              <div
-                className="shrink-0 text-xs font-semibold text-black underline underline-offset-4"
-              >
-                Order #{selectedOrder?.displayNumber}
-              </div>
-            </div>
-          ) : undefined
-        }
+        topNode={undefined}
         topText={
           mode === 'order'
-            ? `Order #${selectedOrder?.displayNumber || '—'}`
+            ? selectedOrder?.status === 'READY'
+              ? 'READY — Collect now'
+              : servingOrder 
+                ? `Now serving #${servingOrder}` 
+                : `Preparing your order`
             : `${cart.totalItems} ${cart.totalItems === 1 ? 'item' : 'items'}`
         }
         bottomText={
           mode === 'order'
             ? selectedOrder?.status === 'READY'
-              ? 'READY — Collect now'
-              : selectedOrder?.status === 'PREPARING'
-                ? servingOrder 
-                  ? `Now serving #${servingOrder}` 
-                  : `Preparing your order`
-                : String(selectedOrder?.status || '')
+              ? 'Please head to the booth'
+              : `Your number is #${selectedOrder?.displayNumber || '—'}`
             : undefined
         }
         actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Progress'}

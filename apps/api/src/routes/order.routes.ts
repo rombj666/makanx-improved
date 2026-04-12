@@ -7,6 +7,7 @@ const router = Router();
 
 console.log('[order] Registering vendor specific routes');
 // Vendor (Move these above all parameterized routes to avoid collision)
+router.get('/vendor/:vendorId/serving', optionalAuth, orderController.getVendorServingOrder);
 router.get('/vendor-live', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorLiveOrders);
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
 router.get(

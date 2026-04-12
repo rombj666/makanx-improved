@@ -272,6 +272,28 @@ export function OrderConfirmationPage() {
     navigate('/', { replace: true });
   }, [navigate, order, orderIdFromQuery]);
 
+  const [servingOrder, setServingOrder] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vendorId) return;
+    const fetchServing = async () => {
+      try {
+        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
+        if (data.success) setServingOrder(data.data.displayNumber);
+      } catch {}
+    };
+    fetchServing();
+    if (socket) {
+      const onServingUpdated = (data: any) => {
+        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
+      };
+      socket.on('vendor_serving_updated', onServingUpdated);
+      return () => {
+        socket.off('vendor_serving_updated', onServingUpdated);
+      };
+    }
+  }, [vendorId, socket]);
+
   useEffect(() => {
     if (!socket) return;
     if (!orderId) return;
@@ -373,7 +395,12 @@ export function OrderConfirmationPage() {
                       Preparing your order
                     </div>
                     <div className="mt-3 text-base text-neutral-700">
-                      Your order is being prepared now.
+                      <div className="space-y-1">
+                        {servingOrder && (
+                          <div>Now serving <span className="font-bold">#{servingOrder}</span></div>
+                        )}
+                        <div className="text-sm opacity-75">Your number is <span className="font-bold">#{orderNumber}</span></div>
+                      </div>
                     </div>
                   </>
                 )}

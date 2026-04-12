@@ -35,12 +35,6 @@ export function BoothHeader({
               </div>
               <div className="mt-1 text-3xl font-semibold text-black truncate">{boothName || title}</div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-[11px] text-neutral-500 tracking-wide uppercase">Prep</div>
-              <div className="mt-0.5 text-sm font-semibold text-black">
-                {prepTimeMinutes != null ? `~${prepTimeMinutes} min` : '—'}
-              </div>
-            </div>
           </div>
         </div>
         <div className="h-px bg-neutral-900/10" />
@@ -86,14 +80,6 @@ export function BoothHeader({
         <div className="flex items-center justify-between gap-4">
           <div className="text-sm text-neutral-600 min-w-0">
             {description ? <div className="line-clamp-2">{description}</div> : null}
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="text-right">
-              <div className="text-xs text-neutral-500 tracking-wide uppercase">Prep</div>
-              <div className="text-sm font-semibold text-black">
-                {prepTimeMinutes != null ? `~${prepTimeMinutes} min` : '—'}
-              </div>
-            </div>
           </div>
         </div>
       </div>
