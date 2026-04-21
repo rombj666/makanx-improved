@@ -31,7 +31,7 @@ const port = process.env.PORT || 3001;
 initSocket(httpServer);
 
 // Security Middleware
-app.set('trust proxy', 1); // Trust first proxy (Render/Vercel)
+app.set('trust proxy', 1); // Trust first proxy (Railway/Render/Load Balancers)
 
 const stripQuotes = (s: string) => s.replace(/^['"`]+|['"`]+$/g, '');
 const normalizeOrigin = (s: string) => stripQuotes(s.trim()).replace(/\/+$/, '');
@@ -78,7 +78,7 @@ configureSecurity(app);
 app.use(express.json());
 
 app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.originalUrl}`);
+  console.log(`[${req.method}] ${req.originalUrl} - IP: ${req.ip} - Forwarded: ${req.headers['x-forwarded-for']}`);
   next();
 });
 

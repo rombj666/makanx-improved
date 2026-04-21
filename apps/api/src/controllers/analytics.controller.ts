@@ -3,7 +3,9 @@ import { Role } from '@makanx/shared';
 import prisma from '../utils/prisma';
 
 const parseDateRange = (dateStr?: string) => {
-  const date = dateStr ? new Date(dateStr) : new Date();
+  let date = dateStr ? new Date(dateStr) : new Date();
+  if (isNaN(date.getTime())) date = new Date(); // Fallback to now if invalid date string
+  
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
   const end = new Date(date);

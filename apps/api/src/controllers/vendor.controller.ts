@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import prisma from '../utils/prisma';
 import { z } from 'zod';
 
 const updateSettingsSchema = z.object({
@@ -17,6 +17,7 @@ export const getSettings = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({
       where: { userId },
       select: {
+        id: true,
         dailyDrinkLimitEnabled: true,
         dailyDrinkLimitQuantity: true,
         autoStopOrderingOnLimit: true,
@@ -26,7 +27,15 @@ export const getSettings = async (req: Request, res: Response) => {
 
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    return res.json({ success: true, data: vendor });
+    // Ensure we return default values if null in DB (unlikely with Prisma defaults but safe)
+    const data = {
+      dailyDrinkLimitEnabled: vendor.dailyDrinkLimitEnabled ?? false,
+      dailyDrinkLimitQuantity: vendor.dailyDrinkLimitQuantity ?? 0,
+      autoStopOrderingOnLimit: vendor.autoStopOrderingOnLimit ?? true,
+      reportRecipientEmail: vendor.reportRecipientEmail ?? null,
+    };
+
+    return res.json({ success: true, data });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -81,7 +90,7 @@ export const getDailyUsage = async (req: Request, res: Response) => {
         data: {
           vendorId: vendor.id,
           date: today,
-          dailyLimit: vendor.dailyDrinkLimitQuantity,
+          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
           usedQuantity: 0,
           orderingClosed: false,
         },
@@ -111,7 +120,7 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
       create: {
         vendorId: vendor.id,
         date: today,
-        dailyLimit: vendor.dailyDrinkLimitQuantity,
+        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
         usedQuantity: 0,
         orderingClosed: closed,
       },

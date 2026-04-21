@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import * as vendorController from '../controllers/vendor.controller';
-import { authenticate } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-router.use(authenticate);
+router.use(requireAuth);
 
 router.get('/settings', vendorController.getSettings);
 router.patch('/settings', vendorController.updateSettings);

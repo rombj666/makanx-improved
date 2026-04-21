@@ -28,30 +28,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
           const { data } = await api.get('/auth/me');
-          if (data.success) {
+          if (isMounted && data.success) {
             console.log('Logged in user (/auth/me):', data.data);
             setUser(data.data);
           }
         } catch (error: any) {
+          if (!isMounted) return;
+          const status = error.response?.status;
           // Only remove token on 401/403.
           // Do NOT remove on 429 (Too Many Requests) or network errors.
-          if (error.response?.status === 401 || error.response?.status === 403) {
-            console.warn('Auth failed, removing token:', error.response?.status);
+          if (status === 401 || status === 403) {
+            console.warn('Auth failed, removing token:', status);
             localStorage.removeItem('token');
             setUser(null);
+          } else if (status === 429) {
+            console.error('Rate limited on auth check. Keeping token but limiting further checks.');
           } else {
-            console.error('Auth check error (kept token):', error.response?.status || error.message);
+            console.error('Auth check error (kept token):', status || error.message);
           }
         }
       }
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
     };
     checkAuth();
+    return () => { isMounted = false; };
   }, []);
 
   const login = (token: string, user: User) => {

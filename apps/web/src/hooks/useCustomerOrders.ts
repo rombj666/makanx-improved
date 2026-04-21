@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { getOrCreateGuestId } from '../lib/guest';
 import { useSocket } from '../context/SocketContext';
@@ -71,9 +71,18 @@ export function useCustomerOrders(eventSlug: string | undefined) {
     };
   }, [slug]);
 
+  const [isThrottled, setIsThrottled] = useState(false);
+  const lastFetchRef = useRef(0);
+
   const fetchAndMerge = useCallback(async () => {
-    if (!slug) return;
+    if (!slug || isThrottled) return;
+    
+    const now = Date.now();
+    if (now - lastFetchRef.current < 5000) return; // 5s throttle
+
     setIsLoading(true);
+    lastFetchRef.current = now;
+
     try {
       const guestId = getOrCreateGuestId();
       const { data } = await api.get(`/orders/my-orders`, {
@@ -98,41 +107,40 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         return {
           orderId: o.id,
           vendorId: o.vendorId,
-          vendorName: o.vendor?.businessName || o.vendorName || '',
+          vendorName: o.vendor?.businessName || '',
           status: o.status,
-          estimatedMinutes: computedEta > 0 ? computedEta : serverEta,
+          estimatedMinutes: serverEta || computedEta,
           createdAt: o.createdAt,
           updatedAt: o.updatedAt,
           displayNumber: computeDisplayNumber(o),
           items,
         };
       });
-      const active = normalized.filter(
-        (o) => o.status === 'PREPARING' || o.status === 'READY'
-      );
-      if (active.length === 0) {
-        try {
-          localStorage.removeItem(key);
-        } catch {}
-      } else {
-        localStorage.setItem(key, JSON.stringify(active));
+      setOrders(normalized);
+      localStorage.setItem(key, JSON.stringify(normalized));
+    } catch (err: any) {
+      if (err.response?.status === 429) {
+        setIsThrottled(true);
+        setTimeout(() => setIsThrottled(false), 60000); // 1 min backoff on 429
       }
-      setOrders(active);
-    } catch {
-      // ignore fetch errors, keep local data
+      console.error('Failed to fetch orders:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [allowedVendorIds, key, slug]);
+  }, [slug, isThrottled, allowedVendorIds, key]);
 
   useEffect(() => {
-    void fetchAndMerge();
+    fetchAndMerge();
   }, [fetchAndMerge]);
 
   useEffect(() => {
     if (!slug) return;
     if (orders.length === 0) return;
-    const intervalMs = isConnected ? 10000 : 15000;
+    
+    // If socket is connected, we poll much less frequently (every 60s)
+    // If socket is disconnected, we poll every 30s
+    const intervalMs = isConnected ? 60000 : 30000;
+    
     const interval = setInterval(() => {
       void fetchAndMerge();
     }, intervalMs);

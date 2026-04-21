@@ -9,19 +9,27 @@ export const configureSecurity = (app: Express) => {
   // Rate limiting for general API endpoints
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: 5000, // Increased further to handle shared IPs and SPA navigation
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Too many requests, please try again later.' }
+    message: { error: 'Too many requests, please try again later.' },
+    handler: (req, res, next, options) => {
+      console.warn(`[rate-limit] General limit reached: ${req.ip} -> ${req.originalUrl}`);
+      res.status(options.statusCode).send(options.message);
+    }
   });
 
   // Stricter rate limiting for auth sensitive actions (login, register, password reset)
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // Limit each IP to 20 login/register attempts per 15 minutes
+    max: 200, // Increased for shared IPs
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Too many login attempts, please try again later.' }
+    message: { error: 'Too many login attempts, please try again later.' },
+    handler: (req, res, next, options) => {
+      console.warn(`[rate-limit] Auth limit reached: ${req.ip} -> ${req.originalUrl}`);
+      res.status(options.statusCode).send(options.message);
+    }
   });
 
   // Stricter rate limiting for webhooks
@@ -32,16 +40,26 @@ export const configureSecurity = (app: Express) => {
     legacyHeaders: false,
   });
 
-  // Apply general API limiter to all /api/
-  app.use('/api/', apiLimiter);
-
-  // Apply stricter limiter ONLY to sensitive auth routes
+  // Apply stricter limiter ONLY to sensitive auth routes FIRST
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/register', authLimiter);
   app.use('/api/auth/password/reset/*', authLimiter);
   app.use('/api/auth/invite/accept', authLimiter);
 
-  // Note: /api/auth/me is now under apiLimiter (100 per 15 mins), which is safe.
-  
+  // Apply general API limiter to all other /api/ routes
+  // We use a custom middleware wrapper to avoid double-counting on auth routes
+  app.use('/api/', (req, res, next) => {
+    const authRoutes = [
+      '/api/auth/login',
+      '/api/auth/register',
+      '/api/auth/password/reset/',
+      '/api/auth/invite/accept'
+    ];
+    if (authRoutes.some(route => req.originalUrl.startsWith(route))) {
+      return next();
+    }
+    apiLimiter(req, res, next);
+  });
+
   app.use('/api/webhooks/', webhookLimiter);
 };
