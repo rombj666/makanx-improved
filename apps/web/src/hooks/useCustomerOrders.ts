@@ -108,7 +108,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         };
       });
       const active = normalized.filter(
-        (o) => o.status !== 'CANCELLED' && o.status !== 'COMPLETED'
+        (o) => o.status === 'PREPARING' || o.status === 'READY'
       );
       if (active.length === 0) {
         try {
@@ -176,7 +176,6 @@ export function useCustomerOrders(eventSlug: string | undefined) {
         const next = prev.slice();
         const idx = next.findIndex((o) => o.orderId === upd.orderId);
         let becameReady = false;
-        let becameCompleted = false;
         let displayNum =
           explicitDisplay || (idx >= 0 ? next[idx]?.displayNumber : null) || computeDisplayNumber(updated);
         if (idx >= 0) {
@@ -186,17 +185,9 @@ export function useCustomerOrders(eventSlug: string | undefined) {
             becameReady = true;
             displayNum = merged.displayNumber;
           }
-          if (old.status !== 'COMPLETED' && merged.status === 'COMPLETED') {
-            becameCompleted = true;
-            displayNum = merged.displayNumber;
-          }
-          if (merged.status === 'CANCELLED' || merged.status === 'COMPLETED') {
-            next.splice(idx, 1);
-          } else {
-            next[idx] = merged;
-          }
+          next[idx] = merged;
         } else {
-          if (upd.orderId && upd.status !== 'CANCELLED' && upd.status !== 'COMPLETED') {
+          if (upd.orderId && (upd.status === 'PREPARING' || upd.status === 'READY')) {
             const newEntry = {
               orderId: upd.orderId!,
               vendorId: upd.vendorId || '',
@@ -218,9 +209,6 @@ export function useCustomerOrders(eventSlug: string | undefined) {
           toast.success(`Order #${displayNum} is READY — come collect`);
           playReadySound();
           vibrateReady();
-        }
-        if (becameCompleted) {
-          toast.success(`Order #${displayNum} completed`);
         }
         return next;
       });
@@ -245,8 +233,7 @@ export function useCustomerOrders(eventSlug: string | undefined) {
           computedEta > 0 ? { ...order, estimatedMinutes: computedEta } : order;
 
         const shouldRemove =
-          order.status === 'COMPLETED' ||
-          order.status === 'CANCELLED';
+          order.status !== 'PREPARING' && order.status !== 'READY';
 
         if (shouldRemove) {
           if (idx >= 0) {

@@ -15,6 +15,7 @@ import menuRoutes from './routes/menu.routes';
 import pushRoutes from './routes/push.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
+import vendorRoutes from './routes/vendor.routes';
 import hourCoffeeTestEmailRoutes from './routes/hour-coffee-test-email.routes';
 import webpush from 'web-push';
 
@@ -121,6 +122,7 @@ apiRouter.use('/menu-items', menuRoutes);
 apiRouter.use('/push', pushRoutes);
 apiRouter.use('/analytics', analyticsRoutes);
 apiRouter.use('/whatsapp', whatsappRoutes);
+apiRouter.use('/vendor', vendorRoutes);
 apiRouter.use('/hour-coffee-test-email', hourCoffeeTestEmailRoutes);
 app.use('/api', apiRouter);
 

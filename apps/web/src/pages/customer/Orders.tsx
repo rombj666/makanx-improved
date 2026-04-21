@@ -56,8 +56,6 @@ export function CustomerOrders() {
     switch (status) {
       case 'PREPARING': return 'text-blue-600 bg-blue-100';
       case 'READY': return 'text-green-600 bg-green-100';
-      case 'COMPLETED': return 'text-gray-600 bg-gray-100';
-      case 'CANCELLED': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
   };
@@ -80,11 +78,6 @@ export function CustomerOrders() {
               <div className="text-sm text-gray-500 mb-2">
                 Ordered on {new Date(order.createdAt).toLocaleString()}
               </div>
-              {order.status === 'COMPLETED' && order.completedAt ? (
-                <div className="text-sm text-gray-500 mb-2">
-                  Completed on {new Date(order.completedAt).toLocaleString()}
-                </div>
-              ) : null}
               <ul className="space-y-1 mb-4">
                 {order.items.map((item, idx) => (
                   <li key={idx} className="flex justify-between text-sm">

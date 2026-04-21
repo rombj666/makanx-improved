@@ -44,7 +44,6 @@ router.post(
   orderController.markOrderItemsReady
 );
 router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderController.updateStatus);
-router.post('/:id/cancel', optionalAuth, orderController.cancelOrder);
 
 console.log('[order] Registering generic order lookup (must be last)');
 // Generic order lookup MUST be last to avoid catching specific string routes

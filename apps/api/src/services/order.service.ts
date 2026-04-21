@@ -6,6 +6,7 @@ import { createAuditLog } from './audit.service';
 import { sendReadyNotification } from './push.service'; 
 import { sendOrderReadyMessage } from './whatsapp.service'; 
 import { sendHourCoffeeReadyEmail } from './email/email.service'; 
+import { triggerDailyReport } from './report.service';
  
 const readyEmailSentCache = new Map<string, number>(); 
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30; 
@@ -197,6 +198,40 @@ export const createOrder = async (
 
   console.log('[order] create: incoming payload', { vendorId, itemsCount: items.length, guestId, customerEmail: customerEmail || null });
 
+  // Calculate requested total quantity
+  const requestedQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Daily Limit Validation
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const vendor = await prisma.vendorProfile.findUnique({
+    where: { id: vendorId },
+    select: { 
+      dailyDrinkLimitEnabled: true, 
+      dailyDrinkLimitQuantity: true,
+      reportRecipientEmail: true,
+      autoStopOrderingOnLimit: true
+    }
+  });
+
+  if (vendor?.dailyDrinkLimitEnabled) {
+    const dailyUsage = await prisma.vendorDailyUsage.findUnique({
+      where: { vendorId_date: { vendorId, date: today } }
+    });
+
+    const used = dailyUsage?.usedQuantity || 0;
+    const limit = dailyUsage?.dailyLimit ?? vendor.dailyDrinkLimitQuantity;
+    const isClosed = dailyUsage?.orderingClosed || false;
+
+    if (isClosed || used >= limit) {
+      throw new Error('All drinks are sold out for today.');
+    }
+
+    if (used + requestedQuantity > limit) {
+      const remaining = limit - used;
+      throw new Error(`Only ${remaining} drinks left for today. Please update your order quantity to continue.`);
+    }
+  }
+
   // Use guestId as customerId if provided and no customerId from JWT
   const finalCustomerId = customerId || guestId;
   if (!finalCustomerId) throw new Error('Customer identity missing');
@@ -350,8 +385,40 @@ export const createOrder = async (
       };
     });
   };
+
   try {
     result = await createWithDisplayNumber();
+    
+    // Increment daily usage after successful creation
+    if (vendor?.dailyDrinkLimitEnabled) {
+      const dailyUsage = await prisma.vendorDailyUsage.upsert({
+        where: { vendorId_date: { vendorId, date: today } },
+        update: { usedQuantity: { increment: requestedQuantity } },
+        create: {
+          vendorId,
+          date: today,
+          dailyLimit: vendor.dailyDrinkLimitQuantity,
+          usedQuantity: requestedQuantity,
+          orderingClosed: false,
+        },
+      });
+
+      // Check if limit reached and auto-stop
+      if (vendor.autoStopOrderingOnLimit && dailyUsage.usedQuantity >= dailyUsage.dailyLimit) {
+        await prisma.vendorDailyUsage.update({
+          where: { id: dailyUsage.id },
+          data: { orderingClosed: true },
+        });
+        
+        // Trigger report if email is set
+        if (vendor.reportRecipientEmail) {
+          // We'll implement triggerDailyReport below or in a separate service
+          triggerDailyReport(vendorId, today, vendor.reportRecipientEmail).catch(err => 
+            console.error('[order] Failed to send auto-limit report', err)
+          );
+        }
+      }
+    }
   } catch (e: any) {
     const code = String((e as any)?.code || '');
     if (code === 'P2002') {
@@ -696,7 +763,7 @@ export const getCustomerOrders = async (customerId: string) => {
   const orders = await prisma.order.findMany({
     where: { 
       customerId,
-      status: { in: ['PREPARING', 'READY', 'COMPLETED'] }
+      status: { in: ['PREPARING', 'READY'] }
     },
     include: {
       items: { include: { menuItem: true } },
@@ -751,27 +818,15 @@ export const updateOrderStatus = async (orderId: string, userId: string, status:
     throw new Error('Unauthorized');
   }
 
-  if (status === OrderStatus.COMPLETED) {
-    const allReady = Array.isArray(order.items) && order.items.every((it: any) => it.status === 'READY');
-    if (!allReady) {
-      throw new Error('Order cannot be completed because some items are not ready.');
-    }
-  }
-
   const now = new Date();
   const data: Prisma.OrderUpdateInput = { status };
 
   // Only set timestamps if they are null
   if (status === OrderStatus.PREPARING && !order.acceptedAt) (data as any).acceptedAt = now;
   
-  // READY is now the final vendor action, so we treat it as COMPLETED for sales/analytics
+  // READY is now the final vendor action
   if (status === OrderStatus.READY) {
     if (!order.readyAt) (data as any).readyAt = now;
-    if (!order.completedAt) (data as any).completedAt = now;
-    data.paymentStatus = PaymentStatus.PAID;
-  }
-
-  if (status === OrderStatus.COMPLETED) {
     if (!order.completedAt) (data as any).completedAt = now;
     data.paymentStatus = PaymentStatus.PAID;
   }
@@ -1100,50 +1155,7 @@ export const markOrderItemsReady = async (userId: string, orderId: string) => {
   return updatedOrder;
 };
 
-export const cancelOrder = async (orderId: string, customerId: string) => {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-  });
 
-  if (!order) throw new Error('Order not found');
-  if (order.customerId !== customerId) throw new Error('Not authorized to cancel this order');
-  
-  // Only allow cancellation if order is in PREPARING status
-  if (order.status !== OrderStatus.PREPARING) {
-    throw new Error('Order can only be cancelled while preparing');
-  }
-
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: OrderStatus.CANCELLED },
-    include: {
-      items: { include: { menuItem: true } },
-      vendor: { select: { businessName: true } },
-    },
-  });
-
-  await createAuditLog(
-    AuditAction.ORDER_STATUS_CHANGE,
-    orderId,
-    'Order',
-    customerId,
-    { oldStatus: order.status, newStatus: OrderStatus.CANCELLED }
-  );
-
-  const io = getIO();
-  // Notify customer
-  io.to(`user:${order.customerId}`).emit('order_updated', updatedOrder);
-  
-  // Notify vendor
-  io.to(`vendor:${order.vendorId}`).emit('order_updated', updatedOrder);
-  io.to(`vendor:${order.vendorId}`).emit('vendor_orders_changed', {
-    orderId: updatedOrder.id,
-    status: updatedOrder.status,
-    updatedAt: updatedOrder.updatedAt,
-  });
-
-  return updatedOrder;
-};
 
 /**
  * Bulk status update (vendor only)

@@ -20,7 +20,7 @@ interface OrderItem {
 interface Order {
   id: string;
   displayNumber?: string | number | null;
-  status: 'PREPARING' | 'READY' | 'CANCELLED';
+  status: 'PREPARING' | 'READY';
   totalAmount: number;
   createdAt: string;
   acceptedAt?: string | null;

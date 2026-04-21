@@ -7,7 +7,7 @@ const STEPS = ['PREPARING', 'READY'] as const;
 export function OrderStatusStepper({ status }: Props) {
   const normalized = String(status || '').toUpperCase();
   const idx = Math.max(0, STEPS.indexOf(normalized as any));
-  if (normalized === 'COMPLETED' || normalized === 'READY') {
+  if (normalized === 'READY') {
     // If it's already done, just show full progress on READY
     return (
       <div className="w-full">

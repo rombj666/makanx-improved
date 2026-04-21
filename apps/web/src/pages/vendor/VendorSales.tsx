@@ -13,11 +13,15 @@ import { useAuth } from '../../context/AuthContext';
 
 interface Summary {
   orders: number;
+  revenue: number;
 }
 
 interface ProductPerf {
   productName: string;
   qtySold: number;
+  revenue: number;
+  optionBreakdown: Record<string, number>;
+  remarks: string[];
 }
 
 interface ProductTrendPoint {
@@ -33,11 +37,28 @@ interface ProductTrendSeries {
 interface CompletedOrderItem {
   productName: string;
   qty: number;
+  price: number;
+  remark?: string;
+  selectedOptions?: any;
+}
+
+interface VendorSettings {
+  dailyDrinkLimitEnabled: boolean;
+  dailyDrinkLimitQuantity: number;
+  autoStopOrderingOnLimit: boolean;
+  reportRecipientEmail: string | null;
+}
+
+interface DailyUsage {
+  usedQuantity: number;
+  dailyLimit: number;
+  orderingClosed: boolean;
 }
 interface CompletedOrder {
   orderNumber: string;
   createdAt: string;
   completedAt?: string;
+  totalAmount: number;
   items: CompletedOrderItem[];
 }
 
@@ -48,6 +69,9 @@ export function VendorSales() {
   const [productTrend, setProductTrend] = useState<ProductTrendSeries[]>([]);
   const [products, setProducts] = useState<ProductPerf[]>([]);
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
+  const [settings, setSettings] = useState<VendorSettings | null>(null);
+  const [usage, setUsage] = useState<DailyUsage | null>(null);
+  const [updatingSettings, setUpdatingSettings] = useState(false);
 
   const trendChartRef = useRef<HTMLDivElement>(null);
   const topProductsChartRef = useRef<HTMLDivElement>(null);
@@ -60,16 +84,20 @@ export function VendorSales() {
     setLoading(true);
     try {
       const params = { eventId: '', date };
-      const [s, pt, p, o] = await Promise.all([
+      const [s, pt, p, o, sett, usg] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
         api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
         api.get('/analytics/products', { params }),
         api.get('/analytics/vendor/orders', { params }),
+        api.get('/vendor/settings'),
+        api.get('/vendor/daily-usage'),
       ]);
       setSummary(s.data.data);
       setProductTrend(pt.data.data || []);
       setProducts(p.data.data);
       setOrders(o.data.data);
+      setSettings(sett.data.data);
+      setUsage(usg.data.data);
     } catch (e) {
       // silent
     } finally {
@@ -77,9 +105,33 @@ export function VendorSales() {
     }
   };
 
+  const handleUpdateSettings = async (updates: Partial<VendorSettings>) => {
+    setUpdatingSettings(true);
+    try {
+      const res = await api.patch('/vendor/settings', updates);
+      setSettings(res.data.data);
+      toast.success('Settings updated');
+      fetchAll(); // Refresh usage to see updated limit
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to update settings');
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
+
+  const handleToggleOrdering = async (closed: boolean) => {
+    try {
+      const res = await api.post('/vendor/toggle-ordering', { closed });
+      setUsage(res.data.data);
+      toast.success(closed ? 'Ordering closed' : 'Ordering opened');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to update status');
+    }
+  };
+
   const handleExport = async () => {
     if (orders.length === 0) {
-      toast.error('No completed orders to export');
+      toast.error('No orders to export');
       return;
     }
 
@@ -181,7 +233,7 @@ export function VendorSales() {
       // 6. Data Tables
       // Product Performance Table
       worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-      const prodHeader = worksheet.addRow(['Product', 'Quantity Sold']);
+      const prodHeader = worksheet.addRow(['Product', 'Options Breakdown', 'Quantity Sold', 'Revenue']);
       prodHeader.font = { bold: true };
       prodHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -189,30 +241,45 @@ export function VendorSales() {
       });
 
       products.forEach(p => {
+        const optionSummary = Object.entries(p.optionBreakdown)
+          .map(([opt, qty]) => `• ${opt}: ${qty}`)
+          .join('\n');
+        
         const row = worksheet.addRow([
-          p.productName, 
-          p.qtySold
+          p.productName,
+          optionSummary,
+          p.qtySold,
+          p.revenue
         ]);
-        row.getCell(2).alignment = { horizontal: 'right' };
+        row.getCell(2).alignment = { wrapText: true };
+        row.getCell(3).alignment = { horizontal: 'right' };
+        row.getCell(4).alignment = { horizontal: 'right' };
+        row.getCell(4).numFmt = '"RM "#,##0.00';
       });
 
       // Total row for products
+      const totalRevenue = products.reduce((s, p) => s + p.revenue, 0);
+      const totalQty = products.reduce((s, p) => s + p.qtySold, 0);
       const prodTotalRow = worksheet.addRow([
         'Total',
-        productTotals.qty
+        '',
+        totalQty,
+        totalRevenue
       ]);
       prodTotalRow.font = { bold: true };
       prodTotalRow.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
         c.border = { top: { style: 'medium' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
       });
-      prodTotalRow.getCell(2).alignment = { horizontal: 'right' };
+      prodTotalRow.getCell(3).alignment = { horizontal: 'right' };
+      prodTotalRow.getCell(4).alignment = { horizontal: 'right' };
+      prodTotalRow.getCell(4).numFmt = '"RM "#,##0.00';
 
       worksheet.addRow([]);
 
       // Detailed Orders Table
-      worksheet.addRow(['COMPLETED ORDERS DETAILS']).font = { bold: true, size: 14 };
-      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Completed Time', 'Total Quantity', 'Items Summary']);
+      worksheet.addRow(['DETAILED ORDERS']).font = { bold: true, size: 14 };
+      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Total Quantity', 'Items Summary', 'Remarks', 'Total Amount']);
       orderHeader.font = { bold: true };
       orderHeader.eachCell(c => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -221,14 +288,24 @@ export function VendorSales() {
 
       orders.forEach(o => {
         const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
-        const itemsSummary = o.items.map((it) => `${it.qty}x ${it.productName}`).join(', ');
-        worksheet.addRow([
+        const itemsSummary = o.items.map((it) => {
+          const opts = it.selectedOptions?.map((g: any) => g.choices.map((c: any) => c.label).join(', ')).join(' | ');
+          return `${it.qty}x ${it.productName}${opts ? ` (${opts})` : ''}`;
+        }).join('\n');
+        const remarks = o.items.map(it => it.remark).filter(Boolean).join('\n');
+
+        const row = worksheet.addRow([
           o.orderNumber,
-          new Date(o.createdAt).toLocaleTimeString(),
-          o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-',
+          new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           orderQty,
-          itemsSummary
+          itemsSummary,
+          remarks,
+          o.totalAmount
         ]);
+        row.getCell(4).alignment = { wrapText: true };
+        row.getCell(5).alignment = { wrapText: true };
+        row.getCell(6).alignment = { horizontal: 'right' };
+        row.getCell(6).numFmt = '"RM "#,##0.00';
       });
 
       // Styling cleanups
@@ -278,6 +355,101 @@ export function VendorSales() {
     <>
       <div className="block [@media(pointer:coarse)]:hidden p-6 space-y-6">
         <h1 className="text-2xl font-bold">Vendor Sales Analytics</h1>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <CardHeader>
+              <CardTitle>Daily Drink Production Limit</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Enable Limit</span>
+                <Button 
+                  size="sm" 
+                  variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
+                  onClick={() => handleUpdateSettings({ dailyDrinkLimitEnabled: !settings?.dailyDrinkLimitEnabled })}
+                  disabled={updatingSettings}
+                >
+                  {settings?.dailyDrinkLimitEnabled ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+              
+              {settings?.dailyDrinkLimitEnabled && (
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-600">Daily Quantity Limit</label>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="number" 
+                      defaultValue={settings?.dailyDrinkLimitQuantity}
+                      onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
+                      className="w-32"
+                    />
+                    <span className="text-sm self-center text-gray-500">drinks / day</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Auto-Stop Ordering on Limit</span>
+                <Button 
+                  size="sm" 
+                  variant={settings?.autoStopOrderingOnLimit ? "default" : "outline"}
+                  onClick={() => handleUpdateSettings({ autoStopOrderingOnLimit: !settings?.autoStopOrderingOnLimit })}
+                  disabled={updatingSettings}
+                >
+                  {settings?.autoStopOrderingOnLimit ? "ON" : "OFF"}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm text-gray-600">Report Recipient Email</label>
+                <Input 
+                  type="email" 
+                  placeholder="email@example.com"
+                  defaultValue={settings?.reportRecipientEmail || ''}
+                  onBlur={(e) => handleUpdateSettings({ reportRecipientEmail: e.target.value || null })}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <CardHeader>
+              <CardTitle>Ordering Status & Usage</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-500">Current Status</div>
+                  <div className={`text-lg font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
+                    {usage?.orderingClosed ? 'ORDERING CLOSED' : 'ORDERING OPEN'}
+                  </div>
+                </div>
+                <Button 
+                  variant={usage?.orderingClosed ? "default" : "destructive"}
+                  onClick={() => handleToggleOrdering(!usage?.orderingClosed)}
+                >
+                  {usage?.orderingClosed ? 'Open Ordering' : 'Close Ordering'}
+                </Button>
+              </div>
+
+              {settings?.dailyDrinkLimitEnabled && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Daily Usage</span>
+                    <span className="font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className={`h-2.5 rounded-full ${((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) >= 1 ? 'bg-red-600' : 'bg-orange-500'}`}
+                      style={{ width: `${Math.min(100, ((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="flex items-center gap-4">
           <div>
@@ -378,19 +550,34 @@ export function VendorSales() {
                   <tr className="text-left border-b">
                     <th className="p-2">Product</th>
                     <th className="p-2 text-right">Qty Sold</th>
+                    <th className="p-2 text-right">Revenue</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.map((p, idx) => (
                     <tr key={idx} className="border-b">
-                      <td className="p-2">{p.productName}</td>
+                      <td className="p-2">
+                        <div className="font-medium">{p.productName}</div>
+                        {Object.entries(p.optionBreakdown).map(([opt, qty]) => (
+                          <div key={opt} className="text-xs text-gray-500 pl-2">
+                            • {opt}: {qty}
+                          </div>
+                        ))}
+                        {p.remarks.length > 0 && (
+                          <div className="text-xs text-orange-600 pl-2 mt-1 italic">
+                            Remarks: {p.remarks.join(', ')}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-2 text-right">{p.qtySold}</td>
+                      <td className="p-2 text-right">RM {p.revenue.toFixed(2)}</td>
                     </tr>
                   ))}
                   {products.length > 0 && (
                     <tr className="bg-neutral-50 font-bold border-t-2 border-neutral-200">
                       <td className="p-2">Total</td>
                       <td className="p-2 text-right">{productTotals.qty}</td>
+                      <td className="p-2 text-right">RM {products.reduce((s, p) => s + p.revenue, 0).toFixed(2)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -401,7 +588,7 @@ export function VendorSales() {
 
         <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
-            <CardTitle>Completed Orders</CardTitle>
+            <CardTitle>Detailed Orders</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -409,28 +596,37 @@ export function VendorSales() {
                 <tr className="text-left border-b">
                   <th className="p-2">Order</th>
                   <th className="p-2">Created</th>
-                  <th className="p-2">Completed</th>
                   <th className="p-2">Items</th>
+                  <th className="p-2">Remarks</th>
+                  <th className="p-2 text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length === 0 ? (
-                  <tr><td colSpan={4} className="p-6 text-center text-sm text-gray-500">No completed orders.</td></tr>
+                  <tr><td colSpan={5} className="p-6 text-center text-sm text-gray-500">No orders for this date.</td></tr>
                 ) : (
                   orders.map((o, idx) => (
                     <tr key={idx} className="border-b align-top">
-                      <td className="p-2">{o.orderNumber}</td>
-                      <td className="p-2">{new Date(o.createdAt).toLocaleTimeString()}</td>
-                      <td className="p-2">{o.completedAt ? new Date(o.completedAt).toLocaleTimeString() : '-'}</td>
+                      <td className="p-2 font-medium">{o.orderNumber}</td>
+                      <td className="p-2 text-gray-500">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                       <td className="p-2">
                         <ul>
                           {o.items.map((it, i) => (
-                            <li key={i}>
-                              {it.qty}x {it.productName}
+                            <li key={i} className="mb-1">
+                              <span className="font-medium">{it.qty}x</span> {it.productName}
+                              {it.selectedOptions && (
+                                <div className="text-xs text-gray-400">
+                                  {it.selectedOptions.map((g: any) => g.choices.map((c: any) => c.label).join(', ')).join(' | ')}
+                                </div>
+                              )}
                             </li>
                           ))}
                         </ul>
                       </td>
+                      <td className="p-2 text-orange-600 italic">
+                        {o.items.map((it, i) => it.remark ? <div key={i}>• {it.remark}</div> : null)}
+                      </td>
+                      <td className="p-2 text-right font-medium">RM {o.totalAmount.toFixed(2)}</td>
                     </tr>
                   ))
                 )}
@@ -462,6 +658,96 @@ export function VendorSales() {
               Export
             </button>
           </div>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <Card className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Daily Drink Production Limit</div>
+            <div className="mt-3 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Enable Limit</span>
+                <Button 
+                  size="sm" 
+                  variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
+                  onClick={() => handleUpdateSettings({ dailyDrinkLimitEnabled: !settings?.dailyDrinkLimitEnabled })}
+                  disabled={updatingSettings}
+                >
+                  {settings?.dailyDrinkLimitEnabled ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+              
+              {settings?.dailyDrinkLimitEnabled && (
+                <div className="space-y-2">
+                  <label className="text-xs text-neutral-500">Limit Quantity</label>
+                  <div className="flex gap-2">
+                    <Input 
+                      type="number" 
+                      defaultValue={settings?.dailyDrinkLimitQuantity}
+                      onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
+                      className="w-24"
+                    />
+                    <span className="text-xs self-center text-neutral-500">drinks / day</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Auto-Stop</span>
+                <Button 
+                  size="sm" 
+                  variant={settings?.autoStopOrderingOnLimit ? "default" : "outline"}
+                  onClick={() => handleUpdateSettings({ autoStopOrderingOnLimit: !settings?.autoStopOrderingOnLimit })}
+                  disabled={updatingSettings}
+                >
+                  {settings?.autoStopOrderingOnLimit ? "ON" : "OFF"}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-neutral-500">Report Recipient Email</label>
+                <Input 
+                  type="email" 
+                  placeholder="email@example.com"
+                  defaultValue={settings?.reportRecipientEmail || ''}
+                  onBlur={(e) => handleUpdateSettings({ reportRecipientEmail: e.target.value || null })}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Ordering Status & Usage</div>
+            <div className="mt-3 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className={`text-sm font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
+                  {usage?.orderingClosed ? 'ORDERING CLOSED' : 'ORDERING OPEN'}
+                </div>
+                <Button 
+                  size="sm"
+                  variant={usage?.orderingClosed ? "default" : "destructive"}
+                  onClick={() => handleToggleOrdering(!usage?.orderingClosed)}
+                >
+                  {usage?.orderingClosed ? 'Open' : 'Close'}
+                </Button>
+              </div>
+
+              {settings?.dailyDrinkLimitEnabled && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-neutral-500">Daily Usage</span>
+                    <span className="font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
+                  </div>
+                  <div className="w-full bg-neutral-100 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full ${((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) >= 1 ? 'bg-red-600' : 'bg-orange-500'}`}
+                      style={{ width: `${Math.min(100, ((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
         <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">

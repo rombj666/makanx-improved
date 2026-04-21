@@ -6,9 +6,7 @@ export enum Role {
 
 export enum OrderStatus {
   PREPARING = 'PREPARING',
-  READY = 'READY',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED'
+  READY = 'READY'
 }
 
 export interface User {

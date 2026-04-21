@@ -319,7 +319,7 @@ export function OrderConfirmationPage() {
     if (!orderId) return;
     if (isConnected) return;
     if (!eventSlug) return;
-    if (status === 'COMPLETED') return;
+    if (status === 'READY') return;
     const interval = setInterval(async () => {
       try {
         const { data } = await api.get(`/orders/${orderId}`);
@@ -368,25 +368,18 @@ export function OrderConfirmationPage() {
 
               <div
                 className={`mt-5 rounded-3xl p-6 shadow-xl border ${
-                  status === 'READY' || status === 'COMPLETED'
+                  status === 'READY'
                     ? 'bg-black border-black text-white'
                     : 'bg-white border-neutral-200 text-black'
                 }`}
               >
-                {status === 'READY' || status === 'COMPLETED' ? (
+                {status === 'READY' ? (
                   <>
                     <div className="text-[28px] leading-tight font-extrabold tracking-tight">
                       READY FOR PICKUP
                     </div>
                     <div className="mt-3 text-base font-semibold text-white/90">
                       Please collect at the booth now
-                    </div>
-                  </>
-                ) : status === 'CANCELLED' ? (
-                  <>
-                    <div className="text-[26px] leading-tight font-extrabold tracking-tight text-red-600">CANCELLED</div>
-                    <div className="mt-3 text-base text-neutral-700">
-                      Your order has been cancelled.
                     </div>
                   </>
                 ) : (

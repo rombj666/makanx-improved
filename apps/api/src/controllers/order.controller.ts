@@ -142,20 +142,6 @@ export const updateStatus = async (req: Request, res: Response) => {
   }
 };
 
-export const cancelOrder = async (req: Request, res: Response) => {
-  try {
-    // Only customer who owns the order (or guestId) can cancel
-    const customerId = req.user?.userId || (req.body.guestId as string);
-    if (!customerId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const result = await orderService.cancelOrder(req.params.id, customerId);
-    return res.status(200).json({ success: true, data: result });
-  } catch (error: any) {
-    console.error('[order] cancel failed', { orderId: req.params.id, message: error.message });
-    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
-  }
-};
-
 export const bulkStatusUpdate = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });

@@ -57,10 +57,31 @@ model VendorProfile {
   category     String?
   phoneNumber  String?
   priceRange   String?
+  dailyDrinkLimitEnabled Boolean @default(false)
+  dailyDrinkLimitQuantity Int    @default(0)
+  autoStopOrderingOnLimit Boolean @default(true)
+  reportRecipientEmail String?
   booths       Booth[]
   menuItems    MenuItem[]
   orders       Order[]    @relation("VendorOrders")
+  dailyUsages  VendorDailyUsage[]
   user         User       @relation(fields: [userId], references: [id])
+}
+
+model VendorDailyUsage {
+  id             String        @id @default(uuid())
+  vendorId       String
+  date           String        // format: YYYY-MM-DD
+  dailyLimit     Int
+  usedQuantity   Int           @default(0)
+  orderingClosed Boolean       @default(false)
+  reportSentAt   DateTime?
+  reportSentTo   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  vendor         VendorProfile @relation(fields: [vendorId], references: [id])
+
+  @@unique([vendorId, date])
 }
 
 model VendorApplication {
@@ -198,8 +219,6 @@ enum Role {
 enum OrderStatus {
   PREPARING
   READY
-  COMPLETED
-  CANCELLED
 }
 
 enum OrderItemStatus {

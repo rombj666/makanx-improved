@@ -19,7 +19,7 @@ export const organizerDailySummary = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
         vendor: {
           booths: { some: { eventId } },
@@ -47,7 +47,7 @@ export const organizerVendorRevenue = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -91,7 +91,7 @@ export const organizerProductPerformance = async (req: Request, res: Response) =
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: { in: ['READY', 'COMPLETED'] },
+          status: 'READY',
           createdAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -148,7 +148,7 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -182,7 +182,7 @@ export const vendorSalesSummary = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
       },
       select: { totalAmount: true },
@@ -211,7 +211,7 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
       where: {
         order: {
           vendorId: vendor.id,
-          status: { in: ['READY', 'COMPLETED'] },
+          status: 'READY',
           createdAt: { gte: start, lte: end },
         },
       },
@@ -220,11 +220,21 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
         quantity: true, 
         price: true, 
         selectedOptions: true,
+        remark: true,
         menuItem: { select: { name: true } } 
       },
     });
 
-    const byProduct: Record<string, { productName: string; qtySold: number; revenue: number; price: number; totalBaseAmount: number }> = {};
+    const byProduct: Record<string, { 
+      productName: string; 
+      qtySold: number; 
+      revenue: number; 
+      price: number; 
+      totalBaseAmount: number;
+      optionBreakdown: Record<string, number>;
+      remarks: string[];
+    }> = {};
+
     for (const it of items) {
       const id = it.menuItemId;
       const unitPrice = Number(it.price);
@@ -232,7 +242,14 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
       // Calculate total options price delta
       let optionsPriceDelta = 0;
       const selectedOptions = (it.selectedOptions as any) || [];
+      let optionString = '';
+
       if (Array.isArray(selectedOptions)) {
+        optionString = selectedOptions.map((g: any) => {
+          const choices = g.choices.map((c: any) => c.label).join(', ');
+          return `${g.title}: ${choices}`;
+        }).join(' | ');
+
         selectedOptions.forEach((opt: any) => {
           if (Array.isArray(opt.choices)) {
             opt.choices.forEach((c: any) => {
@@ -251,12 +268,21 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
           qtySold: 0, 
           revenue: 0, 
           price: unitPrice,
-          totalBaseAmount: 0
+          totalBaseAmount: 0,
+          optionBreakdown: {},
+          remarks: []
         };
       }
       byProduct[id].qtySold += it.quantity;
       byProduct[id].revenue += totalItemRevenue;
       byProduct[id].totalBaseAmount += totalItemBaseAmount;
+      
+      if (optionString) {
+        byProduct[id].optionBreakdown[optionString] = (byProduct[id].optionBreakdown[optionString] || 0) + it.quantity;
+      }
+      if (it.remark) {
+        byProduct[id].remarks.push(it.remark);
+      }
     }
     const data = Object.values(byProduct);
     res.json({ success: true, data });
@@ -278,7 +304,7 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
       },
       select: { createdAt: true, totalAmount: true },
@@ -311,7 +337,7 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: { in: ['READY', 'COMPLETED'] },
+        status: 'READY',
         createdAt: { gte: start, lte: end },
       },
       include: {
@@ -331,6 +357,8 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
         productName: it.menuItem?.name || 'Unknown',
         qty: it.quantity,
         price: Number(it.price),
+        remark: it.remark,
+        selectedOptions: it.selectedOptions,
       })),
     }));
 
@@ -351,7 +379,7 @@ export const organizerProductTrend = async (req: Request, res: Response) => {
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: { in: ['READY', 'COMPLETED'] },
+          status: 'READY',
           completedAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -419,7 +447,7 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
       where: {
         order: {
           vendorId: vendor.id,
-          status: { in: ['READY', 'COMPLETED'] },
+          status: 'READY',
           completedAt: { gte: start, lte: end },
         },
       },
