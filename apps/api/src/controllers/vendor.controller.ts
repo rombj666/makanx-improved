@@ -65,7 +65,7 @@ export const updateSettings = async (req: Request, res: Response) => {
     return res.json({ success: true, data: vendor });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
     }
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -129,7 +129,7 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
     return res.json({ success: true, data: usage });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: error.errors });
+      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
     }
     return res.status(500).json({ success: false, error: error.message });
   }
