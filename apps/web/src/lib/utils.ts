@@ -46,3 +46,29 @@ export function computeDisplayNumber(order: any): string {
   const id = order?.id || order?.orderId || '';
   return id ? String(id).slice(-4).toUpperCase() : '----';
 }
+
+export function getApiErrorMessage(err: any): string {
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  if (data?.message && typeof data.message === "string") return data.message;
+
+  if (data?.error && typeof data.error === "string") return data.error;
+
+  if (Array.isArray(data?.errors)) {
+    return data.errors
+      .map((e: any) => e?.message)
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (Array.isArray(data?.issues)) {
+    return data.issues
+      .map((e: any) => e?.message)
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return "Something went wrong. Please try again.";
+}

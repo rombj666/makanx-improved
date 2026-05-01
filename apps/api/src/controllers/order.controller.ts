@@ -19,8 +19,21 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ success: false, error: error.issues });
+      return res.status(400).json({ 
+        success: false, 
+        error: error.issues.map((e) => e.message).join(', ') 
+      });
     }
+    
+    if (error.code === 'PRODUCTION_LIMIT_EXCEEDED') {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+        remainingCups: error.remainingCups
+      });
+    }
+    
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };

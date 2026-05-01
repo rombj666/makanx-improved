@@ -223,12 +223,18 @@ export const createOrder = async (
     const isClosed = dailyUsage?.orderingClosed || false;
 
     if (isClosed || used >= limit) {
-      throw new Error('All drinks are sold out for today.');
+      const error = new Error('This vendor is sold out for today.');
+      (error as any).code = 'PRODUCTION_LIMIT_EXCEEDED';
+      (error as any).remainingCups = 0;
+      throw error;
     }
 
     if (used + requestedQuantity > limit) {
       const remaining = limit - used;
-      throw new Error(`Only ${remaining} drinks left for today. Please update your order quantity to continue.`);
+      const error = new Error(`Only ${remaining} cups remaining today. Please reduce your quantity.`);
+      (error as any).code = 'PRODUCTION_LIMIT_EXCEEDED';
+      (error as any).remainingCups = remaining;
+      throw error;
     }
   }
 
