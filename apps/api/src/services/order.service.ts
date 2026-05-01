@@ -154,10 +154,10 @@ async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
  * - Returns { order, estimatedMinutes }
  */
 const createOrderSchema = z.object({
-  vendorId: z.string().uuid(),
+  vendorId: z.string().min(1, "Vendor ID is required"),
   items: z.array(
     z.object({
-      menuItemId: z.string().uuid(),
+      menuItemId: z.string().min(1, "Menu item ID is required"),
       quantity: z.number().min(1).max(99),
       remark: z.string().max(500).optional(),
       selectedOptions: z
