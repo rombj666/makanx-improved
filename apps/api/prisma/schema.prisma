@@ -50,29 +50,29 @@ model Event {
 }
 
 model VendorProfile {
-  id           String     @id @default(uuid())
-  userId       String     @unique
-  businessName String
-  description  String?
-  category     String?
-  phoneNumber  String?
-  priceRange   String?
-  dailyDrinkLimitEnabled Boolean @default(false)
-  dailyDrinkLimitQuantity Int    @default(0)
-  autoStopOrderingOnLimit Boolean @default(true)
-  reportRecipientEmail String?
-  reportRecipientEmails Json?
-  booths       Booth[]
-  menuItems    MenuItem[]
-  orders       Order[]    @relation("VendorOrders")
-  dailyUsages  VendorDailyUsage[]
-  user         User       @relation(fields: [userId], references: [id])
+  id                      String             @id @default(uuid())
+  userId                  String             @unique
+  businessName            String
+  description             String?
+  category                String?
+  phoneNumber             String?
+  priceRange              String?
+  dailyDrinkLimitEnabled  Boolean            @default(false)
+  dailyDrinkLimitQuantity Int                @default(0)
+  autoStopOrderingOnLimit Boolean            @default(true)
+  reportRecipientEmail    String?
+  reportRecipientEmails   Json?
+  booths                  Booth[]
+  menuItems               MenuItem[]
+  orders                  Order[]            @relation("VendorOrders")
+  dailyUsages             VendorDailyUsage[]
+  user                    User               @relation(fields: [userId], references: [id])
 }
 
 model VendorDailyUsage {
   id             String        @id @default(uuid())
   vendorId       String
-  date           String        // format: YYYY-MM-DD
+  date           String
   dailyLimit     Int
   usedQuantity   Int           @default(0)
   orderingClosed Boolean       @default(false)
@@ -107,35 +107,35 @@ model VendorApplication {
 }
 
 model Booth {
-  id       String         @id @default(uuid())
-  eventId  String
-  vendorId String?
-  name     String
-  status   String
-  x        Float          @default(0)
-  y        Float          @default(0)
-  width    Float          @default(10)
-  height   Float          @default(10)
-  showPrices Boolean      @default(true)
-  event    Event          @relation(fields: [eventId], references: [id])
-  vendor   VendorProfile? @relation(fields: [vendorId], references: [id])
+  id         String         @id @default(uuid())
+  eventId    String
+  vendorId   String?
+  name       String
+  status     String
+  x          Float          @default(0)
+  y          Float          @default(0)
+  width      Float          @default(10)
+  height     Float          @default(10)
+  showPrices Boolean        @default(true)
+  event      Event          @relation(fields: [eventId], references: [id])
+  vendor     VendorProfile? @relation(fields: [vendorId], references: [id])
 }
 
 model MenuItem {
-  id          String        @id @default(uuid())
-  vendorId    String
-  name        String
-  description String?
-  price       Decimal
-  imageUrl    String?
-  isAvailable Boolean       @default(true)
-  optionGroups Json?
-  remarksEnabled Boolean    @default(true)
-  displayOrder Int          @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  vendor      VendorProfile @relation(fields: [vendorId], references: [id])
-  orderItems  OrderItem[]
+  id             String        @id @default(uuid())
+  vendorId       String
+  name           String
+  description    String?
+  price          Decimal
+  imageUrl       String?
+  isAvailable    Boolean       @default(true)
+  optionGroups   Json?
+  remarksEnabled Boolean       @default(true)
+  displayOrder   Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  vendor         VendorProfile @relation(fields: [vendorId], references: [id])
+  orderItems     OrderItem[]
 
   @@index([vendorId, displayOrder])
 }
@@ -165,16 +165,16 @@ model Order {
 }
 
 model OrderItem {
-  id         String   @id @default(uuid())
-  orderId    String
-  menuItemId String
-  quantity   Int
-  price      Decimal
-  remark     String?
+  id              String          @id @default(uuid())
+  orderId         String
+  menuItemId      String
+  quantity        Int
+  price           Decimal
+  remark          String?
   selectedOptions Json?
-  status     OrderItemStatus @default(PREPARING)
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
-  order      Order    @relation(fields: [orderId], references: [id])
+  status          OrderItemStatus @default(PREPARING)
+  menuItem        MenuItem        @relation(fields: [menuItemId], references: [id])
+  order           Order           @relation(fields: [orderId], references: [id])
 }
 
 model PushSubscription {

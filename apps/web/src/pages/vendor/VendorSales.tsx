@@ -109,6 +109,11 @@ export function VendorSales() {
   const handleUpdateSettings = async (updates: Partial<VendorSettings>) => {
     setUpdatingSettings(true);
     try {
+      if (updates.reportRecipientEmails) {
+        console.log("Saving reportRecipientEmails", updates.reportRecipientEmails);
+        // Ensure backward compatibility: send the first email as reportRecipientEmail too
+        updates.reportRecipientEmail = updates.reportRecipientEmails[0] ?? "";
+      }
       const res = await api.patch('/vendor/settings', updates);
       setSettings(res.data.data);
       toast.success('Settings updated');
@@ -257,13 +262,41 @@ export function VendorSales() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm text-gray-600">Report Recipient Email</label>
-                <Input 
-                  type="email" 
-                  placeholder="email@example.com"
-                  defaultValue={settings?.reportRecipientEmail || ''}
-                  onBlur={(e) => handleUpdateSettings({ reportRecipientEmail: e.target.value || null })}
-                />
+                <label className="text-sm font-semibold text-gray-600">Report Recipients</label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="email" 
+                    placeholder="Enter report email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddEmail()}
+                    className="flex-1"
+                  />
+                  <Button size="sm" onClick={handleAddEmail} type="button">
+                    <Plus className="w-4 h-4 mr-1" /> Add
+                  </Button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(settings?.reportRecipientEmails || []).length === 0 && (
+                    <div className="text-xs text-gray-400 italic">No emails added</div>
+                  )}
+                  {(settings?.reportRecipientEmails || []).map((email) => (
+                    <div 
+                      key={email} 
+                      className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full text-xs text-gray-700 border border-gray-200"
+                    >
+                      <Mail className="w-3 h-3" />
+                      {email}
+                      <button 
+                        onClick={() => handleRemoveEmail(email)}
+                        className="ml-1 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
