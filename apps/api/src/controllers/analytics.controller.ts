@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Role } from '@makanx/shared';
 import prisma from '../utils/prisma';
+import { generateVendorSalesExcel } from '../services/excel.service';
 
 const parseDateRange = (dateStr?: string) => {
   let date = dateStr ? new Date(dateStr) : new Date();
@@ -429,6 +430,45 @@ export const organizerProductTrend = async (req: Request, res: Response) => {
     }));
 
     res.json({ success: true, data: response });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const vendorExportReport = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId!;
+    const date = String(req.query.date || '');
+    const { start, end } = parseDateRange(date);
+
+    const vendor = await prisma.vendorProfile.findUnique({
+      where: { userId },
+      select: { id: true, businessName: true }
+    });
+
+    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
+
+    const orders = await prisma.order.findMany({
+      where: {
+        vendorId: vendor.id,
+        createdAt: { gte: start, lte: end },
+        status: 'READY'
+      },
+      include: {
+        items: {
+          include: { menuItem: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const buffer = await generateVendorSalesExcel(vendor.businessName, date, orders);
+    
+    const fileName = `vendor-sales-report-${vendor.businessName.toLowerCase().replace(/\s+/g, '-')}-${date}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    res.send(buffer);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -6,10 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { toPng } from 'html-to-image';
 import { useAuth } from '../../context/AuthContext';
+import { Mail, Plus, X } from 'lucide-react';
 
 interface Summary {
   orders: number;
@@ -47,6 +46,7 @@ interface VendorSettings {
   dailyDrinkLimitQuantity: number;
   autoStopOrderingOnLimit: boolean;
   reportRecipientEmail: string | null;
+  reportRecipientEmails: string[];
 }
 
 interface DailyUsage {
@@ -72,6 +72,7 @@ export function VendorSales() {
   const [settings, setSettings] = useState<VendorSettings | null>(null);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
 
   const trendChartRef = useRef<HTMLDivElement>(null);
   const topProductsChartRef = useRef<HTMLDivElement>(null);
@@ -129,6 +130,30 @@ export function VendorSales() {
     }
   };
 
+  const handleAddEmail = () => {
+    if (!newEmail) return;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      toast.error('Invalid email format');
+      return;
+    }
+    
+    const currentEmails = settings?.reportRecipientEmails || [];
+    if (currentEmails.includes(newEmail.toLowerCase())) {
+      toast.error('Email already added');
+      return;
+    }
+    
+    const updatedEmails = [...currentEmails, newEmail.toLowerCase()];
+    handleUpdateSettings({ reportRecipientEmails: updatedEmails });
+    setNewEmail('');
+  };
+
+  const handleRemoveEmail = (emailToRemove: string) => {
+    const updatedEmails = (settings?.reportRecipientEmails || []).filter(e => e !== emailToRemove);
+    handleUpdateSettings({ reportRecipientEmails: updatedEmails });
+  };
+
   const handleExport = async () => {
     if (orders.length === 0) {
       toast.error('No orders to export');
@@ -137,186 +162,16 @@ export function VendorSales() {
 
     const toastId = toast.loading('Generating professional report...');
     try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Sales Report');
-
-      // 1. Column Configuration
-      worksheet.columns = [
-        { header: 'A', key: 'a', width: 20 },
-        { header: 'B', key: 'b', width: 20 },
-        { header: 'C', key: 'c', width: 15 },
-        { header: 'D', key: 'd', width: 25 },
-        { header: 'E', key: 'e', width: 45 },
-      ];
-
-      // 2. Report Header
-      const titleCell = worksheet.getCell('A1');
-      titleCell.value = 'Vendor Sales Analytics Report';
-      titleCell.font = { name: 'Arial', size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
-      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-      worksheet.mergeCells('A1:F2');
-
-      // 3. Metadata Section
-      worksheet.addRow([]);
-      const metaStart = worksheet.lastRow!.number + 1;
-      worksheet.addRow(['Vendor Name:', user?.vendorProfile?.businessName || 'N/A']);
-      worksheet.addRow(['Report Date:', date]);
-      worksheet.addRow(['Generated At:', format(new Date(), 'yyyy-MM-dd HH:mm:ss')]);
+      const response = await api.get('/analytics/vendor/export', {
+        params: { date },
+        responseType: 'blob'
+      });
       
-      for (let i = metaStart; i < metaStart + 3; i++) {
-        worksheet.getCell(`A${i}`).font = { bold: true };
-      }
-
-      // 4. KPI Summary Section
-      worksheet.addRow([]);
-      worksheet.addRow(['KPI SUMMARY']).font = { bold: true, size: 14 };
-      const kpiHeaderRow = worksheet.addRow(['Total Orders']);
-      kpiHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      kpiHeaderRow.eachCell(c => {
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF444444' } };
-        c.alignment = { horizontal: 'center' };
-      });
-
-      const kpiValueRow = worksheet.addRow([
-        summary?.orders ?? 0
-      ]);
-      kpiValueRow.alignment = { horizontal: 'center' };
-      kpiValueRow.font = { size: 12 };
-
-      // 5. Chart Capture and Embedding
-      worksheet.addRow([]);
-      worksheet.addRow([]);
-      const chartRow = worksheet.lastRow!.number + 1;
-      
-      // Capture charts
-      let trendImageId, topProductsImageId;
-      
-      if (trendChartRef.current) {
-        const trendDataUrl = await toPng(trendChartRef.current, { backgroundColor: '#ffffff' });
-        trendImageId = workbook.addImage({
-          base64: trendDataUrl,
-          extension: 'png',
-        });
-      }
-
-      if (topProductsChartRef.current) {
-        const topProductsDataUrl = await toPng(topProductsChartRef.current, { backgroundColor: '#ffffff' });
-        topProductsImageId = workbook.addImage({
-          base64: topProductsDataUrl,
-          extension: 'png',
-        });
-      }
-
-      // Position charts
-      if (trendImageId !== undefined) {
-        worksheet.getCell(`A${chartRow}`).value = 'Product Trend Analysis';
-        worksheet.getCell(`A${chartRow}`).font = { bold: true, size: 12 };
-        worksheet.addImage(trendImageId, {
-          tl: { col: 0.2, row: chartRow + 1 },
-          ext: { width: 550, height: 300 }
-        });
-      }
-
-      if (topProductsImageId !== undefined) {
-        worksheet.getCell(`E${chartRow}`).value = 'Top Products Distribution';
-        worksheet.getCell(`E${chartRow}`).font = { bold: true, size: 12 };
-        worksheet.addImage(topProductsImageId, {
-          tl: { col: 4.2, row: chartRow + 1 },
-          ext: { width: 350, height: 300 }
-        });
-      }
-
-      // Skip rows for charts
-      for (let i = 0; i < 18; i++) worksheet.addRow([]);
-
-      // 6. Data Tables
-      // Product Performance Table
-      worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-      const prodHeader = worksheet.addRow(['Product', 'Options Breakdown', 'Quantity Sold', 'Revenue']);
-      prodHeader.font = { bold: true };
-      prodHeader.eachCell(c => {
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-        c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-      });
-
-      products.forEach(p => {
-        const optionSummary = Object.entries(p.optionBreakdown)
-          .map(([opt, qty]) => `• ${opt}: ${qty}`)
-          .join('\n');
-        
-        const row = worksheet.addRow([
-          p.productName,
-          optionSummary,
-          p.qtySold,
-          p.revenue
-        ]);
-        row.getCell(2).alignment = { wrapText: true };
-        row.getCell(3).alignment = { horizontal: 'right' };
-        row.getCell(4).alignment = { horizontal: 'right' };
-        row.getCell(4).numFmt = '"RM "#,##0.00';
-      });
-
-      // Total row for products
-      const totalRevenue = products.reduce((s, p) => s + p.revenue, 0);
-      const totalQty = products.reduce((s, p) => s + p.qtySold, 0);
-      const prodTotalRow = worksheet.addRow([
-        'Total',
-        '',
-        totalQty,
-        totalRevenue
-      ]);
-      prodTotalRow.font = { bold: true };
-      prodTotalRow.eachCell(c => {
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
-        c.border = { top: { style: 'medium' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-      });
-      prodTotalRow.getCell(3).alignment = { horizontal: 'right' };
-      prodTotalRow.getCell(4).alignment = { horizontal: 'right' };
-      prodTotalRow.getCell(4).numFmt = '"RM "#,##0.00';
-
-      worksheet.addRow([]);
-
-      // Detailed Orders Table
-      worksheet.addRow(['DETAILED ORDERS']).font = { bold: true, size: 14 };
-      const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Total Quantity', 'Items Summary', 'Remarks', 'Total Amount']);
-      orderHeader.font = { bold: true };
-      orderHeader.eachCell(c => {
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-        c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-      });
-
-      orders.forEach(o => {
-        const orderQty = o.items.reduce((s, it) => s + it.qty, 0);
-        const itemsSummary = o.items.map((it) => {
-          const opts = it.selectedOptions?.map((g: any) => g.choices.map((c: any) => c.label).join(', ')).join(' | ');
-          return `${it.qty}x ${it.productName}${opts ? ` (${opts})` : ''}`;
-        }).join('\n');
-        const remarks = o.items.map(it => it.remark).filter(Boolean).join('\n');
-
-        const row = worksheet.addRow([
-          o.orderNumber,
-          new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          orderQty,
-          itemsSummary,
-          remarks,
-          o.totalAmount
-        ]);
-        row.getCell(4).alignment = { wrapText: true };
-        row.getCell(5).alignment = { wrapText: true };
-        row.getCell(6).alignment = { horizontal: 'right' };
-        row.getCell(6).numFmt = '"RM "#,##0.00';
-      });
-
-      // Styling cleanups
-      worksheet.views = [{ state: 'frozen', ySplit: 2 }];
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      saveAs(new Blob([buffer]), `vendor-sales-report-${date}.xlsx`);
-      toast.success('Report exported successfully!', { id: toastId });
-    } catch (err) {
-      console.error('Export error:', err);
-      toast.error('Failed to export report.', { id: toastId });
+      const fileName = `vendor-sales-report-${user?.vendorProfile?.businessName?.toLowerCase().replace(/\s+/g, '-') || 'report'}-${date}.xlsx`;
+      saveAs(response.data, fileName);
+      toast.success('Report generated', { id: toastId });
+    } catch (e: any) {
+      toast.error('Failed to generate report', { id: toastId });
     }
   };
 
@@ -704,14 +559,41 @@ export function VendorSales() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-neutral-500">Report Recipient Email</label>
-                <Input 
-                  type="email" 
-                  placeholder="email@example.com"
-                  defaultValue={settings?.reportRecipientEmail || ''}
-                  onBlur={(e) => handleUpdateSettings({ reportRecipientEmail: e.target.value || null })}
-                  className="w-full"
-                />
+                <div className="text-xs font-semibold text-neutral-500">Report Recipients</div>
+                <div className="flex gap-2">
+                  <Input 
+                    type="email" 
+                    placeholder="Enter report email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddEmail()}
+                    className="flex-1"
+                  />
+                  <Button size="sm" onClick={handleAddEmail} type="button">
+                    <Plus className="w-4 h-4 mr-1" /> Add
+                  </Button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(settings?.reportRecipientEmails || []).length === 0 && (
+                    <div className="text-xs text-neutral-400 italic">No emails added</div>
+                  )}
+                  {(settings?.reportRecipientEmails || []).map((email) => (
+                    <div 
+                      key={email} 
+                      className="flex items-center gap-1 bg-neutral-100 px-2 py-1 rounded-full text-xs text-neutral-700 border border-neutral-200"
+                    >
+                      <Mail className="w-3 h-3" />
+                      {email}
+                      <button 
+                        onClick={() => handleRemoveEmail(email)}
+                        className="ml-1 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </Card>
@@ -848,8 +730,8 @@ export function VendorSales() {
                     <div>
                       <div className="text-sm font-semibold text-black">{o.orderNumber}</div>
                       <div className="text-xs text-neutral-500">
-                        Created {new Date(o.createdAt).toLocaleTimeString()}
-                        {o.completedAt ? ` • Completed ${new Date(o.completedAt).toLocaleTimeString()}` : ''}
+                        Created {format(new Date(o.createdAt), 'HH:mm')}
+                        {o.completedAt ? ` • Completed ${format(new Date(o.completedAt), 'HH:mm')}` : ''}     
                       </div>
                     </div>
                   </div>

@@ -1,9 +1,14 @@
 export type SendEmailInput = {
-  to: string;
+  to: string | string[];
   subject: string;
   html?: string;
   text?: string;
   templateData?: Record<string, any>;
+  attachments?: {
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }[];
 };
 
 export type SendEmailResult =

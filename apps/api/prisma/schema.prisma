@@ -61,6 +61,7 @@ model VendorProfile {
   dailyDrinkLimitQuantity Int    @default(0)
   autoStopOrderingOnLimit Boolean @default(true)
   reportRecipientEmail String?
+  reportRecipientEmails Json?
   booths       Booth[]
   menuItems    MenuItem[]
   orders       Order[]    @relation("VendorOrders")

@@ -209,6 +209,7 @@ export const createOrder = async (
       dailyDrinkLimitEnabled: true, 
       dailyDrinkLimitQuantity: true,
       reportRecipientEmail: true,
+      reportRecipientEmails: true,
       autoStopOrderingOnLimit: true
     }
   });
@@ -417,9 +418,9 @@ export const createOrder = async (
         });
         
         // Trigger report if email is set
-        if (vendor.reportRecipientEmail) {
+        if (vendor.reportRecipientEmail || (vendor.reportRecipientEmails && Array.isArray(vendor.reportRecipientEmails) && vendor.reportRecipientEmails.length > 0)) {
           // We'll implement triggerDailyReport below or in a separate service
-          triggerDailyReport(vendorId, today, vendor.reportRecipientEmail).catch(err => 
+          triggerDailyReport(vendorId, today).catch(err => 
             console.error('[order] Failed to send auto-limit report', err)
           );
         }

@@ -82,4 +82,11 @@ router.get(
   analyticsController.vendorCompletedOrders
 );
 
+router.get(
+  '/vendor/export',
+  requireAuth,
+  requireRole([Role.VENDOR]),
+  analyticsController.vendorExportReport
+);
+
 export default router;

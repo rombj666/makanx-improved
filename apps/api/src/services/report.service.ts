@@ -1,7 +1,29 @@
 import prisma from '../utils/prisma';
 import { sendEmail } from './email/email.service';
+import { generateVendorSalesExcel } from './excel.service';
 
-export async function triggerDailyReport(vendorId: string, date: string, recipientEmail: string) {
+function normalizeReportRecipients(vendor: { 
+  reportRecipientEmail?: string | null; 
+  reportRecipientEmails?: unknown; 
+}): string[] { 
+  const recipients: string[] = []; 
+
+  if (Array.isArray(vendor.reportRecipientEmails)) { 
+    for (const email of vendor.reportRecipientEmails) { 
+      if (typeof email === "string" && email.trim()) { 
+        recipients.push(email.trim()); 
+      } 
+    } 
+  } 
+
+  if (vendor.reportRecipientEmail && vendor.reportRecipientEmail.trim()) { 
+    recipients.push(vendor.reportRecipientEmail.trim()); 
+  } 
+
+  return Array.from(new Set(recipients)); 
+} 
+
+export async function triggerDailyReport(vendorId: string, date: string, recipientEmails?: string | string[]) {
   try {
     const vendor = await prisma.vendorProfile.findUnique({
       where: { id: vendorId },
@@ -9,6 +31,23 @@ export async function triggerDailyReport(vendorId: string, date: string, recipie
     });
 
     if (!vendor) throw new Error('Vendor not found');
+
+    // Combine recipients
+    let emails: string[] = normalizeReportRecipients(vendor);
+    
+    // 1. From argument
+    if (recipientEmails) {
+      if (Array.isArray(recipientEmails)) emails.push(...recipientEmails);
+      else emails.push(recipientEmails);
+    }
+    
+    // Deduplicate and filter
+    emails = Array.from(new Set(emails.map(e => e.trim().toLowerCase()))).filter(Boolean);
+
+    if (emails.length === 0) {
+      console.warn(`[ReportService] No recipient emails found for vendor ${vendorId} (${vendor.businessName}). Skipping report.`);
+      return;
+    }
 
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
@@ -30,23 +69,38 @@ export async function triggerDailyReport(vendorId: string, date: string, recipie
     });
 
     const reportHtml = generateReportHtml(vendor.businessName, date, orders);
+    const excelBuffer = await generateVendorSalesExcel(vendor.businessName, date, orders);
     
+    const fileName = `daily-production-report-${vendor.businessName.toLowerCase().replace(/\s+/g, '-')}-${date}.xlsx`;
+
     await sendEmail({
-      to: recipientEmail,
+      to: emails,
       subject: `Daily Production Report - ${vendor.businessName} - ${date}`,
-      html: reportHtml
+      html: reportHtml,
+      attachments: [
+        {
+          filename: fileName,
+          content: excelBuffer,
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+      ]
     });
 
     // Update report status in usage record
-    await prisma.vendorDailyUsage.update({
-      where: { vendorId_date: { vendorId, date } },
-      data: {
-        reportSentAt: new Date(),
-        reportSentTo: recipientEmail
-      }
-    });
+    try {
+      await prisma.vendorDailyUsage.update({
+        where: { vendorId_date: { vendorId, date } },
+        data: {
+          reportSentAt: new Date(),
+          reportSentTo: emails.join(', ')
+        }
+      });
+    } catch (e) {
+      // If record doesn't exist, ignore (maybe no usage yet)
+      console.warn(`[ReportService] Could not update usage record for ${vendorId} on ${date}:`, e);
+    }
 
-    console.log(`[ReportService] Daily report sent for vendor ${vendorId} on ${date}`);
+    console.log(`[ReportService] Daily report sent to ${emails.length} recipients for vendor ${vendorId} on ${date}`);
   } catch (error) {
     console.error('[ReportService] Error generating daily report:', error);
     throw error;
@@ -87,8 +141,8 @@ function generateReportHtml(businessName: string, date: string, orders: any[]) {
   let html = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333;">
       <h1 style="color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px;">Daily Production Report</h1>
-      <p><strong>Vendor:</strong> ${businessName}</p>
-      <p><strong>Date:</strong> ${date}</p>
+      <p>Hi,</p>
+      <p>Attached is the daily production report for <strong>${businessName}</strong> on <strong>${date}</strong>.</p>
       
       <div style="display: flex; gap: 20px; margin: 20px 0;">
         <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; flex: 1; text-align: center;">
@@ -105,64 +159,7 @@ function generateReportHtml(businessName: string, date: string, orders: any[]) {
         </div>
       </div>
 
-      <h2 style="font-size: 18px; margin-top: 30px; border-left: 4px solid #ff6b00; padding-left: 10px;">Product Breakdown</h2>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-        <thead>
-          <tr style="background: #eee; text-align: left;">
-            <th style="padding: 10px; border: 1px solid #ddd;">Product</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Qty</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Base Revenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Object.entries(productBreakdown).map(([name, data]) => `
-            <tr>
-              <td style="padding: 10px; border: 1px solid #ddd;">
-                <strong>${name}</strong>
-                <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                  ${Object.entries(data.options).map(([opt, qty]) => `• ${opt}: ${qty}`).join('<br>')}
-                </div>
-              </td>
-              <td style="padding: 10px; border: 1px solid #ddd;">${data.qty}</td>
-              <td style="padding: 10px; border: 1px solid #ddd;">RM ${data.revenue.toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <h2 style="font-size: 18px; margin-top: 30px; border-left: 4px solid #ff6b00; padding-left: 10px;">Detailed Order Rows</h2>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;">
-        <thead>
-          <tr style="background: #eee; text-align: left;">
-            <th style="padding: 8px; border: 1px solid #ddd;">#</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Time</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Items</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Total</th>
-            <th style="padding: 8px; border: 1px solid #ddd;">Remarks</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${orders.map(o => `
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">${o.displayNumber}</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">
-                ${o.items.map((it: any) => `
-                  <div>${it.quantity}x ${it.menuItem?.name} 
-                    <span style="color: #666; font-size: 11px;">
-                      (${it.selectedOptions?.map((g: any) => g.choices.map((c: any) => c.label).join(', ')).join(' | ') || ''})
-                    </span>
-                  </div>
-                `).join('')}
-              </td>
-              <td style="padding: 8px; border: 1px solid #ddd;">RM ${Number(o.totalAmount).toFixed(2)}</td>
-              <td style="padding: 8px; border: 1px solid #ddd; color: #d97706;">
-                ${o.items.map((it: any) => it.remark ? `• ${it.remark}` : '').filter(Boolean).join('<br>')}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <p>Regards,<br>MakanX / Hour Coffee System</p>
       
       <p style="margin-top: 40px; font-size: 12px; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 10px;">
         Generated by MakanX Ordering System

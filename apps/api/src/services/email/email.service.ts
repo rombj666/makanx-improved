@@ -11,7 +11,7 @@ function buildEmailFrom(): string {
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-  const { to, subject, html, text } = input;
+  const { to, subject, html, text, attachments } = input;
   const from = buildEmailFrom();
 
   if (!process.env.RESEND_API_KEY) {
@@ -20,15 +20,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   try {
-    console.log(`[EmailService] Attempting to send email to ${to} with subject: "${subject}"...`);
+    const toLabel = Array.isArray(to) ? to.join(', ') : to;
+    console.log(`[EmailService] Attempting to send email to ${toLabel} with subject: "${subject}"...`);
     
-    const emailPayload: {
-      from: string;
-      to: string;
-      subject: string;
-      html?: string;
-      text?: string;
-    } = {
+    const emailPayload: any = {
       from,
       to,
       subject,
@@ -40,8 +35,11 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     if (text !== undefined && text !== null) {
       emailPayload.text = text;
     }
+    if (attachments && attachments.length > 0) {
+      emailPayload.attachments = attachments;
+    }
 
-    const result = await resend.emails.send(emailPayload as any);
+    const result = await resend.emails.send(emailPayload);
 
     if (result.error) {
       console.error(`[EmailService] Resend API error for ${to}:`, result.error);

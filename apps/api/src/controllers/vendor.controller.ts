@@ -7,6 +7,7 @@ const updateSettingsSchema = z.object({
   dailyDrinkLimitQuantity: z.number().min(0).optional(),
   autoStopOrderingOnLimit: z.boolean().optional(),
   reportRecipientEmail: z.string().email().optional().nullable(),
+  reportRecipientEmails: z.array(z.string().email()).optional().nullable(),
 });
 
 export const getSettings = async (req: Request, res: Response) => {
@@ -22,17 +23,27 @@ export const getSettings = async (req: Request, res: Response) => {
         dailyDrinkLimitQuantity: true,
         autoStopOrderingOnLimit: true,
         reportRecipientEmail: true,
+        reportRecipientEmails: true,
       },
     });
 
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
     // Ensure we return default values if null in DB (unlikely with Prisma defaults but safe)
+    // Also handle migration logic: if old field has email but new field is empty, return [old]
+    let emails: string[] = [];
+    if (vendor.reportRecipientEmails && Array.isArray(vendor.reportRecipientEmails)) {
+      emails = vendor.reportRecipientEmails as string[];
+    } else if (vendor.reportRecipientEmail) {
+      emails = [vendor.reportRecipientEmail];
+    }
+
     const data = {
       dailyDrinkLimitEnabled: vendor.dailyDrinkLimitEnabled ?? false,
       dailyDrinkLimitQuantity: vendor.dailyDrinkLimitQuantity ?? 0,
       autoStopOrderingOnLimit: vendor.autoStopOrderingOnLimit ?? true,
       reportRecipientEmail: vendor.reportRecipientEmail ?? null,
+      reportRecipientEmails: emails,
     };
 
     return res.json({ success: true, data });
@@ -48,9 +59,22 @@ export const updateSettings = async (req: Request, res: Response) => {
 
     const validatedData = updateSettingsSchema.parse(req.body);
 
+    const updateData: any = { ...validatedData };
+    if (updateData.reportRecipientEmails === null) {
+      updateData.reportRecipientEmails = undefined; // Or []
+    }
+
     const vendor = await prisma.vendorProfile.update({
       where: { userId },
-      data: validatedData,
+      data: updateData,
+      select: {
+        id: true,
+        dailyDrinkLimitEnabled: true,
+        dailyDrinkLimitQuantity: true,
+        autoStopOrderingOnLimit: true,
+        reportRecipientEmail: true,
+        reportRecipientEmails: true,
+      },
     });
 
     // Also update today's usage record if it exists and limit was changed
@@ -62,7 +86,20 @@ export const updateSettings = async (req: Request, res: Response) => {
       });
     }
 
-    return res.json({ success: true, data: vendor });
+    // Combine for frontend
+    let emails: string[] = [];
+    if (vendor.reportRecipientEmails && Array.isArray(vendor.reportRecipientEmails)) {
+      emails = vendor.reportRecipientEmails as string[];
+    } else if (vendor.reportRecipientEmail) {
+      emails = [vendor.reportRecipientEmail];
+    }
+
+    const data = {
+      ...vendor,
+      reportRecipientEmails: emails,
+    };
+
+    return res.json({ success: true, data });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
