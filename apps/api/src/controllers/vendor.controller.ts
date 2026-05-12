@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
+import { getMalaysiaTodayString } from '../utils/date';
+import { getVendorDailySalesReport } from '../services/report.service';
 
 const updateSettingsSchema = z.object({
   dailyDrinkLimitEnabled: z.boolean().optional(),
@@ -79,7 +81,7 @@ export const updateSettings = async (req: Request, res: Response) => {
 
     // Also update today's usage record if it exists and limit was changed
     if (validatedData.dailyDrinkLimitQuantity !== undefined) {
-      const today = new Date().toLocaleDateString('en-CA');
+      const today = getMalaysiaTodayString();
       await prisma.vendorDailyUsage.updateMany({
         where: { vendorId: vendor.id, date: today },
         data: { dailyLimit: validatedData.dailyDrinkLimitQuantity },
@@ -116,7 +118,7 @@ export const getDailyUsage = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = getMalaysiaTodayString();
     let usage = await prisma.vendorDailyUsage.findUnique({
       where: { vendorId_date: { vendorId: vendor.id, date: today } },
     });
@@ -150,7 +152,7 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = getMalaysiaTodayString();
     const usage = await prisma.vendorDailyUsage.upsert({
       where: { vendorId_date: { vendorId: vendor.id, date: today } },
       update: { orderingClosed: closed },
@@ -168,6 +170,38 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
     }
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const recalculateUsage = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
+
+    const today = getMalaysiaTodayString();
+    
+    // Fetch all orders for today using the unified report service logic
+    const report = await getVendorDailySalesReport(vendor.id, today);
+    
+    // Update or create usage record
+    const usage = await prisma.vendorDailyUsage.upsert({
+      where: { vendorId_date: { vendorId: vendor.id, date: today } },
+      update: { usedQuantity: report.totalDrinks },
+      create: {
+        vendorId: vendor.id,
+        date: today,
+        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
+        usedQuantity: report.totalDrinks,
+        orderingClosed: false,
+      },
+    });
+
+    return res.json({ success: true, data: usage });
+  } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
 };

@@ -2,27 +2,18 @@ import { Request, Response } from 'express';
 import { Role } from '@makanx/shared';
 import prisma from '../utils/prisma';
 import { generateVendorSalesExcel } from '../services/excel.service';
-
-const parseDateRange = (dateStr?: string) => {
-  let date = dateStr ? new Date(dateStr) : new Date();
-  if (isNaN(date.getTime())) date = new Date(); // Fallback to now if invalid date string
-  
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-};
+import { getMalaysiaDayRange } from '../utils/date';
+import { getVendorDailySalesReport } from '../services/report.service';
 
 export const organizerDailySummary = async (req: Request, res: Response) => {
   try {
     const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'READY',
+        status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
         vendor: {
           booths: { some: { eventId } },
@@ -46,11 +37,11 @@ export const organizerVendorRevenue = async (req: Request, res: Response) => {
   try {
     const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'READY',
+        status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -89,12 +80,12 @@ export const organizerProductPerformance = async (req: Request, res: Response) =
   try {
     const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: 'READY',
+          status: { in: ['PREPARING', 'READY'] },
           createdAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -147,11 +138,11 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
   try {
     const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const orders = await prisma.order.findMany({
       where: {
-        status: 'READY',
+        status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
         vendor: { booths: { some: { eventId } } },
       },
@@ -162,7 +153,8 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
     const buckets: Record<number, number> = {};
     for (let h = 0; h < 24; h++) buckets[h] = 0;
     for (const o of orders) {
-      const hour = new Date(o.createdAt).getHours();
+      // Correctly handle Malaysia timezone for bucket display
+      const hour = new Date(new Date(o.createdAt).getTime() + (8 * 60 * 60 * 1000)).getUTCHours();
       buckets[hour] += Number(o.totalAmount);
     }
     const data = Object.keys(buckets).map((h) => ({ hour: Number(h), revenue: buckets[Number(h)] }));
@@ -175,26 +167,21 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
 export const vendorSalesSummary = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId!;
-    const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const orders = await prisma.order.findMany({
-      where: {
-        vendorId: vendor.id,
-        status: 'READY',
-        createdAt: { gte: start, lte: end },
-      },
-      select: { totalAmount: true },
+    const report = await getVendorDailySalesReport(vendor.id, date);
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        revenue: report.totalRevenue, 
+        orders: report.totalOrders, 
+        avgOrder: report.avgOrder 
+      } 
     });
-
-    const ordersCount = orders.length;
-    const revenue = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
-    const avgOrder = ordersCount > 0 ? revenue / ordersCount : 0;
-    res.json({ success: true, data: { revenue, orders: ordersCount, avgOrder } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -203,92 +190,14 @@ export const vendorSalesSummary = async (req: Request, res: Response) => {
 export const vendorProductPerformance = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId!;
-    const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const items = await prisma.orderItem.findMany({
-      where: {
-        order: {
-          vendorId: vendor.id,
-          status: 'READY',
-          createdAt: { gte: start, lte: end },
-        },
-      },
-      select: { 
-        menuItemId: true, 
-        quantity: true, 
-        price: true, 
-        selectedOptions: true,
-        remark: true,
-        menuItem: { select: { name: true } } 
-      },
-    });
-
-    const byProduct: Record<string, { 
-      productName: string; 
-      qtySold: number; 
-      revenue: number; 
-      price: number; 
-      totalBaseAmount: number;
-      optionBreakdown: Record<string, number>;
-      remarks: string[];
-    }> = {};
-
-    for (const it of items) {
-      const id = it.menuItemId;
-      const unitPrice = Number(it.price);
-      
-      // Calculate total options price delta
-      let optionsPriceDelta = 0;
-      const selectedOptions = (it.selectedOptions as any) || [];
-      let optionString = '';
-
-      if (Array.isArray(selectedOptions)) {
-        optionString = selectedOptions.map((g: any) => {
-          const choices = g.choices.map((c: any) => c.label).join(', ');
-          return `${g.title}: ${choices}`;
-        }).join(' | ');
-
-        selectedOptions.forEach((opt: any) => {
-          if (Array.isArray(opt.choices)) {
-            opt.choices.forEach((c: any) => {
-              optionsPriceDelta += typeof c.priceDelta === 'number' ? c.priceDelta : 0;
-            });
-          }
-        });
-      }
-
-      const totalItemRevenue = (unitPrice + optionsPriceDelta) * it.quantity;
-      const totalItemBaseAmount = unitPrice * it.quantity;
-
-      if (!byProduct[id]) {
-        byProduct[id] = { 
-          productName: it.menuItem?.name || 'Unknown', 
-          qtySold: 0, 
-          revenue: 0, 
-          price: unitPrice,
-          totalBaseAmount: 0,
-          optionBreakdown: {},
-          remarks: []
-        };
-      }
-      byProduct[id].qtySold += it.quantity;
-      byProduct[id].revenue += totalItemRevenue;
-      byProduct[id].totalBaseAmount += totalItemBaseAmount;
-      
-      if (optionString) {
-        byProduct[id].optionBreakdown[optionString] = (byProduct[id].optionBreakdown[optionString] || 0) + it.quantity;
-      }
-      if (it.remark) {
-        byProduct[id].remarks.push(it.remark);
-      }
-    }
-    const data = Object.values(byProduct);
-    res.json({ success: true, data });
+    const report = await getVendorDailySalesReport(vendor.id, date);
+    
+    res.json({ success: true, data: report.productPerformance });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -297,9 +206,8 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
 export const vendorRevenueTrend = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId!;
-    const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
@@ -307,7 +215,7 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
-        status: 'READY',
+        status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
       },
       select: { createdAt: true, totalAmount: true },
@@ -317,7 +225,8 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
     const buckets: Record<number, number> = {};
     for (let h = 0; h < 24; h++) buckets[h] = 0;
     for (const o of orders) {
-      const hour = new Date(o.createdAt).getHours();
+      // Correctly handle Malaysia timezone for bucket display
+      const hour = new Date(new Date(o.createdAt).getTime() + (8 * 60 * 60 * 1000)).getUTCHours();
       buckets[hour] += Number(o.totalAmount);
     }
     const data = Object.keys(buckets).map((h) => ({ hour: Number(h), revenue: buckets[Number(h)] }));
@@ -330,33 +239,21 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
 export const vendorCompletedOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId!;
-    const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const orders = await prisma.order.findMany({
-      where: {
-        vendorId: vendor.id,
-        status: 'READY',
-        createdAt: { gte: start, lte: end },
-      },
-      include: {
-        items: { include: { menuItem: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const report = await getVendorDailySalesReport(vendor.id, date);
 
-    const data = orders.map((o) => ({
+    const data = report.orders.map((o) => ({
       orderNumber: typeof (o as any).displayNumber === 'number' && (o as any).displayNumber > 0
         ? `#${(o as any).displayNumber}`
         : `#${o.id.slice(-4)}`,
       totalAmount: Number(o.totalAmount),
       createdAt: o.createdAt,
       completedAt: o.completedAt,
-      items: o.items.map((it) => ({
+      items: o.items.map((it: any) => ({
         productName: it.menuItem?.name || 'Unknown',
         qty: it.quantity,
         price: Number(it.price),
@@ -371,18 +268,19 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
   }
 };
 
+
 export const organizerProductTrend = async (req: Request, res: Response) => {
   try {
     const eventId = String(req.query.eventId || '');
     const date = String(req.query.date || '');
     const windowMinutes = Number(req.query.window || 5) || 5;
     const topN = Number(req.query.top || 5) || 5;
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
-          status: 'READY',
+          status: { in: ['PREPARING', 'READY'] },
           completedAt: { gte: start, lte: end },
           vendor: { booths: { some: { eventId } } },
         },
@@ -439,7 +337,6 @@ export const vendorExportReport = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId!;
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({
       where: { userId },
@@ -448,21 +345,9 @@ export const vendorExportReport = async (req: Request, res: Response) => {
 
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    const orders = await prisma.order.findMany({
-      where: {
-        vendorId: vendor.id,
-        createdAt: { gte: start, lte: end },
-        status: 'READY'
-      },
-      include: {
-        items: {
-          include: { menuItem: true }
-        }
-      },
-      orderBy: { createdAt: 'asc' }
-    });
+    const report = await getVendorDailySalesReport(vendor.id, date);
 
-    const buffer = await generateVendorSalesExcel(vendor.businessName, date, orders);
+    const buffer = await generateVendorSalesExcel(vendor.businessName, date, report.orders);
     
     const fileName = `vendor-sales-report-${vendor.businessName.toLowerCase().replace(/\s+/g, '-')}-${date}.xlsx`;
 
@@ -480,7 +365,7 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
     const windowMinutes = Number(req.query.window || 5) || 5;
     const topN = Number(req.query.top || 5) || 5;
     const date = String(req.query.date || '');
-    const { start, end } = parseDateRange(date);
+    const { start, end } = getMalaysiaDayRange(date);
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
@@ -489,7 +374,7 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
       where: {
         order: {
           vendorId: vendor.id,
-          status: 'READY',
+          status: { in: ['PREPARING', 'READY'] },
           completedAt: { gte: start, lte: end },
         },
       },

@@ -7,6 +7,7 @@ import { sendReadyNotification } from './push.service';
 import { sendOrderReadyMessage } from './whatsapp.service'; 
 import { sendHourCoffeeReadyEmail } from './email/email.service'; 
 import { triggerDailyReport } from './report.service';
+import { getMalaysiaTodayString } from '../utils/date';
  
 const readyEmailSentCache = new Map<string, number>(); 
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30; 
@@ -202,7 +203,7 @@ export const createOrder = async (
   const requestedQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
   // Daily Limit Validation
-  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const today = getMalaysiaTodayString();
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: vendorId },
     select: { 

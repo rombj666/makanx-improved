@@ -192,7 +192,7 @@ export function VendorSales() {
     }
     const times = Array.from(buckets).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
     return times.map((t) => {
-      const label = new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const label = format(new Date(t), 'HH:mm');
       const row: Record<string, any> = { time: label };
       for (const series of productTrend) {
         const found = series.points.find((pt) => pt.time === t);
