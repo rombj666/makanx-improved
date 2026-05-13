@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
@@ -72,6 +73,8 @@ export function VendorSales() {
   const [settings, setSettings] = useState<VendorSettings | null>(null);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [resettingTodayOrders, setResettingTodayOrders] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
 
   const trendChartRef = useRef<HTMLDivElement>(null);
@@ -81,10 +84,10 @@ export function VendorSales() {
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
   const MOBILE_COLORS = ['#111827', '#374151', '#6B7280', '#9CA3AF', '#D1D5DB', '#E5E7EB'];
 
-  const fetchAll = async () => {
+  const fetchAll = async (targetDate = date) => {
     setLoading(true);
     try {
-      const params = { eventId: '', date };
+      const params = { eventId: '', date: targetDate };
       const [s, pt, p, o, sett, usg] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
         api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
@@ -177,6 +180,23 @@ export function VendorSales() {
       toast.success('Report generated', { id: toastId });
     } catch (e: any) {
       toast.error('Failed to generate report', { id: toastId });
+    }
+  };
+
+  const handleResetTodayOrders = async () => {
+    const toastId = toast.loading("Resetting today's orders...");
+    setResettingTodayOrders(true);
+    try {
+      await api.post('/vendor/sales/reset-today');
+      toast.success("Today's orders reset successfully", { id: toastId });
+      const today = format(new Date(), 'yyyy-MM-dd');
+      setDate(today);
+      await fetchAll(today);
+      setResetConfirmOpen(false);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || "Failed to reset today's orders", { id: toastId });
+    } finally {
+      setResettingTodayOrders(false);
     }
   };
 
@@ -344,11 +364,14 @@ export function VendorSales() {
             <label className="text-sm text-gray-600">Date</label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
           </div>
-          <Button onClick={fetchAll} disabled={loading}>
+          <Button onClick={() => fetchAll()} disabled={loading}>
             Refresh
           </Button>
           <Button variant="outline" onClick={handleExport} disabled={loading}>
             Export
+          </Button>
+          <Button variant="destructive" onClick={() => setResetConfirmOpen(true)} disabled={loading || resettingTodayOrders}>
+            Reset Today Orders
           </Button>
         </div>
 
@@ -530,9 +553,9 @@ export function VendorSales() {
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
             <div className="text-2xl font-semibold text-black">Sales</div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
             <button
-              onClick={fetchAll}
+              onClick={() => fetchAll()}
               disabled={loading}
               className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
             >
@@ -544,6 +567,13 @@ export function VendorSales() {
               className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
             >
               Export
+            </button>
+            <button
+              onClick={() => setResetConfirmOpen(true)}
+              disabled={loading || resettingTodayOrders}
+              className="h-11 px-4 rounded-2xl bg-red-600 border border-red-700 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+            >
+              Reset Today Orders
             </button>
           </div>
         </div>
@@ -781,6 +811,39 @@ export function VendorSales() {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={resetConfirmOpen}
+        onClose={() => {
+          if (!resettingTodayOrders) setResetConfirmOpen(false);
+        }}
+        title="Reset Today's Orders"
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-gray-700">
+            Are you sure you want to reset today's orders? This will delete all today's order records, order items, sales analytics data, ready orders, and reset daily usage back to 0. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetConfirmOpen(false)}
+              disabled={resettingTodayOrders}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleResetTodayOrders}
+              disabled={resettingTodayOrders}
+              isLoading={resettingTodayOrders}
+            >
+              Confirm Reset
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

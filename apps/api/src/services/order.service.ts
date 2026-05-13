@@ -7,7 +7,7 @@ import { sendReadyNotification } from './push.service';
 import { sendOrderReadyMessage } from './whatsapp.service'; 
 import { sendHourCoffeeReadyEmail } from './email/email.service'; 
 import { triggerDailyReport } from './report.service';
-import { getMalaysiaTodayString } from '../utils/date';
+import { getMalaysiaTodayString, getMalaysiaDayRange } from '../utils/date';
  
 const readyEmailSentCache = new Map<string, number>(); 
 const READY_EMAIL_DEDUPE_TTL_MS = 1000 * 60 * 30; 
@@ -353,8 +353,12 @@ export const createOrder = async (
           return copy;
         }) as any);
     return prisma.$transaction(async (tx) => {
+      const { start, end } = getMalaysiaDayRange();
       const maxRow = await tx.order.aggregate({
-        where: { vendorId },
+        where: { 
+          vendorId,
+          createdAt: { gte: start, lte: end }
+        },
         _max: { displayNumber: true },
       });
       const nextDisplayNumber = Number(maxRow?._max?.displayNumber ?? 0) + 1;

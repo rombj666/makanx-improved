@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as vendorController from '../controllers/vendor.controller';
-import { requireAuth } from '../middleware/auth';
+import { Role } from '@makanx/shared';
+import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.get('/settings', vendorController.getSettings);
 router.patch('/settings', vendorController.updateSettings);
 router.get('/daily-usage', vendorController.getDailyUsage);
 router.post('/recalculate-usage', vendorController.recalculateUsage);
+router.post('/sales/reset-today', requireRole([Role.VENDOR]), vendorController.resetTodayOrders);
 router.post('/toggle-ordering', vendorController.toggleOrderingStatus);
 
 export default router;

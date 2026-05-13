@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
-import { getMalaysiaTodayString } from '../utils/date';
+import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { getVendorDailySalesReport } from '../services/report.service';
 
 const updateSettingsSchema = z.object({
@@ -138,6 +138,72 @@ export const getDailyUsage = async (req: Request, res: Response) => {
 
     return res.json({ success: true, data: usage });
   } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const resetTodayOrders = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
+
+    const todayStr = getMalaysiaTodayString();
+    const { start, end } = getMalaysiaDayRange(todayStr);
+
+    console.log(`[vendor-reset] Resetting today's orders for vendor ${vendor.id} (${vendor.businessName})`);
+    console.log(`[vendor-reset] Range: ${start.toISOString()} to ${end.toISOString()}`);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Delete OrderItems for today's orders
+      const orderItemsResult = await tx.orderItem.deleteMany({
+        where: {
+          order: {
+            vendorId: vendor.id,
+            createdAt: { gte: start, lte: end }
+          }
+        }
+      });
+
+      // 2. Delete Orders for today
+      const ordersResult = await tx.order.deleteMany({
+        where: {
+          vendorId: vendor.id,
+          createdAt: { gte: start, lte: end }
+        }
+      });
+
+      // 3. Reset Daily Usage
+      await tx.vendorDailyUsage.upsert({
+        where: { vendorId_date: { vendorId: vendor.id, date: todayStr } },
+        update: { 
+          usedQuantity: 0,
+          orderingClosed: false 
+        },
+        create: {
+          vendorId: vendor.id,
+          date: todayStr,
+          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
+          usedQuantity: 0,
+          orderingClosed: false
+        }
+      });
+
+      return {
+        deletedOrders: ordersResult.count,
+        deletedOrderItems: orderItemsResult.count
+      };
+    });
+
+    return res.json({ 
+      success: true, 
+      message: "Today's orders reset successfully",
+      ...result
+    });
+  } catch (error: any) {
+    console.error(`[vendor-reset] Error: ${error.message}`);
     return res.status(500).json({ success: false, error: error.message });
   }
 };
