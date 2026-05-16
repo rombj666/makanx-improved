@@ -43,6 +43,7 @@ export function CustomerOrderPage() {
   const navigate = useNavigate();
   const { socket } = useSocket();
   const [booth, setBooth] = useState<Booth | null>(null);
+  const [eventId, setEventId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -101,6 +102,7 @@ export function CustomerOrderPage() {
         const { data } = await api.get(`/events/${slug}`);
         if (data.success) {
           const event = data.data;
+          setEventId(String(event.id || ''));
           const found = (event.booths || []).find((b: any) => b.vendor?.id === vendorId) || null;
           setBooth(found);
         }
@@ -141,6 +143,7 @@ export function CustomerOrderPage() {
       }
       const res = await api.post('/orders', {
         vendorId,
+        eventId: eventId || undefined,
         items: cart.lines.map((l) => ({
           menuItemId: l.menuItemId,
           quantity: l.quantity,

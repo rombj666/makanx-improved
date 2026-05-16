@@ -73,7 +73,7 @@ export function VendorSales() {
   const [settings, setSettings] = useState<VendorSettings | null>(null);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [updatingSettings, setUpdatingSettings] = useState(false);
-  const [resettingTodayOrders, setResettingTodayOrders] = useState(false);
+  const [resettingEventOrders, setResettingEventOrders] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
 
@@ -183,20 +183,20 @@ export function VendorSales() {
     }
   };
 
-  const handleResetTodayOrders = async () => {
-    const toastId = toast.loading("Resetting today's orders...");
-    setResettingTodayOrders(true);
+  const handleResetEventOrders = async () => {
+    const toastId = toast.loading('Resetting event orders...');
+    setResettingEventOrders(true);
     try {
-      await api.post('/vendor/sales/reset-today');
-      toast.success("Today's orders reset successfully", { id: toastId });
+      await api.post('/vendor/sales/reset-event');
+      toast.success('Event orders reset successfully', { id: toastId });
       const today = format(new Date(), 'yyyy-MM-dd');
       setDate(today);
       await fetchAll(today);
       setResetConfirmOpen(false);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || "Failed to reset today's orders", { id: toastId });
+      toast.error(e.response?.data?.error || 'Failed to reset event orders', { id: toastId });
     } finally {
-      setResettingTodayOrders(false);
+      setResettingEventOrders(false);
     }
   };
 
@@ -370,8 +370,8 @@ export function VendorSales() {
           <Button variant="outline" onClick={handleExport} disabled={loading}>
             Export
           </Button>
-          <Button variant="destructive" onClick={() => setResetConfirmOpen(true)} disabled={loading || resettingTodayOrders}>
-            Reset Today Orders
+          <Button variant="destructive" onClick={() => setResetConfirmOpen(true)} disabled={loading || resettingEventOrders}>
+            Reset Event Orders
           </Button>
         </div>
 
@@ -570,10 +570,10 @@ export function VendorSales() {
             </button>
             <button
               onClick={() => setResetConfirmOpen(true)}
-              disabled={loading || resettingTodayOrders}
+              disabled={loading || resettingEventOrders}
               className="h-11 px-4 rounded-2xl bg-red-600 border border-red-700 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
             >
-              Reset Today Orders
+              Reset Event Orders
             </button>
           </div>
         </div>
@@ -815,29 +815,29 @@ export function VendorSales() {
       <Modal
         isOpen={resetConfirmOpen}
         onClose={() => {
-          if (!resettingTodayOrders) setResetConfirmOpen(false);
+          if (!resettingEventOrders) setResetConfirmOpen(false);
         }}
-        title="Reset Today's Orders"
+        title="Reset Event Orders"
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-gray-700">
-            Are you sure you want to reset today's orders? This will delete all today's order records, order items, sales analytics data, ready orders, and reset daily usage back to 0. This action cannot be undone.
+            Are you sure you want to reset this event's orders? This will delete all order records and order items for the current event, clear sales analytics, ready orders, and kitchen view for this event, and reset today's usage back to 0. The daily quantity limit will stay unchanged. This action cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setResetConfirmOpen(false)}
-              disabled={resettingTodayOrders}
+              disabled={resettingEventOrders}
             >
               Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
-              onClick={handleResetTodayOrders}
-              disabled={resettingTodayOrders}
-              isLoading={resettingTodayOrders}
+              onClick={handleResetEventOrders}
+              disabled={resettingEventOrders}
+              isLoading={resettingEventOrders}
             >
               Confirm Reset
             </Button>

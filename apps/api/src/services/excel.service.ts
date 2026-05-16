@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { format } from 'date-fns';
+import { formatMalaysiaDateTime, formatMalaysiaTime } from '../utils/date';
 
 export async function generateVendorSalesExcel(
   businessName: string,
@@ -32,7 +32,7 @@ export async function generateVendorSalesExcel(
   const metaStart = worksheet.lastRow!.number + 1;
   worksheet.addRow(['Vendor Name:', businessName || 'N/A']);
   worksheet.addRow(['Report Date:', date]);
-  worksheet.addRow(['Generated At:', format(new Date(), 'yyyy-MM-dd HH:mm:ss')]);
+  worksheet.addRow(['Generated At:', formatMalaysiaDateTime(new Date())]);
   
   for (let i = metaStart; i < metaStart + 3; i++) {
     worksheet.getCell(`A${i}`).font = { bold: true };
@@ -133,7 +133,7 @@ export async function generateVendorSalesExcel(
 
   // 6. Detailed Orders Table
   worksheet.addRow(['DETAILED ORDERS']).font = { bold: true, size: 14 };
-  const orderHeader = worksheet.addRow(['Order #', 'Created Time', 'Total Quantity', 'Items Summary', 'Remarks', 'Total Amount']);
+  const orderHeader = worksheet.addRow(['Order #', 'Created Time (MYT)', 'Total Quantity', 'Items Summary', 'Remarks', 'Total Amount']);
   orderHeader.font = { bold: true };
   orderHeader.eachCell(c => {
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
@@ -150,7 +150,7 @@ export async function generateVendorSalesExcel(
 
     const row = worksheet.addRow([
       o.displayNumber,
-      format(new Date(o.createdAt), 'HH:mm'),
+      formatMalaysiaTime(o.createdAt),
       orderQty,
       itemsSummary,
       remarks,

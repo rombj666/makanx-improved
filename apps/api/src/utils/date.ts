@@ -1,6 +1,8 @@
 /**
  * Malaysia (MYT) is UTC+8
  */
+export const MALAYSIA_TIMEZONE = 'Asia/Kuala_Lumpur';
+
 export function getMalaysiaDayRange(dateStr?: string) {
   // If no date provided, use today
   const baseDate = dateStr ? new Date(dateStr) : new Date();
@@ -42,3 +44,29 @@ export function getMalaysiaTodayString() {
   return `${y}-${m}-${d}`;
 }
 
+export function formatMalaysiaTime(date: Date | string | number) {
+  return new Intl.DateTimeFormat('en-MY', {
+    timeZone: MALAYSIA_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(new Date(date))
+    .toUpperCase();
+}
+
+export function formatMalaysiaDateTime(date: Date | string | number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: MALAYSIA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(date));
+
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}:${value('second')} MYT`;
+}

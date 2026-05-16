@@ -156,6 +156,7 @@ async function sendHourCoffeeReadyEmailIfNeeded(order: any, source: string) {
  */
 const createOrderSchema = z.object({
   vendorId: z.string().min(1, "Vendor ID is required"),
+  eventId: z.string().min(1).optional(),
   items: z.array(
     z.object({
       menuItemId: z.string().min(1, "Menu item ID is required"),
@@ -191,16 +192,81 @@ function isMissingColumnError(e: any, columnName: string) {
   return msg.includes('column') && msg.includes(columnName) && msg.includes('does not exist');
 }
 
+function dailyUsageWhere(vendorId: string, eventId: string | null, date: string) {
+  return { vendorId_eventId_date: { vendorId, eventId, date } } as any;
+}
+
+async function resolveVendorEventId(vendorId: string, requestedEventId?: string) {
+  if (requestedEventId) {
+    const booth = await prisma.booth.findFirst({
+      where: { vendorId, eventId: requestedEventId },
+      select: { id: true, eventId: true },
+    });
+    if (!booth) throw new Error('Vendor is not assigned to this event');
+    return booth.eventId;
+  }
+
+  const now = new Date();
+  const currentBooth = await prisma.booth.findFirst({
+    where: {
+      vendorId,
+      event: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+    },
+    select: { eventId: true },
+  });
+  if (currentBooth?.eventId) return currentBooth.eventId;
+
+  const activeBooth = await prisma.booth.findFirst({
+    where: { vendorId, event: { status: 'ACTIVE' } },
+    select: { eventId: true },
+  });
+  if (activeBooth?.eventId) return activeBooth.eventId;
+
+  const anyBooth = await prisma.booth.findFirst({
+    where: { vendorId },
+    select: { eventId: true },
+  });
+  if (anyBooth?.eventId) return anyBooth.eventId;
+
+  throw new Error('Vendor has no assigned booth');
+}
+
+async function calculateDailyUsedQuantity(
+  client: typeof prisma | Prisma.TransactionClient,
+  vendorId: string,
+  eventId: string | null,
+  dateStr: string
+) {
+  const { start, end } = getMalaysiaDayRange(dateStr);
+  const sum = await (client as any).orderItem.aggregate({
+    where: {
+      order: {
+        vendorId,
+        ...(eventId ? { eventId } : {}),
+        createdAt: { gte: start, lte: end },
+        status: { in: [OrderStatus.PREPARING, OrderStatus.READY] },
+      },
+    },
+    _sum: { quantity: true },
+  });
+  return Number(sum?._sum?.quantity ?? 0);
+}
+
 export const createOrder = async (
   customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
 ) => {
-  const { vendorId, items, paymentMode, guestId, customerEmail } = createOrderSchema.parse(input);
+  const { vendorId, eventId: requestedEventId, items, paymentMode, guestId, customerEmail } = createOrderSchema.parse(input);
 
-  console.log('[order] create: incoming payload', { vendorId, itemsCount: items.length, guestId, customerEmail: customerEmail || null });
+  console.log('[order] create: incoming payload', { vendorId, eventId: requestedEventId || null, itemsCount: items.length, guestId, customerEmail: customerEmail || null });
 
   // Calculate requested total quantity
   const requestedQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const eventId = await resolveVendorEventId(vendorId, requestedEventId);
 
   // Daily Limit Validation
   const today = getMalaysiaTodayString();
@@ -217,21 +283,21 @@ export const createOrder = async (
 
   if (vendor?.dailyDrinkLimitEnabled) {
     const dailyUsage = await prisma.vendorDailyUsage.findUnique({
-      where: { vendorId_date: { vendorId, date: today } }
+      where: dailyUsageWhere(vendorId, eventId, today),
     });
 
-    const used = dailyUsage?.usedQuantity || 0;
-    const limit = dailyUsage?.dailyLimit ?? vendor.dailyDrinkLimitQuantity;
+    const used = await calculateDailyUsedQuantity(prisma, vendorId, eventId, today);
+    const limit = vendor.dailyDrinkLimitQuantity;
     const isClosed = dailyUsage?.orderingClosed || false;
 
-    if (isClosed || used >= limit) {
+    if (isClosed || (limit > 0 && used >= limit)) {
       const error = new Error('This vendor is sold out for today.');
       (error as any).code = 'PRODUCTION_LIMIT_EXCEEDED';
       (error as any).remainingCups = 0;
       throw error;
     }
 
-    if (used + requestedQuantity > limit) {
+    if (limit > 0 && used + requestedQuantity > limit) {
       const remaining = limit - used;
       const error = new Error(`Only ${remaining} cups remaining today. Please reduce your quantity.`);
       (error as any).code = 'PRODUCTION_LIMIT_EXCEEDED';
@@ -332,15 +398,7 @@ export const createOrder = async (
   const paymentStatus =
     paymentMode === PaymentMode.MOCK_PAID ? PaymentStatus.PAID : PaymentStatus.PENDING;
 
-  // Ensure the vendor has at least one assigned booth
-  const booth = await prisma.booth.findFirst({
-    where: { vendorId },
-    select: { id: true },
-  });
-
-  if (!booth) throw new Error('Vendor has no assigned booth');
-
-  // Transaction: assign displayNumber + create order + compute ETA (vendor-based)
+  // Transaction: assign displayNumber + create order + compute ETA (event/vendor-based)
   let result: { order: any; estimatedMinutes: number };
   const createWithDisplayNumber = async (opts?: { includeSelectedOptions?: boolean; includeCustomerEmail?: boolean }) => {
     const includeSelectedOptions = opts?.includeSelectedOptions !== false;
@@ -353,11 +411,10 @@ export const createOrder = async (
           return copy;
         }) as any);
     return prisma.$transaction(async (tx) => {
-      const { start, end } = getMalaysiaDayRange();
       const maxRow = await tx.order.aggregate({
         where: { 
           vendorId,
-          createdAt: { gte: start, lte: end }
+          eventId,
         },
         _max: { displayNumber: true },
       });
@@ -366,6 +423,7 @@ export const createOrder = async (
         data: {
           customerId: finalCustomerId,
           ...(includeCustomerEmail ? { customerEmail: customerEmail || null } : {}),
+          eventId,
           vendorId,
           displayNumber: nextDisplayNumber,
           totalAmount,
@@ -387,7 +445,7 @@ export const createOrder = async (
       });
 
       const pendingCount = await tx.order.count({
-        where: { vendorId, status: { in: [OrderStatus.PREPARING] } },
+        where: { vendorId, eventId, status: { in: [OrderStatus.PREPARING] } },
       });
       const avgMinutesPerOrder = 5;
       const estimatedMinutes = pendingCount * avgMinutesPerOrder;
@@ -401,22 +459,27 @@ export const createOrder = async (
   try {
     result = await createWithDisplayNumber();
     
-    // Increment daily usage after successful creation
+    // Refresh daily usage from today's order items after successful creation.
     if (vendor?.dailyDrinkLimitEnabled) {
+      const usedQuantity = await calculateDailyUsedQuantity(prisma, vendorId, eventId, today);
       const dailyUsage = await prisma.vendorDailyUsage.upsert({
-        where: { vendorId_date: { vendorId, date: today } },
-        update: { usedQuantity: { increment: requestedQuantity } },
+        where: dailyUsageWhere(vendorId, eventId, today),
+        update: {
+          dailyLimit: vendor.dailyDrinkLimitQuantity,
+          usedQuantity,
+        },
         create: {
           vendorId,
+          eventId,
           date: today,
           dailyLimit: vendor.dailyDrinkLimitQuantity,
-          usedQuantity: requestedQuantity,
+          usedQuantity,
           orderingClosed: false,
         },
       });
 
       // Check if limit reached and auto-stop
-      if (vendor.autoStopOrderingOnLimit && dailyUsage.usedQuantity >= dailyUsage.dailyLimit) {
+      if (vendor.autoStopOrderingOnLimit && dailyUsage.dailyLimit > 0 && dailyUsage.usedQuantity >= dailyUsage.dailyLimit) {
         await prisma.vendorDailyUsage.update({
           where: { id: dailyUsage.id },
           data: { orderingClosed: true },

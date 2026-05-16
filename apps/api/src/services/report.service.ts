@@ -1,10 +1,33 @@
 import prisma from '../utils/prisma';
 import { sendEmail } from './email/email.service';
 import { generateVendorSalesExcel } from './excel.service';
-import { getMalaysiaDayRange } from '../utils/date';
+import { formatMalaysiaDateTime, getMalaysiaDayRange } from '../utils/date';
 
-export async function getVendorDailySalesReport(vendorId: string, dateStr: string) {
+async function resolveCurrentVendorEventId(vendorId: string) {
+  const now = new Date();
+  const currentBooth = await prisma.booth.findFirst({
+    where: {
+      vendorId,
+      event: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+    },
+    select: { eventId: true },
+  });
+  if (currentBooth?.eventId) return currentBooth.eventId;
+
+  const activeBooth = await prisma.booth.findFirst({
+    where: { vendorId, event: { status: 'ACTIVE' } },
+    select: { eventId: true },
+  });
+  return activeBooth?.eventId ?? null;
+}
+
+export async function getVendorDailySalesReport(vendorId: string, dateStr: string, eventId?: string | null) {
   const { start, end } = getMalaysiaDayRange(dateStr);
+  const effectiveEventId = eventId === undefined ? await resolveCurrentVendorEventId(vendorId) : eventId;
   
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: vendorId },
@@ -16,6 +39,7 @@ export async function getVendorDailySalesReport(vendorId: string, dateStr: strin
   const orders = await prisma.order.findMany({
     where: {
       vendorId,
+      ...(effectiveEventId ? { eventId: effectiveEventId } : {}),
       createdAt: { gte: start, lte: end },
       status: { in: ['PREPARING', 'READY'] }
     },
@@ -175,8 +199,8 @@ export async function triggerDailyReport(vendorId: string, date: string, recipie
     });
 
     try {
-      await prisma.vendorDailyUsage.update({
-        where: { vendorId_date: { vendorId, date } },
+      await prisma.vendorDailyUsage.updateMany({
+        where: { vendorId, date },
         data: {
           reportSentAt: new Date(),
           reportSentTo: emails.join(', ')
@@ -195,12 +219,14 @@ export async function triggerDailyReport(vendorId: string, date: string, recipie
 
 function generateReportHtml(data: any) {
   const { vendorName, reportDate, totalOrders, totalDrinks, totalRevenue } = data;
+  const generatedAt = formatMalaysiaDateTime(new Date());
 
   let html = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333;">
       <h1 style="color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px;">Daily Production Report</h1>
       <p>Hi,</p>
       <p>Attached is the daily production report for <strong>${vendorName}</strong> on <strong>${reportDate}</strong>.</p>
+      <p style="color: #666; font-size: 13px;">Generated At: <strong>${generatedAt}</strong></p>
       
       <div style="display: flex; gap: 20px; margin: 20px 0;">
         <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; flex: 1; text-align: center; border: 1px solid #eee;">
@@ -227,4 +253,3 @@ function generateReportHtml(data: any) {
 
   return html;
 }
-

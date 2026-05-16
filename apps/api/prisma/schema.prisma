@@ -45,6 +45,7 @@ model Event {
   updatedAt     DateTime            @updatedAt
   status        EventStatus         @default(ACTIVE)
   booths        Booth[]
+  orders        Order[]
   organizer     User                @relation("OrganizerEvents", fields: [organizerId], references: [id])
   applications  VendorApplication[]
 }
@@ -72,6 +73,7 @@ model VendorProfile {
 model VendorDailyUsage {
   id             String        @id @default(uuid())
   vendorId       String
+  eventId        String?
   date           String
   dailyLimit     Int
   usedQuantity   Int           @default(0)
@@ -82,7 +84,7 @@ model VendorDailyUsage {
   updatedAt      DateTime      @updatedAt
   vendor         VendorProfile @relation(fields: [vendorId], references: [id])
 
-  @@unique([vendorId, date])
+  @@unique([vendorId, eventId, date])
 }
 
 model VendorApplication {
@@ -144,6 +146,7 @@ model Order {
   id            String        @id @default(uuid())
   customerId    String
   customerEmail String?
+  eventId       String
   vendorId      String
   displayNumber Int           @default(0)
   status        OrderStatus   @default(PREPARING)
@@ -155,10 +158,12 @@ model Order {
   acceptedAt    DateTime?
   completedAt   DateTime?
   readyAt       DateTime?
+  event         Event         @relation(fields: [eventId], references: [id])
   vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
   items         OrderItem[]
 
-  @@unique([vendorId, displayNumber])
+  @@unique([eventId, vendorId, displayNumber])
+  @@index([eventId, vendorId])
   @@index([vendorId, createdAt])
   @@index([status])
   @@index([completedAt])

@@ -5,6 +5,28 @@ import { generateVendorSalesExcel } from '../services/excel.service';
 import { getMalaysiaDayRange } from '../utils/date';
 import { getVendorDailySalesReport } from '../services/report.service';
 
+async function resolveCurrentVendorEventId(vendorId: string) {
+  const now = new Date();
+  const currentBooth = await prisma.booth.findFirst({
+    where: {
+      vendorId,
+      event: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+    },
+    select: { eventId: true },
+  });
+  if (currentBooth?.eventId) return currentBooth.eventId;
+
+  const activeBooth = await prisma.booth.findFirst({
+    where: { vendorId, event: { status: 'ACTIVE' } },
+    select: { eventId: true },
+  });
+  return activeBooth?.eventId ?? null;
+}
+
 export const organizerDailySummary = async (req: Request, res: Response) => {
   try {
     const eventId = String(req.query.eventId || '');
@@ -13,11 +35,9 @@ export const organizerDailySummary = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
+        ...(eventId ? { eventId } : {}),
         status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
-        vendor: {
-          booths: { some: { eventId } },
-        },
       },
       select: { id: true, vendorId: true, totalAmount: true },
     });
@@ -41,9 +61,9 @@ export const organizerVendorRevenue = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
+        ...(eventId ? { eventId } : {}),
         status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
-        vendor: { booths: { some: { eventId } } },
       },
       select: { vendorId: true, totalAmount: true },
     });
@@ -85,9 +105,9 @@ export const organizerProductPerformance = async (req: Request, res: Response) =
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
+          ...(eventId ? { eventId } : {}),
           status: { in: ['PREPARING', 'READY'] },
           createdAt: { gte: start, lte: end },
-          vendor: { booths: { some: { eventId } } },
         },
       },
       select: {
@@ -142,9 +162,9 @@ export const organizerRevenueTrend = async (req: Request, res: Response) => {
 
     const orders = await prisma.order.findMany({
       where: {
+        ...(eventId ? { eventId } : {}),
         status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
-        vendor: { booths: { some: { eventId } } },
       },
       select: { createdAt: true, totalAmount: true },
       orderBy: { createdAt: 'asc' },
@@ -172,7 +192,8 @@ export const vendorSalesSummary = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const report = await getVendorDailySalesReport(vendor.id, date);
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId ? req.query.eventId : undefined;
+    const report = await getVendorDailySalesReport(vendor.id, date, eventId);
     
     res.json({ 
       success: true, 
@@ -195,7 +216,8 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const report = await getVendorDailySalesReport(vendor.id, date);
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId ? req.query.eventId : undefined;
+    const report = await getVendorDailySalesReport(vendor.id, date, eventId);
     
     res.json({ success: true, data: report.productPerformance });
   } catch (error: any) {
@@ -211,10 +233,14 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId
+      ? req.query.eventId
+      : await resolveCurrentVendorEventId(vendor.id);
 
     const orders = await prisma.order.findMany({
       where: {
         vendorId: vendor.id,
+        ...(eventId ? { eventId } : {}),
         status: { in: ['PREPARING', 'READY'] },
         createdAt: { gte: start, lte: end },
       },
@@ -244,7 +270,8 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
 
-    const report = await getVendorDailySalesReport(vendor.id, date);
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId ? req.query.eventId : undefined;
+    const report = await getVendorDailySalesReport(vendor.id, date, eventId);
 
     const data = report.orders.map((o) => ({
       orderNumber: typeof (o as any).displayNumber === 'number' && (o as any).displayNumber > 0
@@ -280,9 +307,9 @@ export const organizerProductTrend = async (req: Request, res: Response) => {
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
+          ...(eventId ? { eventId } : {}),
           status: { in: ['PREPARING', 'READY'] },
           completedAt: { gte: start, lte: end },
-          vendor: { booths: { some: { eventId } } },
         },
       },
       select: {
@@ -345,7 +372,8 @@ export const vendorExportReport = async (req: Request, res: Response) => {
 
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    const report = await getVendorDailySalesReport(vendor.id, date);
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId ? req.query.eventId : undefined;
+    const report = await getVendorDailySalesReport(vendor.id, date, eventId);
 
     const buffer = await generateVendorSalesExcel(vendor.businessName, date, report.orders);
     
@@ -369,11 +397,15 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(400).json({ success: false, error: 'Vendor profile not found' });
+    const eventId = typeof req.query.eventId === 'string' && req.query.eventId
+      ? req.query.eventId
+      : await resolveCurrentVendorEventId(vendor.id);
 
     const items = await prisma.orderItem.findMany({
       where: {
         order: {
           vendorId: vendor.id,
+          ...(eventId ? { eventId } : {}),
           status: { in: ['PREPARING', 'READY'] },
           completedAt: { gte: start, lte: end },
         },

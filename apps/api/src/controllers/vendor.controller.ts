@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { z } from 'zod';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
-import { getVendorDailySalesReport } from '../services/report.service';
+import { getIO } from '../socket';
 
 const updateSettingsSchema = z.object({
   dailyDrinkLimitEnabled: z.boolean().optional(),
@@ -11,6 +11,53 @@ const updateSettingsSchema = z.object({
   reportRecipientEmail: z.string().email().optional().nullable(),
   reportRecipientEmails: z.array(z.string().email()).optional().nullable(),
 });
+
+const usageWhere = (vendorId: string, eventId: string | null, date: string) =>
+  ({ vendorId_eventId_date: { vendorId, eventId, date } } as any);
+
+async function resolveCurrentVendorEventId(vendorId: string) {
+  const now = new Date();
+  const currentBooth = await prisma.booth.findFirst({
+    where: {
+      vendorId,
+      event: {
+        status: 'ACTIVE',
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+    },
+    select: { eventId: true },
+  });
+  if (currentBooth?.eventId) return currentBooth.eventId;
+
+  const activeBooth = await prisma.booth.findFirst({
+    where: { vendorId, event: { status: 'ACTIVE' } },
+    select: { eventId: true },
+  });
+  if (activeBooth?.eventId) return activeBooth.eventId;
+
+  const anyBooth = await prisma.booth.findFirst({
+    where: { vendorId },
+    select: { eventId: true },
+  });
+  return anyBooth?.eventId ?? null;
+}
+
+async function calculateDailyUsedQuantity(vendorId: string, eventId: string | null, dateStr: string) {
+  const { start, end } = getMalaysiaDayRange(dateStr);
+  const sum = await prisma.orderItem.aggregate({
+    where: {
+      order: {
+        vendorId,
+        ...(eventId ? { eventId } : {}),
+        createdAt: { gte: start, lte: end },
+        status: { in: ['PREPARING', 'READY'] },
+      },
+    },
+    _sum: { quantity: true },
+  });
+  return Number(sum?._sum?.quantity ?? 0);
+}
 
 export const getSettings = async (req: Request, res: Response) => {
   try {
@@ -119,8 +166,10 @@ export const getDailyUsage = async (req: Request, res: Response) => {
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
     const today = getMalaysiaTodayString();
+    const eventId = await resolveCurrentVendorEventId(vendor.id);
+    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
     let usage = await prisma.vendorDailyUsage.findUnique({
-      where: { vendorId_date: { vendorId: vendor.id, date: today } },
+      where: usageWhere(vendor.id, eventId, today),
     });
 
     if (!usage) {
@@ -128,10 +177,19 @@ export const getDailyUsage = async (req: Request, res: Response) => {
       usage = await prisma.vendorDailyUsage.create({
         data: {
           vendorId: vendor.id,
+          eventId,
           date: today,
           dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-          usedQuantity: 0,
+          usedQuantity,
           orderingClosed: false,
+        },
+      });
+    } else if (usage.usedQuantity !== usedQuantity || usage.dailyLimit !== (vendor.dailyDrinkLimitQuantity ?? 0)) {
+      usage = await prisma.vendorDailyUsage.update({
+        where: { id: usage.id },
+        data: {
+          usedQuantity,
+          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
         },
       });
     }
@@ -142,7 +200,7 @@ export const getDailyUsage = async (req: Request, res: Response) => {
   }
 };
 
-export const resetTodayOrders = async (req: Request, res: Response) => {
+export const resetEventOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -150,40 +208,43 @@ export const resetTodayOrders = async (req: Request, res: Response) => {
     const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
-    const todayStr = getMalaysiaTodayString();
-    const { start, end } = getMalaysiaDayRange(todayStr);
+    const eventId = await resolveCurrentVendorEventId(vendor.id);
+    if (!eventId) return res.status(400).json({ success: false, error: 'Vendor has no current event' });
 
-    console.log(`[vendor-reset] Resetting today's orders for vendor ${vendor.id} (${vendor.businessName})`);
-    console.log(`[vendor-reset] Range: ${start.toISOString()} to ${end.toISOString()}`);
+    const todayStr = getMalaysiaTodayString();
+
+    console.log(`[vendor-reset] Resetting event orders for vendor ${vendor.id} (${vendor.businessName}) in event ${eventId}`);
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Delete OrderItems for today's orders
+      // 1. Delete OrderItems for this event's orders
       const orderItemsResult = await tx.orderItem.deleteMany({
         where: {
           order: {
             vendorId: vendor.id,
-            createdAt: { gte: start, lte: end }
+            eventId,
           }
         }
       });
 
-      // 2. Delete Orders for today
+      // 2. Delete Orders for this event
       const ordersResult = await tx.order.deleteMany({
         where: {
           vendorId: vendor.id,
-          createdAt: { gte: start, lte: end }
+          eventId,
         }
       });
 
-      // 3. Reset Daily Usage
+      // 3. Reset today's usage because the underlying event orders are gone.
       await tx.vendorDailyUsage.upsert({
-        where: { vendorId_date: { vendorId: vendor.id, date: todayStr } },
+        where: usageWhere(vendor.id, eventId, todayStr),
         update: { 
           usedQuantity: 0,
+          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
           orderingClosed: false 
         },
         create: {
           vendorId: vendor.id,
+          eventId,
           date: todayStr,
           dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
           usedQuantity: 0,
@@ -197,9 +258,18 @@ export const resetTodayOrders = async (req: Request, res: Response) => {
       };
     });
 
+    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_reset', { vendorId: vendor.id, eventId });
+    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_changed', {
+      reset: true,
+      vendorId: vendor.id,
+      eventId,
+      updatedAt: new Date().toISOString(),
+    });
+    getIO().emit('vendor_serving_updated', { vendorId: vendor.id, displayNumber: null });
+
     return res.json({ 
       success: true, 
-      message: "Today's orders reset successfully",
+      message: "Event orders reset successfully",
       ...result
     });
   } catch (error: any) {
@@ -219,14 +289,21 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
     const today = getMalaysiaTodayString();
+    const eventId = await resolveCurrentVendorEventId(vendor.id);
+    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
     const usage = await prisma.vendorDailyUsage.upsert({
-      where: { vendorId_date: { vendorId: vendor.id, date: today } },
-      update: { orderingClosed: closed },
+      where: usageWhere(vendor.id, eventId, today),
+      update: {
+        orderingClosed: closed,
+        usedQuantity,
+        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
+      },
       create: {
         vendorId: vendor.id,
+        eventId,
         date: today,
         dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-        usedQuantity: 0,
+        usedQuantity,
         orderingClosed: closed,
       },
     });
@@ -249,19 +326,22 @@ export const recalculateUsage = async (req: Request, res: Response) => {
     if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
 
     const today = getMalaysiaTodayString();
-    
-    // Fetch all orders for today using the unified report service logic
-    const report = await getVendorDailySalesReport(vendor.id, today);
+    const eventId = await resolveCurrentVendorEventId(vendor.id);
+    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
     
     // Update or create usage record
     const usage = await prisma.vendorDailyUsage.upsert({
-      where: { vendorId_date: { vendorId: vendor.id, date: today } },
-      update: { usedQuantity: report.totalDrinks },
+      where: usageWhere(vendor.id, eventId, today),
+      update: {
+        usedQuantity,
+        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
+      },
       create: {
         vendorId: vendor.id,
+        eventId,
         date: today,
         dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-        usedQuantity: report.totalDrinks,
+        usedQuantity,
         orderingClosed: false,
       },
     });
