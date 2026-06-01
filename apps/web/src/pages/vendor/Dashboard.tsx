@@ -408,7 +408,8 @@ export function VendorDashboard() {
   const SingleOrderList = ({ data }: { data: Order[] }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {data.map((order) => {
-        const isMultiType = order.items.length > 1;
+        const itemCount = order.items?.length ?? 0;
+        const isMultiType = itemCount > 1;
 
         return (
           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
@@ -439,7 +440,7 @@ export function VendorDashboard() {
                         </div>
                       )}
                     </div>
-                    {isMultiType && (
+                    {(isMultiType || itemCount === 1) && (
                       item.status !== 'READY' ? (
                         <button
                           onClick={async () => {
@@ -467,7 +468,7 @@ export function VendorDashboard() {
                 </div>
               ))}
             </div>
-            {!isMultiType && order.status !== 'READY' && (
+            {isMultiType && order.status !== 'READY' && (
               <button
                 onClick={async () => {
                   try {
@@ -719,7 +720,7 @@ export function VendorDashboard() {
                         </div>
                       ))}
                     </div>
-                    {order.status !== 'READY' && (
+                    {(order.items?.length ?? 0) > 1 && order.status !== 'READY' && (
                       <button
                         onClick={async () => {
                           try {

@@ -376,12 +376,22 @@ export function VendorMenu() {
           {sortedMenu.map((item, index) => {
             const groupsCount = Array.isArray(item.optionGroups) ? item.optionGroups.length : 0;
             return (
-              <div key={item.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
-                <div className="w-full aspect-[16/9] bg-neutral-100">
+              <div key={item.id} className={`bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden ${item.isAvailable ? '' : 'opacity-80'}`}>
+                <div className="relative w-full aspect-[16/9] bg-neutral-100">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className={`w-full h-full object-cover ${item.isAvailable ? '' : 'grayscale opacity-60'}`}
+                      loading="lazy"
+                    />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200" />
+                    <div className={`w-full h-full bg-gradient-to-br from-neutral-100 to-neutral-200 ${item.isAvailable ? '' : 'grayscale opacity-60'}`} />
+                  )}
+                  {!item.isAvailable && (
+                    <div className="absolute left-3 top-3 rounded-full bg-black px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+                      Sold Out
+                    </div>
                   )}
                 </div>
                 <div className="p-4">
@@ -432,6 +442,17 @@ export function VendorMenu() {
                   {item.description ? (
                     <div className="mt-3 text-sm text-neutral-600 line-clamp-2">{item.description}</div>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => toggleAvailability(item)}
+                    className={`mt-4 w-full h-11 rounded-2xl border text-sm font-semibold active:scale-[0.99] transition ${
+                      item.isAvailable
+                        ? 'border-neutral-300 bg-white text-black'
+                        : 'border-black bg-black text-white'
+                    }`}
+                  >
+                    {item.isAvailable ? 'Mark Sold Out' : 'Make Available'}
+                  </button>
                 </div>
               </div>
             );
