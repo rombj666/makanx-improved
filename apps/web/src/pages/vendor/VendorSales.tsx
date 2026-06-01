@@ -672,29 +672,6 @@ export function VendorSales() {
                 </div>
               )}
 
-              <div className="grid w-full min-w-0 grid-cols-2 gap-2 border-t border-neutral-100 pt-4">
-                <button
-                  onClick={() => fetchAll()}
-                  disabled={loading}
-                  className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
-                >
-                  Refresh
-                </button>
-                <button
-                  onClick={handleExport}
-                  disabled={loading}
-                  className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
-                >
-                  Export
-                </button>
-                <button
-                  onClick={() => setResetConfirmOpen(true)}
-                  disabled={loading || resettingEventOrders}
-                  className="col-span-2 h-11 min-w-0 rounded-2xl border border-red-700 bg-red-600 px-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-40"
-                >
-                  Reset Event Orders
-                </button>
-              </div>
             </div>
           </Card>
         </div>
@@ -702,6 +679,29 @@ export function VendorSales() {
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Date</div>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mt-2" />
+          <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2">
+            <button
+              onClick={() => fetchAll()}
+              disabled={loading}
+              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={loading}
+              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
+            >
+              Export
+            </button>
+            <button
+              onClick={() => setResetConfirmOpen(true)}
+              disabled={loading || resettingEventOrders}
+              className="col-span-2 h-11 min-w-0 rounded-2xl border border-red-700 bg-red-600 px-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-40"
+            >
+              Reset Event Orders
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-3">
