@@ -13,7 +13,6 @@ import { EventMap } from './pages/customer/EventMap';
 import { CustomerOrders } from './pages/customer/Orders';
 import { VendorDashboard } from './pages/vendor/Dashboard';
 import { VendorMenu } from './pages/vendor/Menu';
-import { VendorMap } from './pages/vendor/Map';
 import { VendorSales } from './pages/vendor/VendorSales';
 import { OrganizerDashboard as OrganizerLegacyDashboard } from './pages/organizer/Dashboard';
 import { OrganizerDashboard } from './pages/organizer/OrganizerDashboard';
@@ -132,7 +131,7 @@ function App() {
                 <Route index element={<VendorDashboard />} />
                 <Route path="sales" element={<VendorSales />} />
                 <Route path="menu" element={<VendorMenu />} />
-                <Route path="map" element={<VendorMap />} />
+                <Route path="map" element={<Navigate to="/vendor" replace />} />
               </Route>
             </Route>
           </Routes>

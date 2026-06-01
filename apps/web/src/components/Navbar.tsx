@@ -114,9 +114,6 @@ export function Navbar() {
                   <NavLink to="/vendor/menu" className={vendorLinkClass}>
                     Menu
                   </NavLink>
-                  <NavLink to="/vendor/map" className={vendorLinkClass}>
-                    Booth
-                  </NavLink>
                 </>
               )}
               <Button
@@ -174,7 +171,6 @@ function VendorMobileMenu({
   const links = [
     { label: 'Dashboard', to: '/vendor' },
     { label: 'Menu', to: '/vendor/menu' },
-    { label: 'Booth', to: '/vendor/map' },
     { label: 'Sales', to: '/vendor/sales' },
   ];
 

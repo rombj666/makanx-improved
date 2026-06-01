@@ -547,31 +547,31 @@ export function VendorSales() {
         </Card>
       </div>
 
-      <div className="hidden [@media(pointer:coarse)]:block min-h-[100dvh] bg-neutral-50 px-4 pt-5 pb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+      <div className="hidden [@media(pointer:coarse)]:block min-h-[100dvh] w-full max-w-full bg-neutral-50 px-3 pt-5 pb-6 sm:px-4">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Vendor</div>
             <div className="text-2xl font-semibold text-black">Sales</div>
           </div>
-          <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
             <button
               onClick={() => fetchAll()}
               disabled={loading}
-              className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40 sm:px-4"
             >
               Refresh
             </button>
             <button
               onClick={handleExport}
               disabled={loading}
-              className="h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40 sm:px-4"
             >
               Export
             </button>
             <button
               onClick={() => setResetConfirmOpen(true)}
               disabled={loading || resettingEventOrders}
-              className="h-11 px-4 rounded-2xl bg-red-600 border border-red-700 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.99] transition"
+              className="col-span-2 h-11 min-w-0 rounded-2xl border border-red-700 bg-red-600 px-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-40 sm:col-span-1 sm:px-4"
             >
               Reset Event Orders
             </button>
@@ -579,16 +579,17 @@ export function VendorSales() {
         </div>
 
         <div className="mt-4 space-y-4">
-          <Card className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+          <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Daily Drink Production Limit</div>
             <div className="mt-3 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Enable Limit</span>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="min-w-0 text-sm font-medium">Enable Limit</span>
                 <Button 
                   size="sm" 
                   variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
                   onClick={() => handleUpdateSettings({ dailyDrinkLimitEnabled: !settings?.dailyDrinkLimitEnabled })}
                   disabled={updatingSettings}
+                  className="shrink-0"
                 >
                   {settings?.dailyDrinkLimitEnabled ? "Enabled" : "Disabled"}
                 </Button>
@@ -597,25 +598,26 @@ export function VendorSales() {
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
                   <label className="text-xs text-neutral-500">Limit Quantity</label>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Input 
                       type="number" 
                       defaultValue={settings?.dailyDrinkLimitQuantity}
                       onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
-                      className="w-24"
+                      className="w-24 min-w-0"
                     />
-                    <span className="text-xs self-center text-neutral-500">drinks / day</span>
+                    <span className="min-w-0 text-xs text-neutral-500">drinks / day</span>
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Auto-Stop</span>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="min-w-0 text-sm font-medium">Auto-Stop</span>
                 <Button 
                   size="sm" 
                   variant={settings?.autoStopOrderingOnLimit ? "default" : "outline"}
                   onClick={() => handleUpdateSettings({ autoStopOrderingOnLimit: !settings?.autoStopOrderingOnLimit })}
                   disabled={updatingSettings}
+                  className="shrink-0"
                 >
                   {settings?.autoStopOrderingOnLimit ? "ON" : "OFF"}
                 </Button>
@@ -623,34 +625,34 @@ export function VendorSales() {
 
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-neutral-500">Report Recipients</div>
-                <div className="flex gap-2">
+                <div className="flex min-w-0 gap-2">
                   <Input 
                     type="email" 
                     placeholder="Enter report email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddEmail()}
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                   />
-                  <Button size="sm" onClick={handleAddEmail} type="button">
+                  <Button size="sm" onClick={handleAddEmail} type="button" className="shrink-0">
                     <Plus className="w-4 h-4 mr-1" /> Add
                   </Button>
                 </div>
                 
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex min-w-0 flex-wrap gap-2 mt-2">
                   {(settings?.reportRecipientEmails || []).length === 0 && (
                     <div className="text-xs text-neutral-400 italic">No emails added</div>
                   )}
                   {(settings?.reportRecipientEmails || []).map((email) => (
                     <div 
                       key={email} 
-                      className="flex items-center gap-1 bg-neutral-100 px-2 py-1 rounded-full text-xs text-neutral-700 border border-neutral-200"
+                      className="flex max-w-full min-w-0 items-center gap-1 bg-neutral-100 px-2 py-1 rounded-full text-xs text-neutral-700 border border-neutral-200"
                     >
-                      <Mail className="w-3 h-3" />
-                      {email}
+                      <Mail className="h-3 w-3 shrink-0" />
+                      <span className="min-w-0 truncate">{email}</span>
                       <button 
                         onClick={() => handleRemoveEmail(email)}
-                        className="ml-1 hover:text-red-500 transition-colors"
+                        className="ml-1 shrink-0 hover:text-red-500 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -661,17 +663,18 @@ export function VendorSales() {
             </div>
           </Card>
 
-          <Card className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+          <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Ordering Status & Usage</div>
             <div className="mt-3 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className={`text-sm font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <div className={`min-w-0 text-sm font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
                   {usage?.orderingClosed ? 'ORDERING CLOSED' : 'ORDERING OPEN'}
                 </div>
                 <Button 
                   size="sm"
                   variant={usage?.orderingClosed ? "default" : "destructive"}
                   onClick={() => handleToggleOrdering(!usage?.orderingClosed)}
+                  className="shrink-0"
                 >
                   {usage?.orderingClosed ? 'Open' : 'Close'}
                 </Button>
@@ -679,9 +682,9 @@ export function VendorSales() {
 
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
-                  <div className="flex justify-between text-xs">
+                  <div className="flex min-w-0 justify-between gap-3 text-xs">
                     <span className="text-neutral-500">Daily Usage</span>
-                    <span className="font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
+                    <span className="min-w-0 text-right font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
                   </div>
                   <div className="w-full bg-neutral-100 rounded-full h-2">
                     <div 
@@ -695,21 +698,21 @@ export function VendorSales() {
           </Card>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Date</div>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mt-2" />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3">
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3">
+          <div className="min-w-0 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Orders</div>
             <div className="mt-2 text-2xl font-semibold text-black">{summary?.orders ?? 0}</div>
           </div>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Product Trend</div>
-          <div className="mt-3 h-64 [@media(orientation:landscape)]:h-52 w-full">
+          <div className="mt-3 h-64 w-full min-w-0 [@media(orientation:landscape)]:h-52">
             {productTrend.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-neutral-600">No completed orders for selected date.</div>
             ) : (
@@ -734,9 +737,9 @@ export function VendorSales() {
           </div>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Top Products</div>
-          <div className="mt-3 h-72 [@media(orientation:landscape)]:h-56 w-full">
+          <div className="mt-3 h-72 w-full min-w-0 [@media(orientation:landscape)]:h-56">
             {products.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-neutral-600">No product data.</div>
             ) : (
@@ -763,15 +766,15 @@ export function VendorSales() {
           </div>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Product Breakdown</div>
           <div className="mt-3 space-y-2">
             {products.length === 0 ? (
               <div className="text-sm text-neutral-600">No product data.</div>
             ) : (
               products.map((p, idx) => (
-                <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
-                  <div className="text-sm font-semibold text-black">{p.productName}</div>
+                <div key={idx} className="min-w-0 rounded-2xl border border-neutral-100 p-3">
+                  <div className="break-words text-sm font-semibold text-black">{p.productName}</div>
                   <div className="mt-1 text-xs text-neutral-600">
                     Qty: {p.qtySold}
                   </div>
@@ -781,17 +784,17 @@ export function VendorSales() {
           </div>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Completed Orders</div>
           <div className="mt-3 space-y-3">
             {orders.length === 0 ? (
               <div className="text-sm text-neutral-600">No completed orders.</div>
             ) : (
               orders.map((o, idx) => (
-                <div key={idx} className="rounded-3xl border border-neutral-100 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-black">{o.orderNumber}</div>
+                <div key={idx} className="min-w-0 rounded-3xl border border-neutral-100 p-4">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="break-words text-sm font-semibold text-black">{o.orderNumber}</div>
                       <div className="text-xs text-neutral-500">
                         Created {format(new Date(o.createdAt), 'HH:mm')}
                         {o.completedAt ? ` • Completed ${format(new Date(o.completedAt), 'HH:mm')}` : ''}     
@@ -800,7 +803,7 @@ export function VendorSales() {
                   </div>
                   <div className="mt-3 space-y-1">
                     {o.items.map((it, i) => (
-                      <div key={i} className="text-xs text-neutral-700">
+                      <div key={i} className="break-words text-xs text-neutral-700">
                         {it.qty}x {it.productName}
                       </div>
                     ))}
