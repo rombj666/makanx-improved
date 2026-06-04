@@ -12,6 +12,11 @@ const updateSettingsSchema = z.object({
   reportRecipientEmails: z.array(z.string().email()).optional().nullable(),
 });
 
+const updateOrderLimitSettingsSchema = z.object({
+  deviceOrderLimitEnabled: z.boolean(),
+  maxDrinksPerOrder: z.number().int().min(1),
+});
+
 const usageWhere = (vendorId: string, eventId: string | null, date: string) =>
   ({ vendorId_eventId_date: { vendorId, eventId, date } } as any);
 
@@ -41,6 +46,22 @@ async function resolveCurrentVendorEventId(vendorId: string) {
     select: { eventId: true },
   });
   return anyBooth?.eventId ?? null;
+}
+
+async function ensureVendorAssignedToEvent(userId: string, eventId?: string) {
+  const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+  if (!vendor) throw new Error('Vendor profile not found');
+
+  const resolvedEventId = eventId || (await resolveCurrentVendorEventId(vendor.id));
+  if (!resolvedEventId) throw new Error('Vendor has no current event');
+
+  const booth = await prisma.booth.findFirst({
+    where: { vendorId: vendor.id, eventId: resolvedEventId },
+    select: { id: true },
+  });
+  if (!booth) throw new Error('Vendor is not assigned to this event');
+
+  return { vendor, eventId: resolvedEventId };
 }
 
 async function calculateDailyUsedQuantity(vendorId: string, eventId: string | null, dateStr: string) {
@@ -154,6 +175,53 @@ export const updateSettings = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
     }
     return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const getOrderLimitSettings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { eventId } = await ensureVendorAssignedToEvent(userId, req.params.eventId);
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { deviceOrderLimitEnabled: true, maxDrinksPerOrder: true },
+    });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    return res.json({
+      success: true,
+      data: {
+        deviceOrderLimitEnabled: event.deviceOrderLimitEnabled ?? false,
+        maxDrinksPerOrder: event.maxDrinksPerOrder ?? 1,
+      },
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+export const updateOrderLimitSettings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const validatedData = updateOrderLimitSettingsSchema.parse(req.body);
+    const { eventId } = await ensureVendorAssignedToEvent(userId, req.params.eventId);
+
+    const event = await prisma.event.update({
+      where: { id: eventId },
+      data: validatedData,
+      select: { deviceOrderLimitEnabled: true, maxDrinksPerOrder: true },
+    });
+
+    return res.json({ success: true, data: event });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message).join(', ') });
+    }
+    return res.status(400).json({ success: false, error: error.message });
   }
 };
 

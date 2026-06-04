@@ -174,6 +174,7 @@ const createOrderSchema = z.object({
   ),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_BOOTH),
   guestId: z.string().optional(),
+  deviceId: z.string().trim().optional(),
   customerEmail: z
     .union([z.string().trim().email(), z.literal('')])
     .optional()
@@ -260,13 +261,43 @@ export const createOrder = async (
   customerId: string | undefined,
   input: z.infer<typeof createOrderSchema>
 ) => {
-  const { vendorId, eventId: requestedEventId, items, paymentMode, guestId, customerEmail } = createOrderSchema.parse(input);
+  const { vendorId, eventId: requestedEventId, items, paymentMode, guestId, deviceId, customerEmail } = createOrderSchema.parse(input);
 
-  console.log('[order] create: incoming payload', { vendorId, eventId: requestedEventId || null, itemsCount: items.length, guestId, customerEmail: customerEmail || null });
+  console.log('[order] create: incoming payload', { vendorId, eventId: requestedEventId || null, itemsCount: items.length, guestId, deviceId, customerEmail: customerEmail || null });
 
   // Calculate requested total quantity
   const requestedQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const eventId = await resolveVendorEventId(vendorId, requestedEventId);
+
+  const eventSettings = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { deviceOrderLimitEnabled: true, maxDrinksPerOrder: true },
+  });
+  const deviceOrderLimitEnabled = eventSettings?.deviceOrderLimitEnabled === true;
+  const maxDrinksPerOrder = Math.max(1, Number(eventSettings?.maxDrinksPerOrder || 1));
+
+  if (deviceOrderLimitEnabled) {
+    if (!deviceId) {
+      throw new Error('Device ID is required to place this order.');
+    }
+    const existingOrder = await prisma.order.findFirst({
+      where: {
+        eventId,
+        deviceId,
+      },
+      select: { id: true },
+    });
+    if (existingOrder) {
+      const error = new Error('This device has already placed an order for this event.');
+      (error as any).code = 'DEVICE_ORDER_EXISTS';
+      (error as any).existingOrderId = existingOrder.id;
+      throw error;
+    }
+
+    if (requestedQuantity < 1 || requestedQuantity > maxDrinksPerOrder) {
+      throw new Error(maxDrinksPerOrder === 1 ? 'Only 1 drink can be ordered per device.' : `Maximum ${maxDrinksPerOrder} drink(s) per order.`);
+    }
+  }
 
   // Daily Limit Validation
   const today = getMalaysiaTodayString();
@@ -423,6 +454,7 @@ export const createOrder = async (
         data: {
           customerId: finalCustomerId,
           ...(includeCustomerEmail ? { customerEmail: customerEmail || null } : {}),
+          ...(deviceOrderLimitEnabled ? { deviceId } : {}),
           eventId,
           vendorId,
           displayNumber: nextDisplayNumber,
@@ -497,6 +529,18 @@ export const createOrder = async (
   } catch (e: any) {
     const code = String((e as any)?.code || '');
     if (code === 'P2002') {
+      const target = (e as any)?.meta?.target;
+      const targetText = Array.isArray(target) ? target.join(',') : String(target || '');
+      if (targetText.includes('eventId') && targetText.includes('deviceId')) {
+        const existingOrder = await prisma.order.findFirst({
+          where: { eventId, deviceId },
+          select: { id: true },
+        });
+        const conflict = new Error('This device has already placed an order for this event.');
+        (conflict as any).code = 'DEVICE_ORDER_EXISTS';
+        (conflict as any).existingOrderId = existingOrder?.id;
+        throw conflict;
+      }
       result = await createWithDisplayNumber();
     } else if (isMissingColumnError(e, 'selectedOptions')) {
       try {

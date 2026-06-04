@@ -33,6 +33,14 @@ export const createOrder = async (req: Request, res: Response) => {
         remainingCups: error.remainingCups
       });
     }
+
+    if (error.code === 'DEVICE_ORDER_EXISTS') {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+        existingOrderId: error.existingOrderId,
+      });
+    }
     
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }

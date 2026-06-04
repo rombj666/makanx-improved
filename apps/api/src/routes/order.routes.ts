@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as orderController from '../controllers/order.controller';
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 
 const router = Router();
 

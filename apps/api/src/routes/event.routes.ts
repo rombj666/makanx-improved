@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as eventController from '../controllers/event.controller';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 
 import { upload } from '../middleware/upload';
 

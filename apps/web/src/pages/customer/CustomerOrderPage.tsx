@@ -15,6 +15,13 @@ import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
+import {
+  DEVICE_ORDER_LOCK_MESSAGE,
+  getMaxDrinksOrderMessage,
+  getOrCreateDeviceId,
+  hasOrderLock,
+  saveOrderLock,
+} from '../../lib/deviceOrderLock';
 
 interface MenuItem {
   id: string;
@@ -49,6 +56,8 @@ export function CustomerOrderPage() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [servingOrder, setServingOrder] = useState<string | null>(null);
+  const [deviceOrderLimitEnabled, setDeviceOrderLimitEnabled] = useState(false);
+  const [maxDrinksPerOrder, setMaxDrinksPerOrder] = useState(1);
 
   useEffect(() => {
     if (!vendorId) return;
@@ -77,10 +86,12 @@ export function CustomerOrderPage() {
   const [emailDraftTouched, setEmailDraftTouched] = useState(false);
 
   const guestId = useMemo(() => getOrCreateGuestId(), []);
+  const deviceId = useMemo(() => getOrCreateDeviceId(), []);
   const emailStorageKey = useMemo(() => {
     if (!slug) return '';
     return `mx_customer_email_${slug}`;
   }, [slug]);
+  const eventLockKey = useMemo(() => eventId || String(slug || ''), [eventId, slug]);
 
   const normalizeEmail = (email: string) => email.trim();
   const isValidEmail = (email: string) =>
@@ -103,6 +114,8 @@ export function CustomerOrderPage() {
         if (data.success) {
           const event = data.data;
           setEventId(String(event.id || ''));
+          setDeviceOrderLimitEnabled(event.deviceOrderLimitEnabled === true);
+          setMaxDrinksPerOrder(Math.max(1, Number(event.maxDrinksPerOrder || 1)));
           const found = (event.booths || []).find((b: any) => b.vendor?.id === vendorId) || null;
           setBooth(found);
         }
@@ -127,13 +140,26 @@ export function CustomerOrderPage() {
     vendorId: String(vendorId || ''),
     vendorName: booth?.vendor?.businessName || booth?.name || '',
     boothName: booth?.name || '',
+    maxItems: deviceOrderLimitEnabled ? maxDrinksPerOrder : 99,
   });
+  const orderLimitMessage = useMemo(
+    () => getMaxDrinksOrderMessage(maxDrinksPerOrder),
+    [maxDrinksPerOrder]
+  );
   const hidePrices = booth?.showPrices === false;
 
   const { addOrUpdate } = useCustomerOrders(String(slug || ''));
 
   const performCheckout = async (emailOverride?: string) => {
     if (!vendorId || cart.lines.length === 0) return;
+    if (deviceOrderLimitEnabled && eventLockKey && hasOrderLock(eventLockKey)) {
+      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
+      return;
+    }
+    if (deviceOrderLimitEnabled && (cart.totalItems < 1 || cart.totalItems > maxDrinksPerOrder)) {
+      toast.error(orderLimitMessage);
+      return;
+    }
     setIsPlacing(true);
     try {
       const normalizedEmail = normalizeEmail(typeof emailOverride === 'string' ? emailOverride : customerEmail);
@@ -157,6 +183,7 @@ export function CustomerOrderPage() {
         })),
         paymentMode: 'PAY_AT_BOOTH',
         guestId,
+        ...(deviceOrderLimitEnabled ? { deviceId } : {}),
         customerEmail: normalizedEmail || undefined,
       });
 
@@ -167,6 +194,7 @@ export function CustomerOrderPage() {
 
       const { order, estimatedMinutes } = res.data.data;
       const displayNumber = computeDisplayNumber(order);
+      if (deviceOrderLimitEnabled) saveOrderLock(eventLockKey, order.id);
 
       if (emailStorageKey && isValidNonEmptyEmail(normalizedEmail)) {
         try {
@@ -233,6 +261,14 @@ export function CustomerOrderPage() {
   const requestCheckout = async () => {
     if (isPlacing) return;
     if (!vendorId || cart.totalItems <= 0) return;
+    if (deviceOrderLimitEnabled && eventLockKey && hasOrderLock(eventLockKey)) {
+      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
+      return;
+    }
+    if (deviceOrderLimitEnabled && (cart.totalItems < 1 || cart.totalItems > maxDrinksPerOrder)) {
+      toast.error(orderLimitMessage);
+      return;
+    }
     const normalized = normalizeEmail(customerEmail);
     if (normalized === '') {
       let saved = '';
@@ -390,9 +426,16 @@ export function CustomerOrderPage() {
         optionGroups={Array.isArray(activeItem?.optionGroups) ? activeItem?.optionGroups : []}
         remarksEnabled={activeItem?.remarksEnabled !== false}
         hidePrice={hidePrices}
+        maxQuantity={deviceOrderLimitEnabled ? Math.max(0, maxDrinksPerOrder - cart.totalItems) : 99}
+        addDisabled={deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder}
+        disabledMessage={orderLimitMessage}
         onClose={() => setActiveItem(null)}
         onAdd={({ quantity, remark, selectedOptions }) => {
           if (!activeItem) return;
+          if (deviceOrderLimitEnabled && (cart.totalItems + quantity > maxDrinksPerOrder)) {
+            toast.error(orderLimitMessage);
+            return;
+          }
           cart.addLine({
             menuItemId: activeItem.id,
             name: activeItem.name,
@@ -462,8 +505,15 @@ export function CustomerOrderPage() {
                             {l.quantity}
                           </span>
                           <button
-                            onClick={() => cart.updateQuantity(l.id, l.quantity + 1)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition"
+                            onClick={() => {
+                              if (deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder) {
+                                toast.error(orderLimitMessage);
+                                return;
+                              }
+                              cart.updateQuantity(l.id, l.quantity + 1);
+                            }}
+                            disabled={deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition disabled:opacity-40"
                           >
                             <Plus size={14} />
                           </button>

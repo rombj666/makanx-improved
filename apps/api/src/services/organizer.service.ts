@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 
 export const getVendors = async (active?: boolean, eventId?: string) => {
   const where: any = {

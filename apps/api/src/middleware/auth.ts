@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, TokenPayload } from '../utils/jwt';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 import prisma from '../utils/prisma';
 
 // Extend Express Request to include user

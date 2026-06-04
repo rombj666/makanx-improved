@@ -3,7 +3,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 import { uploadMemory } from '../middleware/uploadCloudinary';
 
 const router = Router();

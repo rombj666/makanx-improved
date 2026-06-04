@@ -19,6 +19,9 @@ type Props = {
   optionGroups?: OptionGroup[];
   remarksEnabled?: boolean;
   hidePrice?: boolean;
+  maxQuantity?: number;
+  addDisabled?: boolean;
+  disabledMessage?: string;
   onClose: () => void;
   onAdd: (payload: {
     quantity: number;
@@ -39,6 +42,9 @@ export function ProductDetailSheet({
   optionGroups,
   remarksEnabled,
   hidePrice,
+  maxQuantity = 99,
+  addDisabled = false,
+  disabledMessage,
   onClose,
   onAdd,
 }: Props) {
@@ -65,6 +71,9 @@ export function ProductDetailSheet({
           optionGroups={groups}
           remarksEnabled={allowRemarks}
           hidePrice={hidePrice === true}
+          maxQuantity={Math.max(0, Math.floor(maxQuantity))}
+          addDisabled={addDisabled}
+          disabledMessage={disabledMessage}
           onClose={onClose}
           onAdd={onAdd}
         />
@@ -82,6 +91,9 @@ function ProductDetailSheetBody({
   optionGroups,
   remarksEnabled,
   hidePrice,
+  maxQuantity,
+  addDisabled,
+  disabledMessage,
   onClose,
   onAdd,
 }: {
@@ -91,6 +103,9 @@ function ProductDetailSheetBody({
   optionGroups: OptionGroup[];
   remarksEnabled: boolean;
   hidePrice: boolean;
+  maxQuantity: number;
+  addDisabled: boolean;
+  disabledMessage?: string;
   onClose: () => void;
   onAdd: (payload: {
     quantity: number;
@@ -104,12 +119,18 @@ function ProductDetailSheetBody({
   const [selected, setSelected] = React.useState<Record<string, string[]>>({});
 
   const setBothQty = (q: number) => {
-    const next = clamp(q, 1, 99);
+    const next = clamp(q, 1, Math.max(1, maxQuantity));
     setQuantity(next);
     setDraftQty(String(next));
   };
   const dec = () => setBothQty(quantity - 1);
-  const inc = () => setBothQty(quantity + 1);
+  const inc = () => {
+    if (quantity >= maxQuantity) {
+      if (disabledMessage) toast.error(disabledMessage);
+      return;
+    }
+    setBothQty(quantity + 1);
+  };
 
   const commitQty = (raw: string) => {
     const trimmed = String(raw || '').trim();
@@ -190,7 +211,7 @@ function ProductDetailSheetBody({
             />
             <button
               onClick={inc}
-              disabled={quantity >= 99}
+              disabled={quantity >= maxQuantity}
               className="w-12 h-12 rounded-full border border-neutral-200 text-lg bg-white disabled:opacity-40 active:scale-95 transition"
               aria-label="Increase quantity"
             >
@@ -263,6 +284,10 @@ function ProductDetailSheetBody({
 
         <button
           onClick={() => {
+            if (addDisabled || maxQuantity < 1) {
+              if (disabledMessage) toast.error(disabledMessage);
+              return;
+            }
             const requiredMissing = optionGroups.find((g) => {
               if (!g.required) return false;
               const chosen = Array.isArray(selected[g.id]) ? selected[g.id] : [];
@@ -291,7 +316,8 @@ function ProductDetailSheetBody({
             setSelected({});
             onClose();
           }}
-          className="mt-5 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-lg active:scale-[0.99] transition"
+          disabled={addDisabled || maxQuantity < 1}
+          className="mt-5 w-full bg-black text-white rounded-2xl py-4 text-base font-semibold shadow-lg active:scale-[0.99] transition disabled:opacity-50"
         >
           Add to Cart
         </button>

@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma';
 import { z } from 'zod';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 import crypto from 'crypto';
 import { generateToken } from '../utils/jwt';
 import { hashPassword } from '../utils/password';

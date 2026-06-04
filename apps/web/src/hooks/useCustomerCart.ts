@@ -66,8 +66,10 @@ export function useCustomerCart(params: {
   vendorId: string;
   vendorName?: string;
   boothName?: string;
+  maxItems?: number;
 }) {
-  const { eventSlug, vendorId, vendorName = '', boothName = '' } = params;
+  const { eventSlug, vendorId, vendorName = '', boothName = '', maxItems = 99 } = params;
+  const cartLimit = Math.max(1, Math.floor(Number(maxItems) || 99));
   const key = useMemo(() => storageKey(eventSlug, vendorId), [eventSlug, vendorId]);
 
   const [state, setState] = useState<CartState>(() => ({
@@ -109,7 +111,10 @@ export function useCustomerCart(params: {
     (input: Omit<CartLine, 'id'>) => {
       setState((prev) => {
         const normalizedRemark = (input.remark || '').trim();
-        const qty = clampQuantity(input.quantity);
+        const currentTotal = prev.lines.reduce((sum, l) => sum + l.quantity, 0);
+        const remaining = Math.max(0, cartLimit - currentTotal);
+        const qty = Math.min(clampQuantity(input.quantity), remaining);
+        if (qty <= 0) return prev;
         const sig = normalizeSelectedOptions(input.selectedOptions);
         const allowRemarks = normalizeRemarksEnabled((input as any).remarksEnabled);
         const idx = prev.lines.findIndex(
@@ -138,17 +143,19 @@ export function useCustomerCart(params: {
         };
       });
     },
-    [vendorId, vendorName, boothName]
+    [vendorId, vendorName, boothName, cartLimit]
   );
 
   const updateQuantity = useCallback((id: string, quantity: number) => {
     setState((prev) => {
+      const otherQuantity = prev.lines.reduce((sum, l) => (l.id === id ? sum : sum + l.quantity), 0);
+      const maxForLine = Math.max(0, cartLimit - otherQuantity);
       const next = prev.lines
-        .map((l) => (l.id === id ? { ...l, quantity: clampQuantity(quantity) } : l))
+        .map((l) => (l.id === id ? { ...l, quantity: Math.min(clampQuantity(quantity), maxForLine) } : l))
         .filter((l) => l.quantity > 0);
       return { ...prev, lines: next };
     });
-  }, []);
+  }, [cartLimit]);
 
   const updateRemark = useCallback((id: string, remark: string) => {
     setState((prev) => {

@@ -40,6 +40,8 @@ model Event {
   location      String?
   mapImageUrl   String?
   layoutVersion Int                 @default(0)
+  deviceOrderLimitEnabled Boolean   @default(false)
+  maxDrinksPerOrder Int             @default(1)
   organizerId   String
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -146,6 +148,7 @@ model Order {
   id            String        @id @default(uuid())
   customerId    String
   customerEmail String?
+  deviceId      String?
   eventId       String
   vendorId      String
   displayNumber Int           @default(0)
@@ -163,7 +166,9 @@ model Order {
   items         OrderItem[]
 
   @@unique([eventId, vendorId, displayNumber])
+  @@unique([eventId, deviceId])
   @@index([eventId, vendorId])
+  @@index([deviceId])
   @@index([vendorId, createdAt])
   @@index([status])
   @@index([completedAt])

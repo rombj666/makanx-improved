@@ -50,6 +50,11 @@ interface VendorSettings {
   reportRecipientEmails: string[];
 }
 
+interface OrderLimitSettings {
+  deviceOrderLimitEnabled: boolean;
+  maxDrinksPerOrder: number;
+}
+
 interface DailyUsage {
   usedQuantity: number;
   dailyLimit: number;
@@ -71,8 +76,10 @@ export function VendorSales() {
   const [products, setProducts] = useState<ProductPerf[]>([]);
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [settings, setSettings] = useState<VendorSettings | null>(null);
+  const [orderLimitSettings, setOrderLimitSettings] = useState<OrderLimitSettings | null>(null);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [updatingOrderLimit, setUpdatingOrderLimit] = useState(false);
   const [resettingEventOrders, setResettingEventOrders] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -88,12 +95,13 @@ export function VendorSales() {
     setLoading(true);
     try {
       const params = { eventId: '', date: targetDate };
-      const [s, pt, p, o, sett, usg] = await Promise.all([
+      const [s, pt, p, o, sett, orderLimit, usg] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
         api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
         api.get('/analytics/products', { params }),
         api.get('/analytics/vendor/orders', { params }),
         api.get('/vendor/settings'),
+        api.get('/vendor/order-limit-settings'),
         api.get('/vendor/daily-usage'),
       ]);
       setSummary(s.data.data);
@@ -101,6 +109,7 @@ export function VendorSales() {
       setProducts(p.data.data);
       setOrders(o.data.data);
       setSettings(sett.data.data);
+      setOrderLimitSettings(orderLimit.data.data);
       setUsage(usg.data.data);
     } catch (e) {
       // silent
@@ -125,6 +134,26 @@ export function VendorSales() {
       toast.error(e.response?.data?.error || 'Failed to update settings');
     } finally {
       setUpdatingSettings(false);
+    }
+  };
+
+  const handleUpdateOrderLimitSettings = async (updates: Partial<OrderLimitSettings>) => {
+    const next = {
+      deviceOrderLimitEnabled: orderLimitSettings?.deviceOrderLimitEnabled ?? false,
+      maxDrinksPerOrder: orderLimitSettings?.maxDrinksPerOrder ?? 1,
+      ...updates,
+    };
+    next.maxDrinksPerOrder = Math.max(1, Math.floor(Number(next.maxDrinksPerOrder) || 1));
+
+    setUpdatingOrderLimit(true);
+    try {
+      const res = await api.patch('/vendor/order-limit-settings', next);
+      setOrderLimitSettings(res.data.data);
+      toast.success('Order limit settings updated');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to update order limit settings');
+    } finally {
+      setUpdatingOrderLimit(false);
     }
   };
 
@@ -236,7 +265,7 @@ export function VendorSales() {
       <div className="block [@media(pointer:coarse)]:hidden p-6 space-y-6">
         <h1 className="text-2xl font-bold">Vendor Sales Analytics</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
               <CardTitle>Daily Drink Production Limit</CardTitle>
@@ -316,6 +345,40 @@ export function VendorSales() {
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <CardHeader>
+              <CardTitle>ORDER LIMIT CONTROL</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">Enable Device Limit</span>
+                <Button
+                  size="sm"
+                  variant={orderLimitSettings?.deviceOrderLimitEnabled ? "default" : "outline"}
+                  onClick={() => handleUpdateOrderLimitSettings({ deviceOrderLimitEnabled: !orderLimitSettings?.deviceOrderLimitEnabled })}
+                  disabled={updatingOrderLimit}
+                >
+                  {orderLimitSettings?.deviceOrderLimitEnabled ? "ON" : "OFF"}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm text-gray-600">Max Drinks Per Order</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    key={`desktop-order-limit-${orderLimitSettings?.maxDrinksPerOrder ?? 1}`}
+                    type="number"
+                    min={1}
+                    defaultValue={orderLimitSettings?.maxDrinksPerOrder ?? 1}
+                    onBlur={(e) => handleUpdateOrderLimitSettings({ maxDrinksPerOrder: parseInt(e.target.value, 10) })}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-gray-500">drinks / order</span>
                 </div>
               </div>
             </CardContent>
@@ -635,6 +698,39 @@ export function VendorSales() {
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">ORDER LIMIT CONTROL</div>
+            <div className="mt-3 space-y-4">
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="min-w-0 text-sm font-medium">Enable Device Limit</span>
+                <Button
+                  size="sm"
+                  variant={orderLimitSettings?.deviceOrderLimitEnabled ? "default" : "outline"}
+                  onClick={() => handleUpdateOrderLimitSettings({ deviceOrderLimitEnabled: !orderLimitSettings?.deviceOrderLimitEnabled })}
+                  disabled={updatingOrderLimit}
+                  className="shrink-0"
+                >
+                  {orderLimitSettings?.deviceOrderLimitEnabled ? "ON" : "OFF"}
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-neutral-500">Max Drinks Per Order</label>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Input
+                    key={`mobile-order-limit-${orderLimitSettings?.maxDrinksPerOrder ?? 1}`}
+                    type="number"
+                    min={1}
+                    defaultValue={orderLimitSettings?.maxDrinksPerOrder ?? 1}
+                    onBlur={(e) => handleUpdateOrderLimitSettings({ maxDrinksPerOrder: parseInt(e.target.value, 10) })}
+                    className="w-20 min-w-0"
+                  />
+                  <span className="min-w-0 text-xs text-neutral-500">drinks / order</span>
                 </div>
               </div>
             </div>

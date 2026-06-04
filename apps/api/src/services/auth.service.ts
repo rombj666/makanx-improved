@@ -1,7 +1,7 @@
 import prisma from '../utils/prisma';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
-import { Role } from '@makanx/shared';
+import { Role } from '@prisma/client';
 import { z } from 'zod';
 import { randomInt } from 'crypto';
 import { sendPasswordResetEmail } from './email/email.service';
