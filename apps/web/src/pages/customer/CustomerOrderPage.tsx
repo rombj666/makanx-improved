@@ -191,12 +191,12 @@ export function CustomerOrderPage() {
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-neutral-50 pb-52">
-      <header className="bg-black px-4 py-8 text-white">
+      <header className="border-b border-neutral-200 bg-white px-4 py-8 text-black">
         <div className="mx-auto max-w-4xl">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">Smart QR Ordering System</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-600">Smart QR Ordering System</div>
           <h1 className="mt-2 text-3xl font-bold">{store.businessName}</h1>
-          {store.description && <p className="mt-2 max-w-xl text-neutral-300">{store.description}</p>}
-          {!store.settings?.orderingOpen && <p className="mt-4 rounded-xl bg-red-500/20 p-3 text-sm text-red-100">Ordering is currently closed.</p>}
+          {store.description && <p className="mt-2 max-w-xl text-neutral-600">{store.description}</p>}
+          {!store.settings?.orderingOpen && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">Ordering is currently closed.</p>}
         </div>
       </header>
 
