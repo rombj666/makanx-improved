@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { Role } from '@makanx/shared';
+import { Role } from '@smart-qr/shared';
 
 interface User {
   id: string;

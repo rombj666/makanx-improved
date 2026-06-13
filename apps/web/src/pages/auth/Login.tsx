@@ -38,10 +38,7 @@ export function Login() {
       login(token, user);
       toast.success('Welcome back!');
       
-      // Redirect based on role
-      if (user.role === 'ORGANIZER') navigate('/organizer', { replace: true });
-      else if (user.role === 'VENDOR') navigate('/vendor', { replace: true });
-      else navigate('/home', { replace: true });
+      navigate('/vendor', { replace: true });
     } catch (error: any) {
       const msg = error.response?.data?.error || 'Login failed. Please try again.';
       setErrorMessage(msg);
@@ -56,7 +53,7 @@ export function Login() {
       <Card className="w-full max-w-md rounded-2xl shadow-xl bg-white border-none">
         <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-2xl font-bold text-center text-gray-900">
-            Welcome to MakanX
+            Smart QR Ordering System
           </CardTitle>
           <p className="text-center text-sm text-gray-500">
             Sign in to your account
@@ -125,11 +122,6 @@ export function Login() {
             )}
           </form>
           
-          <div className="mt-6 flex flex-col items-center gap-4 text-sm text-gray-500">
-            <Link to="/invite" className="text-orange-600 hover:text-orange-700 font-medium hover:underline transition-colors">
-              Activate vendor account
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>

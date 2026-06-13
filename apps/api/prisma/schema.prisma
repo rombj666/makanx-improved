@@ -7,122 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model AuditLog {
-  id         String      @id @default(uuid())
-  action     AuditAction
-  entityId   String
-  entityType String
-  actorId    String
-  details    Json?
-  createdAt  DateTime    @default(now())
-}
-
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
   password      String
   name          String
-  role          Role           @default(CUSTOMER)
+  role          Role           @default(VENDOR)
+  isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  isActive      Boolean        @default(true)
-  managedEvents Event[]        @relation("OrganizerEvents")
   vendorProfile VendorProfile?
 }
 
-model Event {
-  id            String              @id @default(uuid())
-  name          String
-  slug          String              @unique
-  description   String?
-  startDate     DateTime
-  endDate       DateTime
-  location      String?
-  mapImageUrl   String?
-  layoutVersion Int                 @default(0)
-  deviceOrderLimitEnabled Boolean   @default(false)
-  maxDrinksPerOrder Int             @default(1)
-  organizerId   String
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  status        EventStatus         @default(ACTIVE)
-  booths        Booth[]
-  orders        Order[]
-  organizer     User                @relation("OrganizerEvents", fields: [organizerId], references: [id])
-  applications  VendorApplication[]
+model VendorProfile {
+  id           String         @id @default(uuid())
+  userId       String         @unique
+  businessName String
+  description  String?
+  category     String?
+  phoneNumber  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  settings     VendorSettings?
+  menuItems    MenuItem[]
+  orders       Order[]
+  dailyUsages  VendorDailyUsage[]
 }
 
-model VendorProfile {
-  id                      String             @id @default(uuid())
-  userId                  String             @unique
-  businessName            String
-  description             String?
-  category                String?
-  phoneNumber             String?
-  priceRange              String?
-  dailyDrinkLimitEnabled  Boolean            @default(false)
-  dailyDrinkLimitQuantity Int                @default(0)
-  autoStopOrderingOnLimit Boolean            @default(true)
-  reportRecipientEmail    String?
+model VendorSettings {
+  id                      String        @id @default(uuid())
+  vendorId                String        @unique
+  orderingOpen            Boolean       @default(true)
+  dailyLimitEnabled       Boolean       @default(false)
+  dailyLimitQuantity      Int           @default(0)
+  dailyLimitAutoStop      Boolean       @default(true)
+  deviceOrderLimitEnabled Boolean       @default(false)
+  maxDrinksPerOrder       Int           @default(99)
   reportRecipientEmails   Json?
-  booths                  Booth[]
-  menuItems               MenuItem[]
-  orders                  Order[]            @relation("VendorOrders")
-  dailyUsages             VendorDailyUsage[]
-  user                    User               @relation(fields: [userId], references: [id])
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  vendor                  VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 }
 
 model VendorDailyUsage {
   id             String        @id @default(uuid())
   vendorId       String
-  eventId        String?
   date           String
   dailyLimit     Int
   usedQuantity   Int           @default(0)
   orderingClosed Boolean       @default(false)
-  reportSentAt   DateTime?
-  reportSentTo   String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  vendor         VendorProfile @relation(fields: [vendorId], references: [id])
+  vendor         VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
-  @@unique([vendorId, eventId, date])
-}
-
-model VendorApplication {
-  id               String            @id @default(uuid())
-  eventId          String
-  applicantName    String
-  applicantEmail   String
-  businessName     String
-  googleFormData   Json?
-  status           ApplicationStatus @default(PENDING)
-  createdAt        DateTime          @default(now())
-  accountCreatedAt DateTime?
-  approvedAt       DateTime?
-  approvedByUserId String?
-  category         String?
-  description      String?
-  phoneNumber      String?
-  priceMax         Float             @default(0)
-  priceMin         Float             @default(0)
-  inviteToken      InviteToken?
-  event            Event             @relation(fields: [eventId], references: [id])
-}
-
-model Booth {
-  id         String         @id @default(uuid())
-  eventId    String
-  vendorId   String?
-  name       String
-  status     String
-  x          Float          @default(0)
-  y          Float          @default(0)
-  width      Float          @default(10)
-  height     Float          @default(10)
-  showPrices Boolean        @default(true)
-  event      Event          @relation(fields: [eventId], references: [id])
-  vendor     VendorProfile? @relation(fields: [vendorId], references: [id])
+  @@unique([vendorId, date])
 }
 
 model MenuItem {
@@ -130,15 +69,17 @@ model MenuItem {
   vendorId       String
   name           String
   description    String?
-  price          Decimal
+  price          Decimal       @db.Decimal(10, 2)
   imageUrl       String?
   isAvailable    Boolean       @default(true)
   optionGroups   Json?
   remarksEnabled Boolean       @default(true)
   displayOrder   Int           @default(0)
+  basePrepMin    Int           @default(5)
+  extraPerItemMin Int          @default(1)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  vendor         VendorProfile @relation(fields: [vendorId], references: [id])
+  vendor         VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   orderItems     OrderItem[]
 
   @@index([vendorId, displayOrder])
@@ -147,31 +88,28 @@ model MenuItem {
 model Order {
   id            String        @id @default(uuid())
   customerId    String
+  customerName  String?
+  customerPhone String?
   customerEmail String?
   deviceId      String?
-  eventId       String
   vendorId      String
-  displayNumber Int           @default(0)
+  displayNumber Int
   status        OrderStatus   @default(PREPARING)
-  paymentMode   PaymentMode   @default(PAY_AT_BOOTH)
+  paymentMode   PaymentMode   @default(PAY_AT_COUNTER)
   paymentStatus PaymentStatus @default(PENDING)
-  totalAmount   Decimal
+  totalAmount   Decimal       @db.Decimal(10, 2)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   acceptedAt    DateTime?
-  completedAt   DateTime?
   readyAt       DateTime?
-  event         Event         @relation(fields: [eventId], references: [id])
-  vendor        VendorProfile @relation("VendorOrders", fields: [vendorId], references: [id])
+  completedAt   DateTime?
+  vendor        VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   items         OrderItem[]
 
-  @@unique([eventId, vendorId, displayNumber])
-  @@unique([eventId, deviceId])
-  @@index([eventId, vendorId])
-  @@index([deviceId])
+  @@unique([vendorId, displayNumber])
   @@index([vendorId, createdAt])
+  @@index([vendorId, deviceId, createdAt])
   @@index([status])
-  @@index([completedAt])
 }
 
 model OrderItem {
@@ -179,12 +117,12 @@ model OrderItem {
   orderId         String
   menuItemId      String
   quantity        Int
-  price           Decimal
+  price           Decimal         @db.Decimal(10, 2)
   remark          String?
   selectedOptions Json?
   status          OrderItemStatus @default(PREPARING)
   menuItem        MenuItem        @relation(fields: [menuItemId], references: [id])
-  order           Order           @relation(fields: [orderId], references: [id])
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model PushSubscription {
@@ -194,19 +132,6 @@ model PushSubscription {
   p256dh     String
   auth       String
   createdAt  DateTime @default(now())
-}
-
-model InviteToken {
-  id            String             @id @default(uuid())
-  token         String             @unique
-  role          Role
-  eventId       String?
-  applicationId String?            @unique
-  isUsed        Boolean            @default(false)
-  expiresAt     DateTime
-  email         String
-  usedAt        DateTime?
-  application   VendorApplication? @relation(fields: [applicationId], references: [id])
 }
 
 model PasswordResetToken {
@@ -222,9 +147,7 @@ model PasswordResetToken {
 }
 
 enum Role {
-  CUSTOMER
   VENDOR
-  ORGANIZER
 }
 
 enum OrderStatus {
@@ -238,31 +161,11 @@ enum OrderItemStatus {
 }
 
 enum PaymentMode {
-  PAY_AT_BOOTH
-  MOCK_PAID
+  PAY_AT_COUNTER
 }
 
 enum PaymentStatus {
   PENDING
   PAID
   FAILED
-}
-
-enum AuditAction {
-  ORDER_STATUS_CHANGE
-  PAYMENT_STATUS_CHANGE
-  BOOTH_ASSIGNMENT
-  VENDOR_APPROVAL
-}
-
-enum ApplicationStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  ACCOUNT_CREATED
-}
-
-enum EventStatus {
-  ACTIVE
-  ARCHIVED
 }

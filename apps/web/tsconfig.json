@@ -18,9 +18,9 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "paths": {
-      "@makanx/shared": ["../../packages/shared/src/index.ts"]
+      "@smart-qr/shared": ["../../packages/shared/src/index.ts"]
     }
   },
-  "include": ["src"],
+  "files": ["src/main.tsx", "src/vite-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

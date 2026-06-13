@@ -1,19 +1,19 @@
 export function buildOrderReadyEmail({
   orderNumber,
-  boothName,
+  storeName,
   customerOrderPageUrl,
 }: {
   orderNumber: string;
-  boothName: string;
+  storeName: string;
   customerOrderPageUrl?: string;
 }) {
   const subject = `Hour Coffee — Order #${orderNumber} Ready`;
-  const text = `Your order #${orderNumber} is ready for pickup at Booth ${boothName}.`;
+  const text = `Your order #${orderNumber} is ready for pickup at ${storeName}.`;
   let html = `
     <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 640px; margin: 0 auto; padding: 24px;">
       <h1 style="margin: 0 0 12px; font-size: 22px; line-height: 1.2;">Order Ready for Pickup</h1>
       <p style="margin: 0; font-size: 14px; line-height: 1.6;">
-        Your order <strong>#${orderNumber}</strong> is ready for pickup at <strong>Booth ${boothName}</strong>.
+        Your order <strong>#${orderNumber}</strong> is ready for pickup at <strong>${storeName}</strong>.
       </p>
   `;
 
@@ -35,7 +35,7 @@ export function buildOrderReadyEmail({
 }
 
 export function buildPasswordResetEmail({ otp }: { otp: string }) {
-  const subject = 'MakanX Password Reset Code';
+  const subject = 'Smart QR Ordering System Password Reset Code';
   const html = `
     <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width: 600px; margin: 0 auto; padding: 24px;">
       <h2 style="margin: 0 0 12px; font-size: 22px; line-height: 1.2;">Reset Your Password</h2>

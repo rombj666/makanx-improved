@@ -1,593 +1,139 @@
-
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../lib/api';
-import BoothHeader from '../../components/customer/BoothHeader';
-import MenuCard from '../../components/customer/MenuCard';
-import CartBar from '../../components/customer/CartBar';
-import { useCustomerCart } from '../../hooks/useCustomerCart';
+import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { ProductDetailSheet } from '../../components/customer/ProductDetailSheet';
-import { useCustomerOrders } from '../../hooks/useCustomerOrders';
-import { computeDisplayNumber, getApiErrorMessage } from '../../lib/utils';
-import { EmailPromptSheet } from '../../components/customer/EmailPromptSheet';
+import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { Minus, Plus, Trash2 } from 'lucide-react';
-import { useSocket } from '../../context/SocketContext';
-import {
-  DEVICE_ORDER_LOCK_MESSAGE,
-  getMaxDrinksOrderMessage,
-  getOrCreateDeviceId,
-  hasOrderLock,
-  saveOrderLock,
-} from '../../lib/deviceOrderLock';
+import { getOrCreateDeviceId } from '../../lib/deviceOrderLock';
+import { useCustomerCart } from '../../hooks/useCustomerCart';
 
 interface MenuItem {
   id: string;
   name: string;
   description?: string;
   price: number;
-  imageUrl: string;
+  imageUrl?: string;
   optionGroups?: any[];
   remarksEnabled?: boolean;
 }
 
-interface Booth {
+interface Store {
   id: string;
-  name: string;
-  showPrices?: boolean;
-  vendor?: {
-    id: string;
-    businessName: string;
-    description?: string;
-    menuItems?: MenuItem[];
+  businessName: string;
+  description?: string;
+  settings?: {
+    orderingOpen: boolean;
+    deviceOrderLimitEnabled: boolean;
+    maxDrinksPerOrder: number;
   };
+  menuItems: MenuItem[];
 }
 
 export function CustomerOrderPage() {
-  const { slug, vendorId } = useParams();
+  const { vendorId = '' } = useParams();
   const navigate = useNavigate();
-  const { socket } = useSocket();
-  const [booth, setBooth] = useState<Booth | null>(null);
-  const [eventId, setEventId] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [activeItem, setActiveItem] = useState<MenuItem | null>(null);
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [servingOrder, setServingOrder] = useState<string | null>(null);
-  const [deviceOrderLimitEnabled, setDeviceOrderLimitEnabled] = useState(false);
-  const [maxDrinksPerOrder, setMaxDrinksPerOrder] = useState(1);
-
-  useEffect(() => {
-    if (!vendorId) return;
-    const fetchServing = async () => {
-      try {
-        const { data } = await api.get(`/orders/vendor/${vendorId}/serving`);
-        if (data.success) setServingOrder(data.data.displayNumber);
-      } catch {}
-    };
-    fetchServing();
-    if (socket) {
-      socket.on('vendor_serving_updated', (data: any) => {
-        if (data.vendorId === vendorId) setServingOrder(data.displayNumber);
-      });
-    }
-    return () => {
-      if (socket) socket.off('vendor_serving_updated');
-    };
-  }, [vendorId, socket]);
-
-  // Checkout state
-  const [isPlacing, setIsPlacing] = useState(false);
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [emailSheetOpen, setEmailSheetOpen] = useState(false);
-  const [emailDraft, setEmailDraft] = useState('');
-  const [emailDraftTouched, setEmailDraftTouched] = useState(false);
-
-  const guestId = useMemo(() => getOrCreateGuestId(), []);
-  const deviceId = useMemo(() => getOrCreateDeviceId(), []);
-  const emailStorageKey = useMemo(() => {
-    if (!slug) return '';
-    return `mx_customer_email_${slug}`;
-  }, [slug]);
-  const eventLockKey = useMemo(() => eventId || String(slug || ''), [eventId, slug]);
-
-  const normalizeEmail = (email: string) => email.trim();
-  const isValidEmail = (email: string) =>
-    email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isValidNonEmptyEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  useEffect(() => {
-    if (!emailStorageKey) return;
-    try {
-      const saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
-      if (isValidNonEmptyEmail(saved)) setCustomerEmail(saved);
-    } catch {}
-  }, [emailStorageKey]);
-
-  useEffect(() => {
-    const run = async () => {
-      if (!slug || !vendorId) return;
-      try {
-        const { data } = await api.get(`/events/${slug}`);
-        if (data.success) {
-          const event = data.data;
-          setEventId(String(event.id || ''));
-          setDeviceOrderLimitEnabled(event.deviceOrderLimitEnabled === true);
-          setMaxDrinksPerOrder(Math.max(1, Number(event.maxDrinksPerOrder || 1)));
-          const found = (event.booths || []).find((b: any) => b.vendor?.id === vendorId) || null;
-          setBooth(found);
-        }
-      } catch (e: any) {
-        setError('Failed to load vendor menu');
-      }
-    };
-    run();
-  }, [slug, vendorId]);
-
-  const menu: MenuItem[] = useMemo(() => {
-    if (!booth?.vendor?.menuItems) return [];
-    return booth.vendor.menuItems.map((m: any) => ({
-      ...m,
-      price: Number(m.price),
-      imageUrl: m.imageUrl || '',
-    }));
-  }, [booth]);
-
+  const [store, setStore] = useState<Store | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [placing, setPlacing] = useState(false);
   const cart = useCustomerCart({
-    eventSlug: String(slug || ''),
-    vendorId: String(vendorId || ''),
-    vendorName: booth?.vendor?.businessName || booth?.name || '',
-    boothName: booth?.name || '',
-    maxItems: deviceOrderLimitEnabled ? maxDrinksPerOrder : 99,
+    storeId: vendorId,
+    vendorId,
+    vendorName: store?.businessName || '',
+    maxItems: store?.settings?.deviceOrderLimitEnabled ? store.settings.maxDrinksPerOrder : 99,
   });
-  const orderLimitMessage = useMemo(
-    () => getMaxDrinksOrderMessage(maxDrinksPerOrder),
-    [maxDrinksPerOrder]
-  );
-  const hidePrices = booth?.showPrices === false;
-
-  const { addOrUpdate } = useCustomerOrders(String(slug || ''));
-
-  const performCheckout = async (emailOverride?: string) => {
-    if (!vendorId || cart.lines.length === 0) return;
-    if (deviceOrderLimitEnabled && eventLockKey && hasOrderLock(eventLockKey)) {
-      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
-      return;
-    }
-    if (deviceOrderLimitEnabled && (cart.totalItems < 1 || cart.totalItems > maxDrinksPerOrder)) {
-      toast.error(orderLimitMessage);
-      return;
-    }
-    setIsPlacing(true);
-    try {
-      const normalizedEmail = normalizeEmail(typeof emailOverride === 'string' ? emailOverride : customerEmail);
-      if (!isValidEmail(normalizedEmail)) {
-        toast.error('Please enter a valid email address');
-        return;
-      }
-      const res = await api.post('/orders', {
-        vendorId,
-        eventId: eventId || undefined,
-        items: cart.lines.map((l) => ({
-          menuItemId: l.menuItemId,
-          quantity: l.quantity,
-          remark: l.remarksEnabled === false ? '' : (l.remark || '').trim(),
-          selectedOptions: Array.isArray((l as any).selectedOptions)
-            ? (l as any).selectedOptions.map((s: any) => ({
-                groupId: String(s?.groupId || ''),
-                choiceIds: Array.isArray(s?.choiceIds) ? s.choiceIds.map(String).filter(Boolean) : [],
-              }))
-            : [],
-        })),
-        paymentMode: 'PAY_AT_BOOTH',
-        guestId,
-        ...(deviceOrderLimitEnabled ? { deviceId } : {}),
-        customerEmail: normalizedEmail || undefined,
-      });
-
-      if (!res.data?.success) {
-        toast.error('Checkout failed');
-        return;
-      }
-
-      const { order, estimatedMinutes } = res.data.data;
-      const displayNumber = computeDisplayNumber(order);
-      if (deviceOrderLimitEnabled) saveOrderLock(eventLockKey, order.id);
-
-      if (emailStorageKey && isValidNonEmptyEmail(normalizedEmail)) {
-        try {
-          localStorage.setItem(emailStorageKey, normalizedEmail);
-        } catch {}
-      }
-
-      const summaryItems = cart.lines.map((l) => ({
-        name: l.name,
-        quantity: l.quantity,
-        imageUrl: l.imageUrl || '',
-        remark: l.remarksEnabled === false ? '' : (l.remark || '').trim(),
-        selectedOptions: Array.isArray((l as any).selectedOptions) ? (l as any).selectedOptions : [],
-      }));
-
-      addOrUpdate({
-        orderId: order.id,
-        vendorId: order.vendorId,
-        vendorName: order.vendor?.businessName || cart.vendorName || '',
-        status: order.status,
-        estimatedMinutes: Math.max(Number(estimatedMinutes ?? 0), 0),
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt,
-        displayNumber,
-        items: summaryItems.map((it) => ({
-          name: it.name,
-          quantity: it.quantity,
-          imageUrl: it.imageUrl,
-          remark: it.remark,
-          selectedOptions: it.selectedOptions,
-        })),
-      } as any);
-
-      cart.clear();
-      setSummaryOpen(false);
-      setEmailDraft('');
-      setEmailDraftTouched(false);
-      try {
-        localStorage.setItem('mx_center_map', '1');
-      } catch {}
-
-      const nextUrl =
-        `/customer/order-confirmed?orderId=${encodeURIComponent(order.id)}` +
-        (slug ? `&eventSlug=${encodeURIComponent(slug)}` : '');
-      navigate(nextUrl, {
-        state: {
-          orderId: order.id,
-          orderNumber: displayNumber,
-          eta: estimatedMinutes,
-          eventSlug: slug,
-          vendorId,
-          customerEmail: normalizedEmail || undefined,
-          items: summaryItems,
-          newOrder: true, // Flag for inline countdown
-        },
-      });
-    } catch (e: any) {
-      toast.error(getApiErrorMessage(e));
-    } finally {
-      setIsPlacing(false);
-    }
-  };
-
-  const requestCheckout = async () => {
-    if (isPlacing) return;
-    if (!vendorId || cart.totalItems <= 0) return;
-    if (deviceOrderLimitEnabled && eventLockKey && hasOrderLock(eventLockKey)) {
-      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
-      return;
-    }
-    if (deviceOrderLimitEnabled && (cart.totalItems < 1 || cart.totalItems > maxDrinksPerOrder)) {
-      toast.error(orderLimitMessage);
-      return;
-    }
-    const normalized = normalizeEmail(customerEmail);
-    if (normalized === '') {
-      let saved = '';
-      if (emailStorageKey) {
-        try {
-          saved = normalizeEmail(localStorage.getItem(emailStorageKey) || '');
-        } catch {}
-      }
-      if (isValidNonEmptyEmail(saved)) {
-        setCustomerEmail(saved);
-        await performCheckout(saved);
-        return;
-      }
-      setEmailDraft('');
-      setEmailDraftTouched(false);
-      setEmailSheetOpen(true);
-      return;
-    }
-    await performCheckout(normalized);
-  };
-
-  const { orders } = useCustomerOrders(String(slug || ''));
-  const activeOrdersForVendor = useMemo(() => {
-    return orders
-      .filter((o) => o.vendorId === String(vendorId || '') && (o.status === 'PREPARING' || o.status === 'READY'))
-      .slice()
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [orders, vendorId]);
-  const selectedOrder = useMemo(() => {
-    if (!selectedOrderId) return activeOrdersForVendor[0] || null;
-    return activeOrdersForVendor.find((o) => String(o.orderId) === String(selectedOrderId)) || activeOrdersForVendor[0] || null;
-  }, [activeOrdersForVendor, selectedOrderId]);
 
   useEffect(() => {
-    if (activeOrdersForVendor.length === 0) return;
-    const exists = selectedOrderId
-      ? activeOrdersForVendor.some((o) => String(o.orderId) === String(selectedOrderId))
-      : false;
-    if (!exists) setSelectedOrderId(String(activeOrdersForVendor[0].orderId));
-  }, [activeOrdersForVendor, selectedOrderId]);
+    api.get(`/menu-items/public/${vendorId}`)
+      .then(({ data }) => setStore(data.data))
+      .catch(() => toast.error('Store menu could not be loaded'))
+      .finally(() => setLoading(false));
+  }, [vendorId]);
 
-  const mode: 'cart' | 'order' | 'empty' =
-    cart.totalItems > 0 ? 'cart' : selectedOrder ? 'order' : 'empty';
+  const menu = useMemo(() => store?.menuItems || [], [store]);
 
-  if (!booth) {
-    return (
-      <div className="w-full h-full bg-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold">Loading...</h1>
-        </div>
-      </div>
-    );
-  }
+  const checkout = async () => {
+    if (!store?.settings?.orderingOpen || cart.lines.length === 0) return;
+    setPlacing(true);
+    try {
+      const { data } = await api.post('/orders', {
+        vendorId,
+        guestId: getOrCreateGuestId(),
+        deviceId: getOrCreateDeviceId(),
+        paymentMode: 'PAY_AT_COUNTER',
+        items: cart.lines.map((line) => ({
+          menuItemId: line.menuItemId,
+          quantity: line.quantity,
+          remark: line.remark,
+          selectedOptions: line.selectedOptions || [],
+        })),
+      });
+      cart.clear();
+      toast.success(`Order #${data.data.order.displayNumber} placed`);
+      navigate(`/track/${data.data.order.id}`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Checkout failed');
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center">Loading menu...</div>;
+  if (!store) return <div className="p-10 text-center">Store not found.</div>;
 
   return (
-    <div className="w-full h-full bg-white flex flex-col">
-      <BoothHeader
-        boothName={booth.name}
-        boothNumber={booth.name}
-        vendorName={booth.vendor?.businessName || null}
-        description={null}
-        heroImageUrl={null}
-        onBack={() => navigate(`/customer/event/${slug}`)}
-      />
+    <main className="min-h-screen overflow-x-hidden bg-neutral-50 pb-44">
+      <header className="bg-black px-4 py-8 text-white">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">Smart QR Ordering System</div>
+          <h1 className="mt-2 text-3xl font-bold">{store.businessName}</h1>
+          {store.description && <p className="mt-2 max-w-xl text-neutral-300">{store.description}</p>}
+          {!store.settings?.orderingOpen && <p className="mt-4 rounded-xl bg-red-500/20 p-3 text-sm text-red-100">Ordering is currently closed.</p>}
+        </div>
+      </header>
 
-      <div className="flex-1 overflow-y-auto p-4 pb-28">
-        {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
-        {menu.length === 0 ? (
-          <p className="text-neutral-600">No menu items.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
-            {menu.map((item) => (
-              <MenuCard
-                key={item.id}
-                name={item.name}
-                price={item.price}
-                image={item.imageUrl}
-                onClick={() => setActiveItem(item)}
-                className="border-neutral-900/15 shadow-none h-full"
-                hidePrice={hidePrices}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <CartBar
-        totalItems={cart.totalItems}
-        totalPrice={cart.total}
-        hidePrices={hidePrices}
-        topNode={undefined}
-        topText={
-          mode === 'order'
-            ? selectedOrder?.status === 'READY'
-              ? 'READY — Collect now'
-              : servingOrder 
-                ? `Now serving #${servingOrder}` 
-                : `Preparing your order`
-            : `${cart.totalItems} ${cart.totalItems === 1 ? 'item' : 'items'}`
-        }
-        bottomText={
-          mode === 'order'
-            ? selectedOrder?.status === 'READY'
-              ? 'Please head to the booth'
-              : `Your number is #${selectedOrder?.displayNumber || '—'}`
-            : undefined
-        }
-        actionLabel={mode === 'cart' ? 'Proceed to Check Out' : 'Progress'}
-        onViewCart={() => {
-          if (mode === 'cart') {
-            setSummaryOpen(true);
-            return;
-          }
-          if (!selectedOrder?.orderId) {
-            toast.success('No active order yet.');
-            return;
-          }
-          const nextUrl =
-            `/customer/order-confirmed?orderId=${encodeURIComponent(String(selectedOrder.orderId))}` +
-            (slug ? `&eventSlug=${encodeURIComponent(String(slug))}` : '');
-          navigate(nextUrl);
-        }}
-      />
-
-      <EmailPromptSheet
-        open={emailSheetOpen}
-        emailDraft={emailDraft}
-        emailTouched={emailDraftTouched}
-        isEmailValid={isValidEmail(normalizeEmail(emailDraft))}
-        onEmailChange={(v) => setEmailDraft(v)}
-        onEmailBlur={() => setEmailDraftTouched(true)}
-        onClose={() => setEmailSheetOpen(false)}
-        onContinueWithEmail={async () => {
-          const normalized = normalizeEmail(emailDraft);
-          setEmailDraftTouched(true);
-          if (!isValidEmail(normalized) || normalized === '') {
-            toast.error('Please enter a valid email address');
-            return;
-          }
-          setCustomerEmail(normalized);
-          setEmailSheetOpen(false);
-          await performCheckout(normalized);
-        }}
-        onSkip={async () => {
-          setEmailSheetOpen(false);
-          await performCheckout('');
-        }}
-      />
-
-      <ProductDetailSheet
-        isOpen={!!activeItem}
-        name={activeItem?.name || ''}
-        price={Number(activeItem?.price || 0)}
-        imageUrl={activeItem?.imageUrl || ''}
-        optionGroups={Array.isArray(activeItem?.optionGroups) ? activeItem?.optionGroups : []}
-        remarksEnabled={activeItem?.remarksEnabled !== false}
-        hidePrice={hidePrices}
-        maxQuantity={deviceOrderLimitEnabled ? Math.max(0, maxDrinksPerOrder - cart.totalItems) : 99}
-        addDisabled={deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder}
-        disabledMessage={orderLimitMessage}
-        onClose={() => setActiveItem(null)}
-        onAdd={({ quantity, remark, selectedOptions }) => {
-          if (!activeItem) return;
-          if (deviceOrderLimitEnabled && (cart.totalItems + quantity > maxDrinksPerOrder)) {
-            toast.error(orderLimitMessage);
-            return;
-          }
-          cart.addLine({
-            menuItemId: activeItem.id,
-            name: activeItem.name,
-            price: Number(activeItem.price),
-            quantity,
-            remark,
-            imageUrl: activeItem.imageUrl || '',
-            selectedOptions,
-            remarksEnabled: activeItem?.remarksEnabled !== false,
-          });
-          toast.success('Added to cart');
-        }}
-      />
-
-      <SummarySheet
-        open={summaryOpen}
-        onClose={() => setSummaryOpen(false)}
-        title={mode === 'cart' ? 'Order Summary' : mode === 'order' ? 'Current Order' : 'Summary'}
-      >
-        {mode === 'cart' ? (
-          <div>
-            {cart.lines.length === 0 ? (
-              <div className="text-sm text-neutral-600">Your cart is empty.</div>
-            ) : (
-              <div className="space-y-3">
-                {cart.lines.map((l) => (
-                  <div key={l.id} className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-black">
-                          {l.name}
-                        </div>
-                        {Array.isArray((l as any).selectedOptions) && (l as any).selectedOptions.length > 0 ? (
-                          <div className="mt-1 text-xs text-neutral-600">
-                            {(l as any).selectedOptions
-                              .map((s: any) => {
-                                const title = typeof s?.title === 'string' ? s.title : '';
-                                const labels = Array.isArray(s?.choiceLabels) ? s.choiceLabels.filter(Boolean) : [];
-                                if (!title || labels.length === 0) return '';
-                                return `${title}: ${labels.join(', ')}`;
-                              })
-                              .filter(Boolean)
-                              .join(' • ')}
-                          </div>
-                        ) : null}
-                        {l.remark && String(l.remark).trim() !== '' ? (
-                          <div className="mt-1 text-xs text-neutral-600">
-                            <span className="text-neutral-500">Remark:</span> {String(l.remark).trim()}
-                          </div>
-                        ) : null}
-                        {!hidePrices ? (
-                          <div className="mt-2 text-sm font-semibold text-black">
-                            RM{(l.price * l.quantity).toFixed(2)}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <div className="flex items-center gap-2 bg-neutral-100 rounded-xl p-1">
-                          <button
-                            onClick={() => cart.updateQuantity(l.id, l.quantity - 1)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition"
-                          >
-                            {l.quantity === 1 ? <Trash2 size={14} className="text-red-500" /> : <Minus size={14} />}
-                          </button>
-                          <span className="w-6 text-center text-sm font-bold tabular-nums">
-                            {l.quantity}
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder) {
-                                toast.error(orderLimitMessage);
-                                return;
-                              }
-                              cart.updateQuantity(l.id, l.quantity + 1);
-                            }}
-                            disabled={deviceOrderLimitEnabled && cart.totalItems >= maxDrinksPerOrder}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white shadow-sm active:scale-90 transition disabled:opacity-40"
-                          >
-                            <Plus size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+      <div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2">
+        {menu.map((item) => (
+          <article key={item.id} className="min-w-0 rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+            {item.imageUrl && <img src={item.imageUrl} alt="" className="h-40 w-full rounded-2xl object-cover" />}
+            <div className="mt-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="break-words font-bold">{item.name}</h2>
+                {item.description && <p className="mt-1 text-sm text-neutral-600">{item.description}</p>}
               </div>
-            )}
-
-            <div className="mt-4 rounded-2xl border border-neutral-100 bg-white p-4">
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-neutral-600">Items</div>
-                <div className="font-semibold text-black">{cart.totalItems}</div>
-              </div>
-              {!hidePrices ? (
-                <div className="flex items-center justify-between text-sm mt-1">
-                  <div className="text-neutral-600">Total</div>
-                  <div className="font-semibold text-black">RM{cart.total.toFixed(2)}</div>
-                </div>
-              ) : null}
-              <button
-                onClick={requestCheckout}
-                disabled={cart.totalItems <= 0 || isPlacing}
-                className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold shadow-md active:scale-[0.99] transition bg-black text-white disabled:opacity-50"
-              >
-                {isPlacing ? 'Checking Out...' : 'Check Out'}
-              </button>
+              <span className="shrink-0 font-bold">RM{Number(item.price).toFixed(2)}</span>
             </div>
-          </div>
-        ) : (
-          <div className="text-sm text-neutral-600">No items in cart.</div>
-        )}
-      </SummarySheet>
-    </div>
-  );
-}
-
-function SummarySheet({
-  open,
-  onClose,
-  title,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  if (!open) return null;
-  const sheet = (
-    <div className="fixed inset-0 z-50 bg-black/60" onMouseDown={onClose} onTouchStart={onClose}>
-      <div
-        className="absolute inset-x-0 bottom-0 bg-neutral-50 rounded-t-3xl shadow-2xl"
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-neutral-200">
-          <div className="text-base font-semibold text-black truncate">{title}</div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-full border border-neutral-200 text-black bg-white active:scale-95 transition"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="max-h-[75vh] overflow-y-auto p-5">
-          {children}
-          <div className="pb-[max(env(safe-area-inset-bottom),12px)]" />
-        </div>
+            <button
+              disabled={!store.settings?.orderingOpen}
+              onClick={() => cart.addLine({ menuItemId: item.id, name: item.name, price: Number(item.price), quantity: 1, remark: '', imageUrl: item.imageUrl || '', selectedOptions: [], remarksEnabled: item.remarksEnabled })}
+              className="mt-4 h-11 w-full rounded-xl bg-black font-semibold text-white disabled:bg-neutral-300"
+            >
+              Add to order
+            </button>
+          </article>
+        ))}
       </div>
-    </div>
+
+      {cart.totalItems > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-4 shadow-2xl">
+          <div className="mx-auto max-w-4xl">
+            <div className="max-h-40 space-y-2 overflow-y-auto">
+              {cart.lines.map((line) => (
+                <div key={line.id} className="flex min-w-0 items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-semibold">{line.name}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button onClick={() => cart.updateQuantity(line.id, line.quantity - 1)} className="h-8 w-8 rounded-lg border">{line.quantity === 1 ? <Trash2 className="m-auto" size={14} /> : <Minus className="m-auto" size={14} />}</button>
+                    <span className="w-5 text-center">{line.quantity}</span>
+                    <button onClick={() => cart.updateQuantity(line.id, line.quantity + 1)} className="h-8 w-8 rounded-lg border"><Plus className="m-auto" size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={checkout} disabled={placing} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-black font-bold text-white disabled:opacity-50">
+              <ShoppingBag size={18} />{placing ? 'Placing order...' : `Checkout · RM${cart.total.toFixed(2)}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </main>
   );
-  return createPortal(sheet, document.body);
 }

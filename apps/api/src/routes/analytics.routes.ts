@@ -1,92 +1,15 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth';
 import { Role } from '@prisma/client';
-import * as analyticsController from '../controllers/analytics.controller';
+import { requireAuth, requireRole } from '../middleware/auth';
+import * as analytics from '../controllers/analytics.controller';
 
 const router = Router();
-
-router.get(
-  '/products',
-  requireAuth,
-  requireRole([Role.ORGANIZER, Role.VENDOR]),
-  analyticsController.productPerformance
-);
-
-router.get(
-  '/organizer/summary',
-  requireAuth,
-  requireRole([Role.ORGANIZER]),
-  analyticsController.organizerDailySummary
-);
-
-router.get(
-  '/organizer/vendors',
-  requireAuth,
-  requireRole([Role.ORGANIZER]),
-  analyticsController.organizerVendorRevenue
-);
-
-router.get(
-  '/organizer/products',
-  requireAuth,
-  requireRole([Role.ORGANIZER]),
-  analyticsController.organizerProductPerformance
-);
-
-router.get(
-  '/organizer/trend',
-  requireAuth,
-  requireRole([Role.ORGANIZER]),
-  analyticsController.organizerRevenueTrend
-);
-
-router.get(
-  '/organizer/product-trend',
-  requireAuth,
-  requireRole([Role.ORGANIZER]),
-  analyticsController.organizerProductTrend
-);
-
-router.get(
-  '/vendor/summary',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorSalesSummary
-);
-
-router.get(
-  '/vendor/products',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorProductPerformance
-);
-
-router.get(
-  '/vendor/trend',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorRevenueTrend
-);
-
-router.get(
-  '/vendor/product-trend',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorProductTrend
-);
-
-router.get(
-  '/vendor/orders',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorCompletedOrders
-);
-
-router.get(
-  '/vendor/export',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  analyticsController.vendorExportReport
-);
-
+router.use(requireAuth, requireRole([Role.VENDOR]));
+router.get('/products', analytics.productPerformance);
+router.get('/vendor/summary', analytics.vendorSalesSummary);
+router.get('/vendor/products', analytics.vendorProductPerformance);
+router.get('/vendor/trend', analytics.vendorRevenueTrend);
+router.get('/vendor/product-trend', analytics.vendorProductTrend);
+router.get('/vendor/orders', analytics.vendorCompletedOrders);
+router.get('/vendor/export', analytics.vendorExportReport);
 export default router;

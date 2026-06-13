@@ -22,8 +22,7 @@ router.post(
       }
 
       // Upload to Cloudinary
-      // Folder structure: makanx/uploads/<type>
-      const folder = `makanx/uploads/${type}`;
+      const folder = `smart-qr-ordering-system/uploads/${type}`;
       const result = await uploadToCloudinary(
         file.buffer,
         folder,

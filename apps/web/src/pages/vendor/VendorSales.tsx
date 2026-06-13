@@ -94,7 +94,7 @@ export function VendorSales() {
   const fetchAll = async (targetDate = date) => {
     setLoading(true);
     try {
-      const params = { eventId: '', date: targetDate };
+      const params = { date: targetDate };
       const [s, pt, p, o, sett, orderLimit, usg] = await Promise.all([
         api.get('/analytics/vendor/summary', { params }),
         api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
@@ -213,11 +213,11 @@ export function VendorSales() {
   };
 
   const handleResetEventOrders = async () => {
-    const toastId = toast.loading('Resetting event orders...');
+    const toastId = toast.loading("Resetting today's orders...");
     setResettingEventOrders(true);
     try {
-      await api.post('/vendor/sales/reset-event');
-      toast.success('Event orders reset successfully', { id: toastId });
+      await api.post('/vendor/sales/reset-today');
+      toast.success("Today's orders reset successfully", { id: toastId });
       const today = format(new Date(), 'yyyy-MM-dd');
       setDate(today);
       await fetchAll(today);
@@ -255,8 +255,9 @@ export function VendorSales() {
     return products.reduce(
       (acc, p) => ({
         qty: acc.qty + p.qtySold,
+        revenue: acc.revenue + p.revenue,
       }),
-      { qty: 0 }
+      { qty: 0, revenue: 0 }
     );
   }, [products]);
 
@@ -434,7 +435,7 @@ export function VendorSales() {
             Export
           </Button>
           <Button variant="destructive" onClick={() => setResetConfirmOpen(true)} disabled={loading || resettingEventOrders}>
-            Reset Event Orders
+            Reset Today's Orders
           </Button>
         </div>
 
@@ -795,7 +796,7 @@ export function VendorSales() {
               disabled={loading || resettingEventOrders}
               className="col-span-2 h-11 min-w-0 rounded-2xl border border-red-700 bg-red-600 px-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-40"
             >
-              Reset Event Orders
+              Reset Today's Orders
             </button>
           </div>
         </div>
@@ -804,6 +805,10 @@ export function VendorSales() {
           <div className="min-w-0 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Orders</div>
             <div className="mt-2 text-2xl font-semibold text-black">{summary?.orders ?? 0}</div>
+          </div>
+          <div className="min-w-0 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Revenue</div>
+            <div className="mt-2 text-2xl font-semibold text-black">RM {(summary?.revenue ?? 0).toFixed(2)}</div>
           </div>
         </div>
 
@@ -869,14 +874,21 @@ export function VendorSales() {
             {products.length === 0 ? (
               <div className="text-sm text-neutral-600">No product data.</div>
             ) : (
-              products.map((p, idx) => (
-                <div key={idx} className="min-w-0 rounded-2xl border border-neutral-100 p-3">
-                  <div className="break-words text-sm font-semibold text-black">{p.productName}</div>
-                  <div className="mt-1 text-xs text-neutral-600">
-                    Qty: {p.qtySold}
+              <>
+                {products.map((p, idx) => (
+                  <div key={idx} className="min-w-0 rounded-2xl border border-neutral-100 p-3">
+                    <div className="break-words text-sm font-semibold text-black">{p.productName}</div>
+                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-neutral-600">
+                      <span>Qty: {p.qtySold}</span>
+                      <span className="font-semibold text-black">RM {p.revenue.toFixed(2)}</span>
+                    </div>
                   </div>
+                ))}
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-100 p-3 font-bold text-black">
+                  <span>Total</span>
+                  <span className="text-right">{productTotals.qty} · RM {productTotals.revenue.toFixed(2)}</span>
                 </div>
-              ))
+              </>
             )}
           </div>
         </div>
@@ -917,11 +929,11 @@ export function VendorSales() {
         onClose={() => {
           if (!resettingEventOrders) setResetConfirmOpen(false);
         }}
-        title="Reset Event Orders"
+        title="Reset Today's Orders"
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-gray-700">
-            Are you sure you want to reset this event's orders? This will delete all order records and order items for the current event, clear sales analytics, ready orders, and kitchen view for this event, and reset today's usage back to 0. The daily quantity limit will stay unchanged. This action cannot be undone.
+            Are you sure you want to delete today's orders? This clears today's sales analytics, ready orders, kitchen view, and usage count. The configured daily quantity limit remains unchanged. This action cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
             <Button

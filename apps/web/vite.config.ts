@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@makanx/shared': path.resolve(__dirname, '../../packages/shared/src')
+      '@smart-qr/shared': path.resolve(__dirname, '../../packages/shared/src')
     }
   }
 })

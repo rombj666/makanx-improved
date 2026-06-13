@@ -1,4 +1,4 @@
-const GUEST_ID_KEY = 'makanx_guestId';
+const GUEST_ID_KEY = 'smart_qr_guest_id';
 
 export function getOrCreateGuestId(): string {
   const existing = localStorage.getItem(GUEST_ID_KEY);

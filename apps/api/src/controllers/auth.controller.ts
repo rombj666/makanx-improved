@@ -63,16 +63,3 @@ export const confirmPasswordReset = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: error.message });
   }
 };
-
-export const customerQrLogin = async (req: Request, res: Response) => {
-  try {
-    const { slug } = req.body;
-    if (!slug || typeof slug !== 'string') {
-      throw new Error('Slug is required');
-    }
-    const result = await authService.customerQrLoginBySlug(slug);
-    res.status(200).json({ success: true, data: result });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-};

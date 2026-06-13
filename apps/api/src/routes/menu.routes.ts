@@ -5,6 +5,8 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
+router.get('/public/:vendorId', menuController.getPublicMenu);
+
 router.post(
   '/',
   requireAuth,

@@ -12,7 +12,6 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().min(2),
-  role: z.nativeEnum(Role).optional(),
 });
 
 const loginSchema = z.object({
@@ -33,7 +32,7 @@ const confirmResetSchema = z.object({
 export const register = async (input: unknown) => {
   const parsed = registerSchema.parse(input);
   const email = normalizeEmail(parsed.email);
-  const { password, name, role } = parsed;
+  const { password, name } = parsed;
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new Error('User already exists');
@@ -45,7 +44,7 @@ export const register = async (input: unknown) => {
       email,
       password: hashedPassword,
       name,
-      role: role || Role.CUSTOMER,
+      role: Role.VENDOR,
     },
   });
 
@@ -86,7 +85,7 @@ export const login = async (input: unknown) => {
 
   // Check if account is active (for vendors)
   if (user.role === Role.VENDOR && !user.isActive) {
-    throw new Error('Vendor account disabled. Contact organizer.');
+    throw new Error('Vendor account disabled.');
   }
 
   const token = generateToken({ userId: user.id, role: user.role as Role });
@@ -123,57 +122,6 @@ export const getMe = async (userId: string) => {
       businessName: user.vendorProfile.businessName || undefined 
     } : undefined
   };
-};
-
-export const customerQrLoginBySlug = async (slug: string) => {
-  let event: any;
-  try {
-    event = await prisma.event.findUnique({
-      where: { slug },
-      include: {
-        booths: {
-          include: {
-            vendor: {
-              include: {
-                menuItems: {
-                  where: { isAvailable: true },
-                  orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-  } catch (e: any) {
-    const msg = String(e?.message || '');
-    if (msg.includes('displayOrder') && msg.includes('does not exist')) {
-      event = await prisma.event.findUnique({
-        where: { slug },
-        include: {
-          booths: {
-            include: {
-              vendor: {
-                include: {
-                  menuItems: {
-                    where: { isAvailable: true },
-                    orderBy: { createdAt: 'asc' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-    } else {
-      throw e;
-    }
-  }
-  if (!event) {
-    throw new Error('Invalid event');
-  }
-  // Return event info only - no guest user creation
-  return { event };
 };
 
 export const requestPasswordReset = async (input: unknown) => {

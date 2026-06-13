@@ -1,5 +1,5 @@
 {
-  "name": "makanx-web",
+  "name": "smart-qr-ordering-web",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "@makanx/shared": "*",
+    "@smart-qr/shared": "*",
     "@types/lodash.debounce": "^4.0.9",
     "axios": "^1.4.0",
     "class-variance-authority": "^0.7.1",

@@ -1,26 +1,16 @@
-# MakanX API Routes
+# Smart QR Ordering System API Routes
 
-## Authentication
-- `POST /auth/register` - `{ email, password, name, role }` -> `{ token, user }`
-- `POST /auth/login` - `{ email, password }` -> `{ token, user }`
-- `GET /auth/me` - (Auth Header) -> `{ user }`
-
-## Webhooks
-- `POST /webhooks/vendor-application` - Receives Google Form payload.
-
-## Events
-- `GET /events` - List active events.
-- `POST /events` - (Organizer) Create event.
-
-## Booths
-- `GET /events/:eventId/booths` - Get booth map/status.
-
-## Vendors
-- `GET /vendors/:id/menu` - Public menu.
-- `GET /vendor/applications` - (Organizer) List pending apps.
-- `POST /vendor/applications/:id/approve` - (Organizer) Approve app.
-
-## Orders
-- `POST /orders` - (Customer) Create order.
-- `GET /orders` - List own orders.
-- `PATCH /orders/:id/status` - (Vendor) Update status.
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/menu-items/public/:vendorId`
+- `GET|POST|PUT|DELETE /api/menu-items`
+- `POST /api/orders`
+- `GET /api/orders/:orderId`
+- `GET /api/orders/vendor-live`
+- `POST /api/orders/:orderId/items/:itemId/mark-ready`
+- `GET|PATCH /api/vendor/settings`
+- `GET|PATCH /api/vendor/order-limit-settings`
+- `GET /api/vendor/daily-usage`
+- `POST /api/vendor/toggle-ordering`
+- `POST /api/vendor/sales/reset-today`
+- `GET /api/analytics/vendor/*`

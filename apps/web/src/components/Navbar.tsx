@@ -1,225 +1,52 @@
-import React from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Button } from './ui/Button';
-import { Role } from '@makanx/shared';
-import { BarChart3, Menu, X, LogOut } from 'lucide-react';
-import { createPortal } from 'react-dom';
+
+const links = [
+  { label: 'Dashboard', to: '/vendor', end: true },
+  { label: 'Menu', to: '/vendor/menu' },
+  { label: 'Live Orders', to: '/vendor/live-orders' },
+  { label: 'Sales', to: '/vendor/sales' },
+  { label: 'Settings', to: '/vendor/settings' },
+];
 
 export function Navbar() {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [mobileVendorMenuOpen, setMobileVendorMenuOpen] = React.useState(false);
-
-  const isVendor = !!user?.vendorProfile?.id;
-  const vendorLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `text-sm font-medium transition-colors ${isActive ? 'text-black' : 'text-gray-700 hover:text-black'}`;
+  const { logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `rounded-xl px-3 py-2 text-sm font-semibold ${isActive ? 'bg-black text-white' : 'text-neutral-700 hover:bg-neutral-100'}`;
 
   return (
-    <nav className="border-b bg-white shadow-sm overflow-x-hidden">
-      <div className="hidden [@media(pointer:coarse)]:block max-w-[100vw] px-4 pt-3 pb-4">
-        {user && isVendor ? (
-          <>
-            <div className="flex items-center justify-between">
-              <Link to="/vendor" className="text-lg font-semibold text-black tracking-tight">
-                MakanX
-              </Link>
-              <button
-                type="button"
-                onClick={() => setMobileVendorMenuOpen(true)}
-                className="w-11 h-11 rounded-2xl border border-neutral-200 bg-white text-black flex items-center justify-center active:scale-95 transition"
-                aria-label="Open menu"
-              >
-                <Menu size={20} />
+    <nav className="border-b border-neutral-200 bg-white">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+        <NavLink to="/vendor" className="min-w-0 truncate font-bold text-neutral-950">
+          Smart QR Ordering System
+        </NavLink>
+        <div className="hidden items-center gap-1 md:flex">
+          {links.map((link) => <NavLink key={link.to} {...link} className={linkClass}>{link.label}</NavLink>)}
+          <button onClick={logout} className="ml-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Logout</button>
+        </div>
+        <button onClick={() => setOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl border md:hidden" aria-label="Open navigation">
+          <Menu size={20} />
+        </button>
+      </div>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/50 md:hidden" onClick={() => setOpen(false)}>
+          <div className="absolute inset-y-0 right-0 w-[min(86vw,320px)] overflow-y-auto bg-white p-5" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-6 flex items-center justify-between">
+              <span className="font-bold">Navigation</span>
+              <button onClick={() => setOpen(false)} className="h-10 w-10 rounded-full border" aria-label="Close navigation"><X className="m-auto" size={18} /></button>
+            </div>
+            <div className="space-y-2">
+              {links.map((link) => <NavLink key={link.to} {...link} onClick={() => setOpen(false)} className={({ isActive }) => `${linkClass({ isActive })} block w-full`}>{link.label}</NavLink>)}
+              <button onClick={logout} className="flex w-full items-center justify-between rounded-xl border border-red-200 px-3 py-3 font-semibold text-red-700">
+                Logout <LogOut size={18} />
               </button>
             </div>
-
-            <VendorMobileMenu
-              isOpen={mobileVendorMenuOpen}
-              onClose={() => setMobileVendorMenuOpen(false)}
-              onLogout={() => {
-                setMobileVendorMenuOpen(false);
-                logout();
-              }}
-              onNavigate={(to) => {
-                setMobileVendorMenuOpen(false);
-                if (location.pathname !== to) navigate(to);
-              }}
-              activePath={location.pathname}
-            />
-          </>
-        ) : (
-          <div className="flex items-center justify-between">
-            <Link to="/" className="text-lg font-semibold text-black tracking-tight">
-              MakanX
-            </Link>
-            {user ? (
-              <button
-                type="button"
-                onClick={logout}
-                className="h-11 px-4 rounded-2xl border border-neutral-200 bg-white text-black font-semibold text-sm active:scale-[0.99] transition"
-              >
-                Logout
-              </button>
-            ) : (
-              <Link to="/login" className="h-11 px-4 rounded-2xl border border-neutral-200 bg-white text-black font-semibold text-sm flex items-center">
-                Login
-              </Link>
-            )}
           </div>
-        )}
-      </div>
-
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between [@media(pointer:coarse)]:hidden">
-        <Link to="/" className="text-xl font-bold text-orange-600 hover:text-orange-700 transition-colors">
-          MakanX
-        </Link>
-
-        <div className="flex items-center gap-4">
-          {user ? (
-            <>
-              <span className="text-sm text-gray-600 hidden sm:inline">
-                {user.name} ({user.role})
-              </span>
-              {user.role === Role.CUSTOMER && (
-                <>
-                  <Link to="/home" className="text-sm hover:underline hover:text-orange-600">
-                    Events
-                  </Link>
-                  <Link to="/customer/orders" className="text-sm hover:underline hover:text-orange-600">
-                    My Orders
-                  </Link>
-                </>
-              )}
-              {user.role === Role.ORGANIZER && (
-                <Link to="/organizer" className="text-sm hover:underline hover:text-black text-black">
-                  Dashboard
-                </Link>
-              )}
-              {isVendor && (
-                <>
-                  <NavLink to="/vendor" className={vendorLinkClass}>
-                    Dashboard
-                  </NavLink>
-                  <NavLink
-                    to="/vendor/sales"
-                    className={({ isActive }) =>
-                      `${vendorLinkClass({ isActive })} flex items-center gap-1`
-                    }
-                  >
-                    <BarChart3 size={16} />
-                    View Sales
-                  </NavLink>
-                  <NavLink to="/vendor/menu" className={vendorLinkClass}>
-                    Menu
-                  </NavLink>
-                </>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={logout}
-                className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
-              >
-                Logout
-              </Button>
-            </>
-          ) : (
-            <>
-              <Link to="/login">
-                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-orange-600 hover:bg-orange-50">
-                  Login
-                </Button>
-              </Link>
-            </>
-          )}
         </div>
-      </div>
+      )}
     </nav>
-  );
-}
-
-function VendorMobileMenu({
-  isOpen,
-  onClose,
-  onLogout,
-  onNavigate,
-  activePath,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onLogout: () => void;
-  onNavigate: (to: string) => void;
-  activePath: string;
-}) {
-  React.useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const links = [
-    { label: 'Dashboard', to: '/vendor' },
-    { label: 'Menu', to: '/vendor/menu' },
-    { label: 'Sales', to: '/vendor/sales' },
-  ];
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/60" onMouseDown={onClose} onTouchStart={onClose}>
-      <div
-        className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl"
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-neutral-100">
-          <div className="text-base font-semibold text-black">Menu</div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-full border border-neutral-200 text-black active:scale-95 transition"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-2">
-          {links.map((l) => {
-            const active = activePath === l.to;
-            return (
-              <button
-                key={l.to}
-                type="button"
-                onClick={() => onNavigate(l.to)}
-                className={`w-full h-12 rounded-2xl px-4 text-left font-semibold transition ${
-                  active ? 'bg-black text-white' : 'bg-white border border-neutral-200 text-black'
-                }`}
-              >
-                {l.label}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={onLogout}
-            className="mt-3 w-full h-12 rounded-2xl px-4 text-left font-semibold bg-white border border-neutral-200 text-black flex items-center justify-between"
-          >
-            <span>Logout</span>
-            <LogOut size={18} />
-          </button>
-          <div className="h-3" />
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }

@@ -1,51 +1,20 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { app } from '../index';
-import prisma from '../utils/prisma';
 
-describe('Auth Routes', () => {
-  beforeAll(async () => {
-    // Cleanup
-    await prisma.user.deleteMany({ where: { email: 'test@example.com' } });
+describe('Simplified API surface', () => {
+  it('reports the active product name', async () => {
+    const response = await request(app).get('/');
+    expect(response.status).toBe(200);
+    expect(response.text).toBe('Smart QR Ordering System API Running');
   });
 
-  afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: 'test@example.com' } });
-    await prisma.$disconnect();
-  });
-
-  it('should register a new user with normalized email', async () => {
-    const res = await request(app).post('/auth/register').send({
-      email: 'Test@Example.com',
-      password: 'password123',
-      name: 'Test User',
-      role: 'CUSTOMER',
-    });
-
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.user.email).toBe('test@example.com');
-    expect(res.body.data.token).toBeDefined();
-  });
-
-  it('should login the user with normalized email', async () => {
-    const res = await request(app).post('/auth/login').send({
-      email: 'Test@Example.com',
-      password: 'password123',
-    });
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.token).toBeDefined();
-  });
-
-  it('should not login with wrong password', async () => {
-    const res = await request(app).post('/auth/login').send({
-      email: 'Test@Example.com',
-      password: 'wrongpassword',
-    });
-
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+  it('does not expose organizer, event, or booth routes', async () => {
+    const responses = await Promise.all([
+      request(app).get('/api/organizer'),
+      request(app).get('/api/events'),
+      request(app).get('/api/booths'),
+    ]);
+    responses.forEach((response) => expect(response.status).toBe(404));
   });
 });

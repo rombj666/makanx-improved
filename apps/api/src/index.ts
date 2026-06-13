@@ -4,20 +4,11 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { initSocket } from './socket';
 import authRoutes from './routes/auth.routes';
-import eventRoutes from './routes/event.routes';
-import boothRoutes from './routes/booth.routes';
-import applicationRoutes from './routes/application.routes';
 import orderRoutes from './routes/order.routes';
-import organizerRoutes from './routes/organizer.routes';
-import organizerUploadRoutes from './routes/organizerUploadRoutes';
 import uploadRoutes from './routes/upload.routes';
 import menuRoutes from './routes/menu.routes';
-import pushRoutes from './routes/push.routes';
 import analyticsRoutes from './routes/analytics.routes';
-import whatsappRoutes from './routes/whatsapp.routes';
 import vendorRoutes from './routes/vendor.routes';
-import hourCoffeeTestEmailRoutes from './routes/hour-coffee-test-email.routes';
-import webpush from 'web-push';
 
 import { configureSecurity } from './middleware/security';
 
@@ -86,48 +77,18 @@ import path from 'path';
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-const vapidSubject = process.env.VAPID_EMAIL || process.env.VAPID_SUBJECT || '';
-const vapidPublic = process.env.VAPID_PUBLIC_KEY || '';
-const vapidPrivate = process.env.VAPID_PRIVATE_KEY || '';
-if (vapidSubject && vapidPublic && vapidPrivate) {
-  try {
-    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-    console.log('[push] VAPID configured:', {
-      subject: vapidSubject,
-      publicKeyLen: vapidPublic.length,
-      privateKeyLen: vapidPrivate.length,
-    });
-  } catch (err: any) {
-    console.error('[push] VAPID configuration error:', err?.message || err);
-  }
-} else {
-  console.warn('[push] VAPID missing:', {
-    hasSubject: !!vapidSubject,
-    hasPublic: !!vapidPublic,
-    hasPrivate: !!vapidPrivate,
-  });
-}
-
 // Routes
 const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
-apiRouter.use('/events', eventRoutes);
-apiRouter.use('/booths', boothRoutes);
-apiRouter.use('/applications', applicationRoutes);
 apiRouter.use('/orders', orderRoutes);
-apiRouter.use('/organizer', organizerRoutes);
-apiRouter.use('/organizer', organizerUploadRoutes);
 apiRouter.use('/uploads', uploadRoutes);
 apiRouter.use('/menu-items', menuRoutes);
-apiRouter.use('/push', pushRoutes);
 apiRouter.use('/analytics', analyticsRoutes);
-apiRouter.use('/whatsapp', whatsappRoutes);
 apiRouter.use('/vendor', vendorRoutes);
-apiRouter.use('/hour-coffee-test-email', hourCoffeeTestEmailRoutes);
 app.use('/api', apiRouter);
 
-app.get('/api/whatsapp/webhook-test', (_req, res) => {
-  res.status(200).type('text/plain').send('ok');
+app.get('/', (_req, res) => {
+  res.send('Smart QR Ordering System API Running');
 });
 
 app.get('/test-route', (req, res) => {

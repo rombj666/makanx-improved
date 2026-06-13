@@ -1,34 +1,31 @@
-# MakanX API
+# Smart QR Ordering System
 
-## Setup
+A simplified vendor and customer QR ordering application.
 
-1.  Copy `.env.example` to `.env` and fill in your `DATABASE_URL` (Neon PostgreSQL) and secrets.
-2.  Install dependencies: `npm install` (from root).
-3.  Sync database schema:
-    ```bash
-    npx prisma db push
-    ```
-4.  Seed the database:
-    ```bash
-    npx prisma db seed
-    ```
-5.  Start the server:
-    ```bash
-    npm run dev
-    ```
+## Applications
 
-## Testing
+- `apps/web`: React + TypeScript vendor UI and public customer ordering UI
+- `apps/api`: Express + TypeScript API with Prisma/PostgreSQL
 
-Run unit/integration tests (requires database connection):
+## Main Routes
 
-```bash
-npm test
-```
+- `/login`
+- `/vendor`
+- `/vendor/menu`
+- `/vendor/live-orders`
+- `/vendor/sales`
+- `/vendor/settings`
+- `/order/:vendorId`
+- `/track/:orderId`
 
-## Features Implemented
+## Local Setup
 
--   **Auth**: Register, Login, JWT, RBAC (Middleware).
--   **Events**: CRUD (Organizer), Public Read (by slug).
--   **Booths**: Linked to events (Organizer).
--   **Applications**: Webhook integration, Organizer approval/rejection.
--   **Invites**: Generated on application approval.
+1. Point `DATABASE_URL` to a disposable local PostgreSQL database.
+2. Run `npm install`.
+3. Run `npx prisma migrate dev` from `apps/api`.
+4. Run `npm run db:seed -w apps/api`.
+5. Start the API and web applications.
+
+Seed login: `vendor@test.com` / `password`.
+
+The new baseline migration is destructive and must not be applied to production without a reviewed data-migration plan and backup.

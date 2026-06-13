@@ -1,421 +1,153 @@
 import { Request, Response } from 'express';
-import prisma from '../utils/prisma';
 import { z } from 'zod';
+import prisma from '../utils/prisma';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { getIO } from '../socket';
 
-const updateSettingsSchema = z.object({
+const settingsSchema = z.object({
   dailyDrinkLimitEnabled: z.boolean().optional(),
-  dailyDrinkLimitQuantity: z.number().min(0).optional(),
+  dailyDrinkLimitQuantity: z.number().int().min(0).optional(),
   autoStopOrderingOnLimit: z.boolean().optional(),
-  reportRecipientEmail: z.string().email().optional().nullable(),
+  reportRecipientEmail: z.string().email().or(z.literal('')).optional().nullable(),
   reportRecipientEmails: z.array(z.string().email()).optional().nullable(),
 });
 
-const updateOrderLimitSettingsSchema = z.object({
+const orderLimitSchema = z.object({
   deviceOrderLimitEnabled: z.boolean(),
   maxDrinksPerOrder: z.number().int().min(1),
 });
 
-const usageWhere = (vendorId: string, eventId: string | null, date: string) =>
-  ({ vendorId_eventId_date: { vendorId, eventId, date } } as any);
-
-async function resolveCurrentVendorEventId(vendorId: string) {
-  const now = new Date();
-  const currentBooth = await prisma.booth.findFirst({
-    where: {
-      vendorId,
-      event: {
-        status: 'ACTIVE',
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-    },
-    select: { eventId: true },
-  });
-  if (currentBooth?.eventId) return currentBooth.eventId;
-
-  const activeBooth = await prisma.booth.findFirst({
-    where: { vendorId, event: { status: 'ACTIVE' } },
-    select: { eventId: true },
-  });
-  if (activeBooth?.eventId) return activeBooth.eventId;
-
-  const anyBooth = await prisma.booth.findFirst({
-    where: { vendorId },
-    select: { eventId: true },
-  });
-  return anyBooth?.eventId ?? null;
-}
-
-async function ensureVendorAssignedToEvent(userId: string, eventId?: string) {
-  const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+async function vendorFor(userId: string) {
+  const vendor = await prisma.vendorProfile.findUnique({ where: { userId }, include: { settings: true } });
   if (!vendor) throw new Error('Vendor profile not found');
-
-  const resolvedEventId = eventId || (await resolveCurrentVendorEventId(vendor.id));
-  if (!resolvedEventId) throw new Error('Vendor has no current event');
-
-  const booth = await prisma.booth.findFirst({
-    where: { vendorId: vendor.id, eventId: resolvedEventId },
-    select: { id: true },
-  });
-  if (!booth) throw new Error('Vendor is not assigned to this event');
-
-  return { vendor, eventId: resolvedEventId };
+  if (!vendor.settings) {
+    vendor.settings = await prisma.vendorSettings.create({ data: { vendorId: vendor.id } });
+  }
+  return vendor;
 }
 
-async function calculateDailyUsedQuantity(vendorId: string, eventId: string | null, dateStr: string) {
-  const { start, end } = getMalaysiaDayRange(dateStr);
-  const sum = await prisma.orderItem.aggregate({
-    where: {
-      order: {
-        vendorId,
-        ...(eventId ? { eventId } : {}),
-        createdAt: { gte: start, lte: end },
-        status: { in: ['PREPARING', 'READY'] },
-      },
-    },
+async function usedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
+  const { start, end } = getMalaysiaDayRange(date);
+  const aggregate = await prisma.orderItem.aggregate({
+    where: { order: { vendorId, createdAt: { gte: start, lte: end } } },
     _sum: { quantity: true },
   });
-  return Number(sum?._sum?.quantity ?? 0);
+  return Number(aggregate._sum.quantity || 0);
+}
+
+function responseSettings(settings: any) {
+  return {
+    dailyDrinkLimitEnabled: settings.dailyLimitEnabled,
+    dailyDrinkLimitQuantity: settings.dailyLimitQuantity,
+    autoStopOrderingOnLimit: settings.dailyLimitAutoStop,
+    reportRecipientEmail: Array.isArray(settings.reportRecipientEmails) ? settings.reportRecipientEmails[0] || null : null,
+    reportRecipientEmails: Array.isArray(settings.reportRecipientEmails) ? settings.reportRecipientEmails : [],
+  };
 }
 
 export const getSettings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const vendor = await prisma.vendorProfile.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        dailyDrinkLimitEnabled: true,
-        dailyDrinkLimitQuantity: true,
-        autoStopOrderingOnLimit: true,
-        reportRecipientEmail: true,
-        reportRecipientEmails: true,
-      },
-    });
-
-    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-
-    // Ensure we return default values if null in DB (unlikely with Prisma defaults but safe)
-    // Also handle migration logic: if old field has email but new field is empty, return [old]
-    let emails: string[] = [];
-    if (vendor.reportRecipientEmails && Array.isArray(vendor.reportRecipientEmails)) {
-      emails = vendor.reportRecipientEmails as string[];
-    } else if (vendor.reportRecipientEmail) {
-      emails = [vendor.reportRecipientEmail];
-    }
-
-    const data = {
-      dailyDrinkLimitEnabled: vendor.dailyDrinkLimitEnabled ?? false,
-      dailyDrinkLimitQuantity: vendor.dailyDrinkLimitQuantity ?? 0,
-      autoStopOrderingOnLimit: vendor.autoStopOrderingOnLimit ?? true,
-      reportRecipientEmail: vendor.reportRecipientEmail ?? null,
-      reportRecipientEmails: emails,
-    };
-
-    return res.json({ success: true, data });
+    const vendor = await vendorFor(req.user!.userId);
+    res.json({ success: true, data: responseSettings(vendor.settings) });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
 export const updateSettings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const validatedData = updateSettingsSchema.parse(req.body);
-
-    const updateData: any = { ...validatedData };
-    if (updateData.reportRecipientEmails === null) {
-      updateData.reportRecipientEmails = undefined; // Or []
-    }
-
-    const vendor = await prisma.vendorProfile.update({
-      where: { userId },
-      data: updateData,
-      select: {
-        id: true,
-        dailyDrinkLimitEnabled: true,
-        dailyDrinkLimitQuantity: true,
-        autoStopOrderingOnLimit: true,
-        reportRecipientEmail: true,
-        reportRecipientEmails: true,
+    const vendor = await vendorFor(req.user!.userId);
+    const input = settingsSchema.parse(req.body);
+    const emails = input.reportRecipientEmails
+      ?? (input.reportRecipientEmail ? [input.reportRecipientEmail] : undefined);
+    const settings = await prisma.vendorSettings.update({
+      where: { vendorId: vendor.id },
+      data: {
+        ...(input.dailyDrinkLimitEnabled !== undefined ? { dailyLimitEnabled: input.dailyDrinkLimitEnabled } : {}),
+        ...(input.dailyDrinkLimitQuantity !== undefined ? { dailyLimitQuantity: input.dailyDrinkLimitQuantity } : {}),
+        ...(input.autoStopOrderingOnLimit !== undefined ? { dailyLimitAutoStop: input.autoStopOrderingOnLimit } : {}),
+        ...(emails !== undefined ? { reportRecipientEmails: emails } : {}),
       },
     });
-
-    // Also update today's usage record if it exists and limit was changed
-    if (validatedData.dailyDrinkLimitQuantity !== undefined) {
-      const today = getMalaysiaTodayString();
-      await prisma.vendorDailyUsage.updateMany({
-        where: { vendorId: vendor.id, date: today },
-        data: { dailyLimit: validatedData.dailyDrinkLimitQuantity },
-      });
-    }
-
-    // Combine for frontend
-    let emails: string[] = [];
-    if (vendor.reportRecipientEmails && Array.isArray(vendor.reportRecipientEmails)) {
-      emails = vendor.reportRecipientEmails as string[];
-    } else if (vendor.reportRecipientEmail) {
-      emails = [vendor.reportRecipientEmail];
-    }
-
-    const data = {
-      ...vendor,
-      reportRecipientEmails: emails,
-    };
-
-    return res.json({ success: true, data });
+    res.json({ success: true, data: responseSettings(settings) });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
-    }
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
 export const getOrderLimitSettings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const { eventId } = await ensureVendorAssignedToEvent(userId, req.params.eventId);
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: { deviceOrderLimitEnabled: true, maxDrinksPerOrder: true },
-    });
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-
-    return res.json({
+    const vendor = await vendorFor(req.user!.userId);
+    res.json({
       success: true,
       data: {
-        deviceOrderLimitEnabled: event.deviceOrderLimitEnabled ?? false,
-        maxDrinksPerOrder: event.maxDrinksPerOrder ?? 1,
+        deviceOrderLimitEnabled: vendor.settings!.deviceOrderLimitEnabled,
+        maxDrinksPerOrder: vendor.settings!.maxDrinksPerOrder,
       },
     });
   } catch (error: any) {
-    return res.status(400).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
 export const updateOrderLimitSettings = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const validatedData = updateOrderLimitSettingsSchema.parse(req.body);
-    const { eventId } = await ensureVendorAssignedToEvent(userId, req.params.eventId);
-
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: validatedData,
-      select: { deviceOrderLimitEnabled: true, maxDrinksPerOrder: true },
-    });
-
-    return res.json({ success: true, data: event });
+    const vendor = await vendorFor(req.user!.userId);
+    const input = orderLimitSchema.parse(req.body);
+    const settings = await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: input });
+    res.json({ success: true, data: {
+      deviceOrderLimitEnabled: settings.deviceOrderLimitEnabled,
+      maxDrinksPerOrder: settings.maxDrinksPerOrder,
+    } });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message).join(', ') });
-    }
-    return res.status(400).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
 export const getDailyUsage = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
-    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-
-    const today = getMalaysiaTodayString();
-    const eventId = await resolveCurrentVendorEventId(vendor.id);
-    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
-    let usage = await prisma.vendorDailyUsage.findUnique({
-      where: usageWhere(vendor.id, eventId, today),
+    const vendor = await vendorFor(req.user!.userId);
+    const date = getMalaysiaTodayString();
+    const used = await usedQuantity(vendor.id, date);
+    const usage = await prisma.vendorDailyUsage.upsert({
+      where: { vendorId_date: { vendorId: vendor.id, date } },
+      update: { usedQuantity: used, dailyLimit: vendor.settings!.dailyLimitQuantity },
+      create: { vendorId: vendor.id, date, usedQuantity: used, dailyLimit: vendor.settings!.dailyLimitQuantity },
     });
-
-    if (!usage) {
-      // Create initial usage for today if it doesn't exist
-      usage = await prisma.vendorDailyUsage.create({
-        data: {
-          vendorId: vendor.id,
-          eventId,
-          date: today,
-          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-          usedQuantity,
-          orderingClosed: false,
-        },
-      });
-    } else if (usage.usedQuantity !== usedQuantity || usage.dailyLimit !== (vendor.dailyDrinkLimitQuantity ?? 0)) {
-      usage = await prisma.vendorDailyUsage.update({
-        where: { id: usage.id },
-        data: {
-          usedQuantity,
-          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-        },
-      });
-    }
-
-    return res.json({ success: true, data: usage });
+    res.json({ success: true, data: usage });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
-export const resetEventOrders = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
-    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-
-    const eventId = await resolveCurrentVendorEventId(vendor.id);
-    if (!eventId) return res.status(400).json({ success: false, error: 'Vendor has no current event' });
-
-    const todayStr = getMalaysiaTodayString();
-
-    console.log(`[vendor-reset] Resetting event orders for vendor ${vendor.id} (${vendor.businessName}) in event ${eventId}`);
-
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Delete OrderItems for this event's orders
-      const orderItemsResult = await tx.orderItem.deleteMany({
-        where: {
-          order: {
-            vendorId: vendor.id,
-            eventId,
-          }
-        }
-      });
-
-      // 2. Delete Orders for this event
-      const ordersResult = await tx.order.deleteMany({
-        where: {
-          vendorId: vendor.id,
-          eventId,
-        }
-      });
-
-      // 3. Reset today's usage because the underlying event orders are gone.
-      await tx.vendorDailyUsage.upsert({
-        where: usageWhere(vendor.id, eventId, todayStr),
-        update: { 
-          usedQuantity: 0,
-          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-          orderingClosed: false 
-        },
-        create: {
-          vendorId: vendor.id,
-          eventId,
-          date: todayStr,
-          dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-          usedQuantity: 0,
-          orderingClosed: false
-        }
-      });
-
-      return {
-        deletedOrders: ordersResult.count,
-        deletedOrderItems: orderItemsResult.count
-      };
-    });
-
-    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_reset', { vendorId: vendor.id, eventId });
-    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_changed', {
-      reset: true,
-      vendorId: vendor.id,
-      eventId,
-      updatedAt: new Date().toISOString(),
-    });
-    getIO().emit('vendor_serving_updated', { vendorId: vendor.id, displayNumber: null });
-
-    return res.json({ 
-      success: true, 
-      message: "Event orders reset successfully",
-      ...result
-    });
-  } catch (error: any) {
-    console.error(`[vendor-reset] Error: ${error.message}`);
-    return res.status(500).json({ success: false, error: error.message });
-  }
-};
+export const recalculateUsage = getDailyUsage;
 
 export const toggleOrderingStatus = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
     const { closed } = z.object({ closed: z.boolean() }).parse(req.body);
-
-    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
-    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-
-    const today = getMalaysiaTodayString();
-    const eventId = await resolveCurrentVendorEventId(vendor.id);
-    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
+    const vendor = await vendorFor(req.user!.userId);
+    await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: { orderingOpen: !closed } });
+    const date = getMalaysiaTodayString();
     const usage = await prisma.vendorDailyUsage.upsert({
-      where: usageWhere(vendor.id, eventId, today),
-      update: {
-        orderingClosed: closed,
-        usedQuantity,
-        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-      },
-      create: {
-        vendorId: vendor.id,
-        eventId,
-        date: today,
-        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-        usedQuantity,
-        orderingClosed: closed,
-      },
+      where: { vendorId_date: { vendorId: vendor.id, date } },
+      update: { orderingClosed: closed },
+      create: { vendorId: vendor.id, date, dailyLimit: vendor.settings!.dailyLimitQuantity, orderingClosed: closed },
     });
-
-    return res.json({ success: true, data: usage });
+    res.json({ success: true, data: usage });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: error.issues.map((issue) => issue.message) });
-    }
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };
 
-export const recalculateUsage = async (req: Request, res: Response) => {
+export const resetTodayOrders = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
-    if (!vendor) return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-
-    const today = getMalaysiaTodayString();
-    const eventId = await resolveCurrentVendorEventId(vendor.id);
-    const usedQuantity = await calculateDailyUsedQuantity(vendor.id, eventId, today);
-    
-    // Update or create usage record
-    const usage = await prisma.vendorDailyUsage.upsert({
-      where: usageWhere(vendor.id, eventId, today),
-      update: {
-        usedQuantity,
-        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-      },
-      create: {
-        vendorId: vendor.id,
-        eventId,
-        date: today,
-        dailyLimit: vendor.dailyDrinkLimitQuantity ?? 0,
-        usedQuantity,
-        orderingClosed: false,
-      },
-    });
-
-    return res.json({ success: true, data: usage });
+    const vendor = await vendorFor(req.user!.userId);
+    const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
+    const result = await prisma.order.deleteMany({ where: { vendorId: vendor.id, createdAt: { gte: start, lte: end } } });
+    await prisma.vendorDailyUsage.deleteMany({ where: { vendorId: vendor.id, date: getMalaysiaTodayString() } });
+    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_reset', { vendorId: vendor.id });
+    res.json({ success: true, deletedOrders: result.count });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 };

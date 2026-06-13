@@ -1,7 +1,7 @@
 export const ONE_DRINK_ORDER_MESSAGE = 'Only 1 drink can be ordered per device.';
 export const DEVICE_ORDER_LOCK_MESSAGE = 'This device has already placed an order for this event.';
 
-const DEVICE_ID_KEY = 'makanx_device_id';
+const DEVICE_ID_KEY = 'smart_qr_device_id';
 
 function makeId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -23,7 +23,7 @@ export function getOrCreateDeviceId() {
 }
 
 export function getOrderLockKey(eventKey: string) {
-  return `makanx_order_lock_${eventKey}`;
+  return `smart_qr_order_lock_${eventKey}`;
 }
 
 export function hasOrderLock(eventKey: string) {

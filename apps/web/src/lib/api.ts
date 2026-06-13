@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const rawBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 // Ensure API_URL always ends with /api
-const API_URL = envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+const API_URL = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
 
-export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || API_URL.replace(/\/api$/, '');
+export const API_ORIGIN = API_URL.replace(/\/api$/, '');
 
 export const api = axios.create({
   baseURL: API_URL,

@@ -46,6 +46,15 @@ export const getVendorMenu = async (req: any, res: any) => {
   }
 };
 
+export const getPublicMenu = async (req: any, res: any) => {
+  try {
+    const vendor = await menuService.getPublicMenu(String(req.params.vendorId || ''));
+    res.json({ success: true, data: vendor });
+  } catch (error: any) {
+    res.status(404).json({ success: false, message: errorToMessage(error) });
+  }
+};
+
 export const updateMenuItem = async (req: any, res: any) => {
   try {
     const userId = req.user.userId;

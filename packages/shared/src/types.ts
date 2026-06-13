@@ -1,7 +1,5 @@
 export enum Role {
-  CUSTOMER = 'CUSTOMER',
-  VENDOR = 'VENDOR',
-  ORGANIZER = 'ORGANIZER'
+  VENDOR = 'VENDOR'
 }
 
 export enum OrderStatus {

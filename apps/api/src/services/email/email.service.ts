@@ -71,16 +71,16 @@ export async function sendHourCoffeeTestEmail(to: string): Promise<SendEmailResu
 export async function sendHourCoffeeReadyEmail(
   to: string,
   orderNumber: string,
-  boothName: string,
+  storeName: string,
   orderId: string
 ): Promise<SendEmailResult> {
   const customerOrderPageUrl = process.env.CLIENT_URL
-    ? `${process.env.CLIENT_URL}/customer/order-confirmed?orderId=${orderId}`
+    ? `${process.env.CLIENT_URL}/track/${orderId}`
     : undefined;
 
   const { subject, html, text } = buildOrderReadyEmail({
     orderNumber,
-    boothName,
+    storeName,
     customerOrderPageUrl,
   });
 

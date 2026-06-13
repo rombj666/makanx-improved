@@ -22,8 +22,7 @@
   - `JWT_SECRET`: (Generate a strong random string)
   - `CLIENT_URL`: `https://hourcoffee.com.my` (Your frontend production URL)
   - `CORS_ORIGIN`: `https://hourcoffee.com.my,https://www.hourcoffee.com.my`
-  - `GOOGLE_WEBHOOK_SECRET`: (From your Google Apps Script)
-- **Health Check Path**: `/` (returns "MakanX API Running")
+- **Health Check Path**: `/` (returns "Smart QR Ordering System API Running")
 
 **Note on Security**: 
 - Rate limiting is enabled. If you get "Too many requests" during testing, check `src/middleware/security.ts`.
@@ -36,12 +35,6 @@
 - **Build Command**: `npm run build`
 - **Output Directory**: `dist`
 - **Environment Variables**:
-  - `VITE_API_URL`: `https://api.hourcoffee.com.my/api`
-  - `VITE_SOCKET_URL`: `https://api.hourcoffee.com.my`
-  - `VITE_VAPID_PUBLIC_KEY`: (Must match backend VAPID_PUBLIC_KEY)
+  - `VITE_API_URL`: your backend origin, for example `https://your-backend.example.com`
+  - `VITE_SOCKET_URL`: your backend origin, for example `https://your-backend.example.com`
 - **Rewrites**: A `vercel.json` is included to handle SPA routing.
-
-## 4. Google Apps Script
-- Deploy your Apps Script as a Web App.
-- Set the `WEBHOOK_URL` to `https://api.hourcoffee.com.my/api/webhooks/vendor-application`.
-- Set the `SECRET` to match `GOOGLE_WEBHOOK_SECRET` in Render.

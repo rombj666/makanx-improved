@@ -19,8 +19,8 @@ type CartState = {
   lines: CartLine[];
 };
 
-function storageKey(eventSlug: string, vendorId: string) {
-  return `mx_cart_${eventSlug}_${vendorId}`;
+function storageKey(storeId: string, vendorId: string) {
+  return `smart_qr_cart_${storeId}_${vendorId}`;
 }
 
 function safeParse<T>(val: string | null, fallback: T): T {
@@ -62,15 +62,15 @@ function normalizeSelectedOptions(input: CartLine['selectedOptions']): string {
 }
 
 export function useCustomerCart(params: {
-  eventSlug: string;
+  storeId: string;
   vendorId: string;
   vendorName?: string;
-  boothName?: string;
   maxItems?: number;
 }) {
-  const { eventSlug, vendorId, vendorName = '', boothName = '', maxItems = 99 } = params;
+  const { storeId, vendorId, vendorName = '', maxItems = 99 } = params;
+  const boothName = '';
   const cartLimit = Math.max(1, Math.floor(Number(maxItems) || 99));
-  const key = useMemo(() => storageKey(eventSlug, vendorId), [eventSlug, vendorId]);
+  const key = useMemo(() => storageKey(storeId, vendorId), [storeId, vendorId]);
 
   const [state, setState] = useState<CartState>(() => ({
     vendorId,
@@ -80,7 +80,7 @@ export function useCustomerCart(params: {
   }));
 
   useEffect(() => {
-    if (!eventSlug || !vendorId) return;
+    if (!storeId || !vendorId) return;
     const loaded = safeParse<CartState>(localStorage.getItem(key), {
       vendorId,
       vendorName,
@@ -98,14 +98,14 @@ export function useCustomerCart(params: {
           }))
         : [],
     });
-  }, [key, eventSlug, vendorId, vendorName, boothName]);
+  }, [key, storeId, vendorId, vendorName, boothName]);
 
   useEffect(() => {
-    if (!eventSlug || !vendorId) return;
+    if (!storeId || !vendorId) return;
     try {
       localStorage.setItem(key, JSON.stringify(state));
     } catch {}
-  }, [key, state, eventSlug, vendorId]);
+  }, [key, state, storeId, vendorId]);
 
   const addLine = useCallback(
     (input: Omit<CartLine, 'id'>) => {
