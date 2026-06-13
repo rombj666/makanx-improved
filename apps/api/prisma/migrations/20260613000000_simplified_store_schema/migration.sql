@@ -1,17 +1,51 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('VENDOR');
+DO $$ BEGIN
+    CREATE TYPE "Role" AS ENUM ('VENDOR');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'VENDOR';
 
 -- CreateEnum
-CREATE TYPE "OrderStatus" AS ENUM ('PREPARING', 'READY');
+DO $$ BEGIN
+    CREATE TYPE "OrderStatus" AS ENUM ('PREPARING', 'READY');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TYPE "OrderStatus" ADD VALUE IF NOT EXISTS 'PREPARING';
+ALTER TYPE "OrderStatus" ADD VALUE IF NOT EXISTS 'READY';
 
 -- CreateEnum
-CREATE TYPE "OrderItemStatus" AS ENUM ('PREPARING', 'READY');
+DO $$ BEGIN
+    CREATE TYPE "OrderItemStatus" AS ENUM ('PREPARING', 'READY');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TYPE "OrderItemStatus" ADD VALUE IF NOT EXISTS 'PREPARING';
+ALTER TYPE "OrderItemStatus" ADD VALUE IF NOT EXISTS 'READY';
 
 -- CreateEnum
-CREATE TYPE "PaymentMode" AS ENUM ('PAY_AT_COUNTER');
+DO $$ BEGIN
+    CREATE TYPE "PaymentMode" AS ENUM ('PAY_AT_COUNTER');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TYPE "PaymentMode" ADD VALUE IF NOT EXISTS 'PAY_AT_COUNTER';
 
 -- CreateEnum
-CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'FAILED');
+DO $$ BEGIN
+    CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'FAILED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'PENDING';
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'PAID';
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'FAILED';
 
 -- CreateTable
 CREATE TABLE "User" (
