@@ -61,7 +61,7 @@ model VendorDailyUsage {
   updatedAt      DateTime      @updatedAt
   vendor         VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
-  @@unique([vendorId, date])
+  @@index([vendorId, date])
 }
 
 model MenuItem {
@@ -106,7 +106,6 @@ model Order {
   vendor        VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   items         OrderItem[]
 
-  @@unique([vendorId, displayNumber])
   @@index([vendorId, createdAt])
   @@index([vendorId, deviceId, createdAt])
   @@index([status])

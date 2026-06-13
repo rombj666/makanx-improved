@@ -35,6 +35,33 @@ async function usedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
   return Number(aggregate._sum.quantity || 0);
 }
 
+async function saveDailyUsage(
+  vendorId: string,
+  date: string,
+  data: {
+    dailyLimit?: number;
+    usedQuantity?: number;
+    orderingClosed?: boolean;
+  },
+) {
+  const existing = await prisma.vendorDailyUsage.findFirst({
+    where: { vendorId, date },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existing) {
+    return prisma.vendorDailyUsage.update({ where: { id: existing.id }, data });
+  }
+  return prisma.vendorDailyUsage.create({
+    data: {
+      vendorId,
+      date,
+      dailyLimit: data.dailyLimit ?? 0,
+      usedQuantity: data.usedQuantity ?? 0,
+      orderingClosed: data.orderingClosed ?? false,
+    },
+  });
+}
+
 function responseSettings(settings: any) {
   return {
     dailyDrinkLimitEnabled: settings.dailyLimitEnabled,
@@ -109,10 +136,9 @@ export const getDailyUsage = async (req: Request, res: Response) => {
     const vendor = await vendorFor(req.user!.userId);
     const date = getMalaysiaTodayString();
     const used = await usedQuantity(vendor.id, date);
-    const usage = await prisma.vendorDailyUsage.upsert({
-      where: { vendorId_date: { vendorId: vendor.id, date } },
-      update: { usedQuantity: used, dailyLimit: vendor.settings!.dailyLimitQuantity },
-      create: { vendorId: vendor.id, date, usedQuantity: used, dailyLimit: vendor.settings!.dailyLimitQuantity },
+    const usage = await saveDailyUsage(vendor.id, date, {
+      usedQuantity: used,
+      dailyLimit: vendor.settings!.dailyLimitQuantity,
     });
     res.json({ success: true, data: usage });
   } catch (error: any) {
@@ -128,10 +154,9 @@ export const toggleOrderingStatus = async (req: Request, res: Response) => {
     const vendor = await vendorFor(req.user!.userId);
     await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: { orderingOpen: !closed } });
     const date = getMalaysiaTodayString();
-    const usage = await prisma.vendorDailyUsage.upsert({
-      where: { vendorId_date: { vendorId: vendor.id, date } },
-      update: { orderingClosed: closed },
-      create: { vendorId: vendor.id, date, dailyLimit: vendor.settings!.dailyLimitQuantity, orderingClosed: closed },
+    const usage = await saveDailyUsage(vendor.id, date, {
+      dailyLimit: vendor.settings!.dailyLimitQuantity,
+      orderingClosed: closed,
     });
     res.json({ success: true, data: usage });
   } catch (error: any) {

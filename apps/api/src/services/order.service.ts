@@ -87,8 +87,9 @@ export async function createOrder(_customerId: string | undefined, input: unknow
 
   if (settings?.dailyLimitEnabled) {
     const used = await getUsedQuantity(vendor.id);
-    const usage = await prisma.vendorDailyUsage.findUnique({
-      where: { vendorId_date: { vendorId: vendor.id, date: getMalaysiaTodayString() } },
+    const usage = await prisma.vendorDailyUsage.findFirst({
+      where: { vendorId: vendor.id, date: getMalaysiaTodayString() },
+      orderBy: { createdAt: 'desc' },
     });
     if (usage?.orderingClosed || used + requestedQuantity > settings.dailyLimitQuantity) {
       const error = new Error('This store has reached its daily order limit.');
