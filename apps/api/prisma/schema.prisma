@@ -39,6 +39,7 @@ model VendorSettings {
   id                      String        @id @default(uuid())
   vendorId                String        @unique
   orderingOpen            Boolean       @default(true)
+  showPrices              Boolean       @default(true)
   dailyLimitEnabled       Boolean       @default(false)
   dailyLimitQuantity      Int           @default(0)
   dailyLimitAutoStop      Boolean       @default(true)

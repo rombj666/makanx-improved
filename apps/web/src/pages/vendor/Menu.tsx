@@ -89,11 +89,13 @@ export function VendorMenu() {
     fetchMenu();
     const run = async () => {
       try {
-        const { data } = await api.get('/booths/vendor/show-prices');
+        const { data } = await api.get('/vendor/settings');
         if (data?.success) {
           setShowPrices(Boolean(data?.data?.showPrices) !== false);
         }
-      } catch {}
+      } catch (error) {
+        console.error('[vendor-menu] Failed to load Show Prices setting', error);
+      }
     };
     run();
   }, []);
@@ -102,9 +104,15 @@ export function VendorMenu() {
     try {
       setIsSavingToggle(true);
       setShowPrices(next);
-      await api.patch('/booths/vendor/show-prices', { showPrices: next });
+      const { data } = await api.patch('/vendor/settings', { showPrices: next });
+      setShowPrices(data?.data?.showPrices !== false);
       toast.success(next ? 'Customer prices are visible' : 'Customer prices are hidden');
     } catch (e: any) {
+      console.error('[vendor-menu] Failed to update Show Prices setting', {
+        status: e?.response?.status,
+        response: e?.response?.data,
+        error: e,
+      });
       setShowPrices(!next);
       const msg =
         (e as any)?.response?.data?.message ||

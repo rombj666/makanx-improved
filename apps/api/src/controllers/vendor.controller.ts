@@ -5,6 +5,7 @@ import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { getIO } from '../socket';
 
 const settingsSchema = z.object({
+  showPrices: z.boolean().optional(),
   dailyDrinkLimitEnabled: z.boolean().optional(),
   dailyDrinkLimitQuantity: z.number().int().min(0).optional(),
   autoStopOrderingOnLimit: z.boolean().optional(),
@@ -64,6 +65,7 @@ async function saveDailyUsage(
 
 function responseSettings(settings: any) {
   return {
+    showPrices: settings.showPrices !== false,
     dailyDrinkLimitEnabled: settings.dailyLimitEnabled,
     dailyDrinkLimitQuantity: settings.dailyLimitQuantity,
     autoStopOrderingOnLimit: settings.dailyLimitAutoStop,
@@ -90,6 +92,7 @@ export const updateSettings = async (req: Request, res: Response) => {
     const settings = await prisma.vendorSettings.update({
       where: { vendorId: vendor.id },
       data: {
+        ...(input.showPrices !== undefined ? { showPrices: input.showPrices } : {}),
         ...(input.dailyDrinkLimitEnabled !== undefined ? { dailyLimitEnabled: input.dailyDrinkLimitEnabled } : {}),
         ...(input.dailyDrinkLimitQuantity !== undefined ? { dailyLimitQuantity: input.dailyDrinkLimitQuantity } : {}),
         ...(input.autoStopOrderingOnLimit !== undefined ? { dailyLimitAutoStop: input.autoStopOrderingOnLimit } : {}),

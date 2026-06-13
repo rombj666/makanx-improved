@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "VendorSettings" (
     "id" TEXT NOT NULL,
     "vendorId" TEXT NOT NULL,
     "orderingOpen" BOOLEAN NOT NULL DEFAULT true,
+    "showPrices" BOOLEAN NOT NULL DEFAULT true,
     "dailyLimitEnabled" BOOLEAN NOT NULL DEFAULT false,
     "dailyLimitQuantity" INTEGER NOT NULL DEFAULT 0,
     "dailyLimitAutoStop" BOOLEAN NOT NULL DEFAULT true,
@@ -181,6 +182,7 @@ ALTER TABLE "VendorProfile"
 
 ALTER TABLE "VendorSettings"
     ADD COLUMN IF NOT EXISTS "orderingOpen" BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS "showPrices" BOOLEAN NOT NULL DEFAULT true,
     ADD COLUMN IF NOT EXISTS "dailyLimitEnabled" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS "dailyLimitQuantity" INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS "dailyLimitAutoStop" BOOLEAN NOT NULL DEFAULT true,

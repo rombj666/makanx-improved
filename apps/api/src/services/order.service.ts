@@ -24,13 +24,45 @@ const createOrderSchema = z.object({
 });
 
 function selectedOptionSnapshot(groups: any[], selected: { groupId: string; choiceIds: string[] }[] = []) {
-  return selected.map((selection) => {
-    const group = groups.find((candidate) => String(candidate?.id) === selection.groupId);
+  const selections = new Map(
+    selected.map((selection) => [
+      String(selection.groupId),
+      Array.from(new Set(selection.choiceIds.map(String).filter(Boolean))),
+    ]),
+  );
+
+  for (const group of groups) {
+    const groupId = String(group?.id || '');
+    const choiceIds = selections.get(groupId) || [];
+    if (group?.required && choiceIds.length === 0) {
+      throw new Error(`Please select an option for ${String(group?.title || 'required customization')}.`);
+    }
+    if (group?.type !== 'multi' && choiceIds.length > 1) {
+      throw new Error(`${String(group?.title || 'Customization')} allows only one option.`);
+    }
+    const validIds = new Set(
+      (Array.isArray(group?.choices) ? group.choices : []).map((choice: any) => String(choice?.id || '')),
+    );
+    if (choiceIds.some((choiceId) => !validIds.has(choiceId))) {
+      throw new Error(`Invalid option selected for ${String(group?.title || 'customization')}.`);
+    }
+  }
+
+  for (const groupId of selections.keys()) {
+    if (!groups.some((group) => String(group?.id || '') === groupId)) {
+      throw new Error('Invalid customization group selected.');
+    }
+  }
+
+  return groups.flatMap((group) => {
+    const groupId = String(group?.id || '');
+    const choiceIds = selections.get(groupId) || [];
+    if (choiceIds.length === 0) return [];
     const choices = Array.isArray(group?.choices)
-      ? group.choices.filter((choice: any) => selection.choiceIds.includes(String(choice?.id)))
+      ? group.choices.filter((choice: any) => choiceIds.includes(String(choice?.id)))
       : [];
     return {
-      groupId: selection.groupId,
+      groupId,
       title: String(group?.title || ''),
       choices: choices.map((choice: any) => ({
         id: String(choice.id),

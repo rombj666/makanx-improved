@@ -210,6 +210,7 @@ export const getPublicMenu = async (vendorId: string) => {
       settings: {
         select: {
           orderingOpen: true,
+          showPrices: true,
           deviceOrderLimitEnabled: true,
           maxDrinksPerOrder: true,
         },
