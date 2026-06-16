@@ -1,5 +1,6 @@
 import { PrismaClient, Role } from '@prisma/client';
 import { hashPassword } from '../src/utils/password';
+import { slugify } from '../src/utils/slug';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,7 @@ async function main() {
       role: Role.VENDOR,
       vendorProfile: {
         create: {
+          slug: slugify('Demo Coffee Store'),
           businessName: 'Demo Coffee Store',
           description: 'Fresh drinks ordered directly by QR code.',
           category: 'Beverages',

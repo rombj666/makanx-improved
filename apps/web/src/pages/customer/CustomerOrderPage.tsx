@@ -33,6 +33,7 @@ interface MenuItem {
 
 interface Store {
   id: string;
+  slug?: string;
   businessName: string;
   description?: string;
   settings?: {
@@ -45,7 +46,8 @@ interface Store {
 }
 
 export function CustomerOrderPage() {
-  const { vendorId = '' } = useParams();
+  const { vendorSlug = '', vendorId = '' } = useParams();
+  const vendorKey = vendorSlug || vendorId;
   const navigate = useNavigate();
   const [store, setStore] = useState<Store | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,21 +57,25 @@ export function CustomerOrderPage() {
   const [remark, setRemark] = useState('');
 
   const cart = useCustomerCart({
-    storeId: vendorId,
-    vendorId,
+    storeId: store?.id || vendorKey,
+    vendorId: store?.id || vendorKey,
     vendorName: store?.businessName || '',
     maxItems: store?.settings?.deviceOrderLimitEnabled ? store.settings.maxDrinksPerOrder : 99,
   });
 
   useEffect(() => {
-    api.get(`/menu-items/public/${vendorId}`)
+    const loadMenu = vendorSlug
+      ? api.get(`/public/vendors/${encodeURIComponent(vendorSlug)}/menu`)
+      : api.get(`/menu-items/public/${encodeURIComponent(vendorId)}`);
+
+    loadMenu
       .then(({ data }) => setStore(data.data))
       .catch((error) => {
         console.error('[customer-menu] Failed to load store menu', error);
         toast.error('Store menu could not be loaded');
       })
       .finally(() => setLoading(false));
-  }, [vendorId]);
+  }, [vendorId, vendorSlug]);
 
   const menu = useMemo(() => store?.menuItems || [], [store]);
   const showPrices = store?.settings?.showPrices !== false;
@@ -160,8 +166,8 @@ export function CustomerOrderPage() {
     if (!store?.settings?.orderingOpen || cart.lines.length === 0) return;
     setPlacing(true);
     try {
-      const { data } = await api.post('/orders', {
-        vendorId,
+      const orderPayload = {
+        vendorId: store.id,
         guestId: getOrCreateGuestId(),
         deviceId: getOrCreateDeviceId(),
         paymentMode: 'PAY_AT_COUNTER',
@@ -169,12 +175,15 @@ export function CustomerOrderPage() {
           menuItemId: line.menuItemId,
           quantity: line.quantity,
           remark: line.remark,
-          selectedOptions: (line.selectedOptions || []).map((selection) => ({
-            groupId: selection.groupId,
-            choiceIds: selection.choiceIds,
+            selectedOptions: (line.selectedOptions || []).map((selection) => ({
+              groupId: selection.groupId,
+              choiceIds: selection.choiceIds,
+            })),
           })),
-        })),
-      });
+      };
+      const { data } = store.slug
+        ? await api.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
+        : await api.post('/orders', orderPayload);
       cart.clear();
       toast.success(`Order #${data.data.order.displayNumber} placed`);
       navigate(`/track/${data.data.order.id}`);

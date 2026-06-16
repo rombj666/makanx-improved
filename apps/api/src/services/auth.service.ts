@@ -8,12 +8,6 @@ import { sendPasswordResetEmail } from './email/email.service';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(2),
-});
-
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
@@ -28,29 +22,6 @@ const confirmResetSchema = z.object({
   otp: z.string().length(6),
   newPassword: z.string().min(6),
 });
-
-export const register = async (input: unknown) => {
-  const parsed = registerSchema.parse(input);
-  const email = normalizeEmail(parsed.email);
-  const { password, name } = parsed;
-  const existingUser = await prisma.user.findUnique({ where: { email } });
-  if (existingUser) {
-    throw new Error('User already exists');
-  }
-
-  const hashedPassword = await hashPassword(password);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      password: hashedPassword,
-      name,
-      role: Role.VENDOR,
-    },
-  });
-
-  const token = generateToken({ userId: user.id, role: user.role as Role });
-  return { user: { id: user.id, email: user.email, name: user.name, role: user.role }, token };
-};
 
 export const login = async (input: unknown) => {
   const parsed = loginSchema.parse(input);
@@ -97,6 +68,7 @@ export const login = async (input: unknown) => {
       role: user.role,
       vendorProfile: user.vendorProfile ? { 
         id: user.vendorProfile.id, 
+        slug: user.vendorProfile.slug,
         businessName: user.vendorProfile.businessName || undefined 
       } : undefined
     }, 
@@ -119,6 +91,7 @@ export const getMe = async (userId: string) => {
     role: user.role,
     vendorProfile: user.vendorProfile ? { 
       id: user.vendorProfile.id, 
+      slug: user.vendorProfile.slug,
       businessName: user.vendorProfile.businessName || undefined 
     } : undefined
   };

@@ -82,7 +82,7 @@ async function getVendorForUser(userId: string) {
 async function getUsedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
   const { start, end } = getMalaysiaDayRange(date);
   const result = await prisma.orderItem.aggregate({
-    where: { order: { vendorId, createdAt: { gte: start, lte: end } } },
+    where: { order: { vendorId, createdAt: { gte: start, lt: end } } },
     _sum: { quantity: true },
   });
   return Number(result._sum.quantity || 0);
@@ -106,7 +106,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
     }
     const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
     const existing = await prisma.order.findFirst({
-      where: { vendorId: vendor.id, deviceId: parsed.deviceId, createdAt: { gte: start, lte: end } },
+      where: { vendorId: vendor.id, deviceId: parsed.deviceId, createdAt: { gte: start, lt: end } },
       select: { id: true },
     });
     if (existing) {
@@ -168,12 +168,21 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         totalAmount,
         items: { create: preparedItems },
       },
-      include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+      include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true, slug: true } } },
     });
   });
 
   getIO().to(`vendor:${vendor.id}`).emit('order_created', order);
   return { order, estimatedMinutes: Math.max(...menuItems.map((item) => item.basePrepMin), 5) };
+}
+
+export async function createOrderForVendorSlug(slug: string, input: unknown) {
+  const vendor = await prisma.vendorProfile.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+  if (!vendor) throw new Error('Store not found');
+  return createOrder(undefined, { ...(input as any), vendorId: vendor.id });
 }
 
 export async function getVendorOrders(userId: string) {
@@ -198,14 +207,14 @@ export async function getVendorProductionBatch(vendorId: string, _groupByWindow:
 export async function getOrderById(orderId: string) {
   return prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true, slug: true } } },
   });
 }
 
 export async function getCustomerOrders(customerId: string) {
   return prisma.order.findMany({
     where: { customerId },
-    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true } } },
+    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true, slug: true } } },
     orderBy: { createdAt: 'desc' },
   });
 }

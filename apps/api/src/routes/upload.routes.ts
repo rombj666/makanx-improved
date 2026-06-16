@@ -15,7 +15,7 @@ router.post(
   async (req: any, res: any) => {
     try {
       const file = req.file;
-      const type = req.query.type || 'generic'; // vendorLogo, menuItem, eventMap, etc.
+      const type = req.query.type || 'generic'; // vendorLogo, menuItem, etc.
 
       if (!file) {
         return res.status(400).json({ success: false, message: 'No file uploaded' });

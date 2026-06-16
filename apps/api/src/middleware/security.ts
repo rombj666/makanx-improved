@@ -19,7 +19,7 @@ export const configureSecurity = (app: Express) => {
     }
   });
 
-  // Stricter rate limiting for auth sensitive actions (login, register, password reset)
+  // Stricter rate limiting for auth sensitive actions (login and password reset)
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 200, // Increased for shared IPs
@@ -42,18 +42,14 @@ export const configureSecurity = (app: Express) => {
 
   // Apply stricter limiter ONLY to sensitive auth routes FIRST
   app.use('/api/auth/login', authLimiter);
-  app.use('/api/auth/register', authLimiter);
   app.use('/api/auth/password/reset/*', authLimiter);
-  app.use('/api/auth/invite/accept', authLimiter);
 
   // Apply general API limiter to all other /api/ routes
   // We use a custom middleware wrapper to avoid double-counting on auth routes
   app.use('/api/', (req, res, next) => {
     const authRoutes = [
       '/api/auth/login',
-      '/api/auth/register',
       '/api/auth/password/reset/',
-      '/api/auth/invite/accept'
     ];
     if (authRoutes.some(route => req.originalUrl.startsWith(route))) {
       return next();

@@ -40,6 +40,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<CustomerLayout />}>
+              <Route path="/v/:vendorSlug" element={<CustomerOrderPage />} />
               <Route path="/order/:vendorId" element={<CustomerOrderPage />} />
               <Route path="/track/:orderId" element={<TrackOrderPage />} />
             </Route>

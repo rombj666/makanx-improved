@@ -9,6 +9,7 @@ interface User {
   role: Role;
   vendorProfile?: {
     id: string;
+    slug?: string;
     businessName?: string;
   };
 }

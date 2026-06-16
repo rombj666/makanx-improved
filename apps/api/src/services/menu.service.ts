@@ -204,6 +204,46 @@ export const getPublicMenu = async (vendorId: string) => {
     where: { id: vendorId },
     select: {
       id: true,
+      slug: true,
+      businessName: true,
+      description: true,
+      category: true,
+      settings: {
+        select: {
+          orderingOpen: true,
+          showPrices: true,
+          deviceOrderLimitEnabled: true,
+          maxDrinksPerOrder: true,
+        },
+      },
+      menuItems: {
+        where: { isAvailable: true },
+        orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          imageUrl: true,
+          optionGroups: true,
+          remarksEnabled: true,
+        },
+      },
+    },
+  });
+  if (!vendor) throw new Error('Store not found');
+  return {
+    ...vendor,
+    menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
+  };
+};
+
+export const getPublicMenuBySlug = async (slug: string) => {
+  const vendor = await prisma.vendorProfile.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      slug: true,
       businessName: true,
       description: true,
       category: true,

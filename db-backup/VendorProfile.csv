@@ -1,0 +1,2 @@
+"id","userId","businessName","description","category","phoneNumber","priceRange","dailyDrinkLimitEnabled","dailyDrinkLimitQuantity","autoStopOrderingOnLimit","reportRecipientEmail","reportRecipientEmails","createdAt","updatedAt"
+"1","1","Hour Coffee",,"Baverage",,"1-11","true","100","true","rombj45@gmail.com",,"2026-06-13 10:40:50.834","2026-06-13 10:40:50.834"

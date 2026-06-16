@@ -50,9 +50,6 @@ export const toAbsoluteUrl = (path: string | undefined | null) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   
-  // Static maps from /public/maps - KEEP AS IS (relative to frontend root)
-  if (path.startsWith('/maps/')) return path;
-
   // Backend uploads from /uploads - PREFIX WITH API ORIGIN
   if (path.startsWith('/uploads/')) {
     const baseUrl = API_ORIGIN;
@@ -62,7 +59,6 @@ export const toAbsoluteUrl = (path: string | undefined | null) => {
   
   // Default: assume it's backend URL if not caught above, OR handle other cases.
   // The user requirement said: "If startsWith("/uploads/"), prefix API_ORIGIN."
-  // "If mapImageUrl startsWith("/maps/"), use it directly (do NOT prefix API_ORIGIN)."
   // "If it startsWith("http"), use directly."
   
   // What about other paths? Assuming backend for safety if it looks like an API asset.

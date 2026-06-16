@@ -1,0 +1,3 @@
+"id","email","password","name","role","createdAt","updatedAt","isActive"
+"1","rombj45@gmail.com","$2a$10$9sEv80BiUnSvUKDuYPA5sObXpXTEMV2pr4ctbGYwfHgEZh6i2PQaK","Vendor","VENDOR","2026-04-21 12:34:16.12","2026-04-21 00:00:00","true"
+"b6098868-cd36-4951-828a-f9c2db24ce0e","organizer@makanx.test","$2a$10$9sEv80BiUnSvUKDuYPA5sObXpXTEMV2pr4ctbGYwfHgEZh6i2PQaK","sample organizer","ORGANIZER","2026-04-21 10:27:36.659","2026-04-21 10:27:36.659","true"

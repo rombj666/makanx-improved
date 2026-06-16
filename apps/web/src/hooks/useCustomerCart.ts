@@ -15,7 +15,6 @@ export type CartLine = {
 type CartState = {
   vendorId: string;
   vendorName: string;
-  boothName: string;
   lines: CartLine[];
 };
 
@@ -68,14 +67,12 @@ export function useCustomerCart(params: {
   maxItems?: number;
 }) {
   const { storeId, vendorId, vendorName = '', maxItems = 99 } = params;
-  const boothName = '';
   const cartLimit = Math.max(1, Math.floor(Number(maxItems) || 99));
   const key = useMemo(() => storageKey(storeId, vendorId), [storeId, vendorId]);
 
   const [state, setState] = useState<CartState>(() => ({
     vendorId,
     vendorName,
-    boothName,
     lines: [],
   }));
 
@@ -84,13 +81,11 @@ export function useCustomerCart(params: {
     const loaded = safeParse<CartState>(localStorage.getItem(key), {
       vendorId,
       vendorName,
-      boothName,
       lines: [],
     });
     setState({
       vendorId,
       vendorName: loaded.vendorName || vendorName,
-      boothName: loaded.boothName || boothName,
       lines: Array.isArray(loaded.lines)
         ? loaded.lines.map((l: any) => ({
             ...l,
@@ -98,7 +93,7 @@ export function useCustomerCart(params: {
           }))
         : [],
     });
-  }, [key, storeId, vendorId, vendorName, boothName]);
+  }, [key, storeId, vendorId, vendorName]);
 
   useEffect(() => {
     if (!storeId || !vendorId) return;
@@ -138,12 +133,11 @@ export function useCustomerCart(params: {
         return {
           vendorId,
           vendorName: prev.vendorName || vendorName,
-          boothName: prev.boothName || boothName,
           lines: nextLines,
         };
       });
     },
-    [vendorId, vendorName, boothName, cartLimit]
+    [vendorId, vendorName, cartLimit]
   );
 
   const updateQuantity = useCallback((id: string, quantity: number) => {
@@ -188,7 +182,6 @@ export function useCustomerCart(params: {
   return {
     vendorId: state.vendorId,
     vendorName: state.vendorName,
-    boothName: state.boothName,
     lines: state.lines,
     addLine,
     updateQuantity,

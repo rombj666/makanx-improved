@@ -1,5 +1,5 @@
 export const ONE_DRINK_ORDER_MESSAGE = 'Only 1 drink can be ordered per device.';
-export const DEVICE_ORDER_LOCK_MESSAGE = 'This device has already placed an order for this event.';
+export const DEVICE_ORDER_LOCK_MESSAGE = 'This device has already placed an order for this vendor today.';
 
 const DEVICE_ID_KEY = 'smart_qr_device_id';
 
@@ -22,24 +22,24 @@ export function getOrCreateDeviceId() {
   }
 }
 
-export function getOrderLockKey(eventKey: string) {
-  return `smart_qr_order_lock_${eventKey}`;
+export function getOrderLockKey(vendorKey: string) {
+  return `smart_qr_order_lock_${vendorKey}`;
 }
 
-export function hasOrderLock(eventKey: string) {
-  if (!eventKey) return false;
+export function hasOrderLock(vendorKey: string) {
+  if (!vendorKey) return false;
   try {
-    return !!localStorage.getItem(getOrderLockKey(eventKey));
+    return !!localStorage.getItem(getOrderLockKey(vendorKey));
   } catch {
     return false;
   }
 }
 
-export function saveOrderLock(eventKey: string, orderId: string) {
-  if (!eventKey || !orderId) return;
+export function saveOrderLock(vendorKey: string, orderId: string) {
+  if (!vendorKey || !orderId) return;
   try {
     localStorage.setItem(
-      getOrderLockKey(eventKey),
+      getOrderLockKey(vendorKey),
       JSON.stringify({ orderId, createdAt: new Date().toISOString() })
     );
   } catch {}

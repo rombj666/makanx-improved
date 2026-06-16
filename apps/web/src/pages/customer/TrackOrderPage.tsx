@@ -23,7 +23,12 @@ export function TrackOrderPage() {
         <div className={`mt-6 rounded-2xl p-4 text-lg font-bold ${order.status === 'READY' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`}>
           {order.status === 'READY' ? 'Ready for collection' : 'Preparing your order'}
         </div>
-        <button onClick={() => navigate(`/order/${order.vendorId}`)} className="mt-6 h-11 w-full rounded-xl border font-semibold">Back to menu</button>
+        <button
+          onClick={() => navigate(order.vendor?.slug ? `/v/${order.vendor.slug}` : `/order/${order.vendorId}`)}
+          className="mt-6 h-11 w-full rounded-xl border font-semibold"
+        >
+          Back to menu
+        </button>
       </div>
     </main>
   );

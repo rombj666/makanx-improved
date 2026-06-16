@@ -9,6 +9,7 @@ import uploadRoutes from './routes/upload.routes';
 import menuRoutes from './routes/menu.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import vendorRoutes from './routes/vendor.routes';
+import publicRoutes from './routes/public.routes';
 
 import { configureSecurity } from './middleware/security';
 
@@ -80,6 +81,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Routes
 const apiRouter = express.Router();
 apiRouter.use('/auth', authRoutes);
+apiRouter.use('/public', publicRoutes);
 apiRouter.use('/orders', orderRoutes);
 apiRouter.use('/uploads', uploadRoutes);
 apiRouter.use('/menu-items', menuRoutes);

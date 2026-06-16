@@ -8,9 +8,9 @@ export function VendorSettings() {
   const { user } = useAuth();
   const canvasWrap = useRef<HTMLDivElement>(null);
   const orderUrl = useMemo(() => {
-    const vendorId = user?.vendorProfile?.id || '';
-    return `${window.location.origin}/order/${encodeURIComponent(vendorId)}`;
-  }, [user?.vendorProfile?.id]);
+    const vendorSlug = user?.vendorProfile?.slug || user?.vendorProfile?.id || '';
+    return `${window.location.origin}/v/${encodeURIComponent(vendorSlug)}`;
+  }, [user?.vendorProfile?.id, user?.vendorProfile?.slug]);
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(orderUrl);

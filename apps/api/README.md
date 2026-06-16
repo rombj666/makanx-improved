@@ -2,8 +2,6 @@
 
 The API supports vendor authentication, store settings, menu management, direct customer ordering, live orders, tracking, and vendor sales analytics.
 
-There are no organizer, event, booth, invite-token, Google Form, or Apps Script routes.
-
 For a fresh local database:
 
 ```powershell

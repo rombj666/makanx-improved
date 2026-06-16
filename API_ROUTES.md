@@ -2,6 +2,9 @@
 
 - `POST /api/auth/login`
 - `GET /api/auth/me`
+- `GET /api/public/vendors/:slug`
+- `GET /api/public/vendors/:slug/menu`
+- `POST /api/public/vendors/:slug/orders`
 - `GET /api/menu-items/public/:vendorId`
 - `GET|POST|PUT|DELETE /api/menu-items`
 - `POST /api/orders`

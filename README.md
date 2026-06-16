@@ -15,7 +15,8 @@ A simplified vendor and customer QR ordering application.
 - `/vendor/live-orders`
 - `/vendor/sales`
 - `/vendor/settings`
-- `/order/:vendorId`
+- `/v/:vendorSlug`
+- `/order/:vendorId` (legacy-compatible customer link)
 - `/track/:orderId`
 
 ## Local Setup
@@ -28,4 +29,4 @@ A simplified vendor and customer QR ordering application.
 
 Seed login: `vendor@test.com` / `password`.
 
-The new baseline migration is destructive and must not be applied to production without a reviewed data-migration plan and backup.
+Customer QR links use the vendor slug, for example `/v/demo-coffee-store`.

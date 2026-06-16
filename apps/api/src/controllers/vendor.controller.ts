@@ -30,7 +30,7 @@ async function vendorFor(userId: string) {
 async function usedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
   const { start, end } = getMalaysiaDayRange(date);
   const aggregate = await prisma.orderItem.aggregate({
-    where: { order: { vendorId, createdAt: { gte: start, lte: end } } },
+    where: { order: { vendorId, createdAt: { gte: start, lt: end } } },
     _sum: { quantity: true },
   });
   return Number(aggregate._sum.quantity || 0);
@@ -171,7 +171,7 @@ export const resetTodayOrders = async (req: Request, res: Response) => {
   try {
     const vendor = await vendorFor(req.user!.userId);
     const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
-    const result = await prisma.order.deleteMany({ where: { vendorId: vendor.id, createdAt: { gte: start, lte: end } } });
+    const result = await prisma.order.deleteMany({ where: { vendorId: vendor.id, createdAt: { gte: start, lt: end } } });
     await prisma.vendorDailyUsage.deleteMany({ where: { vendorId: vendor.id, date: getMalaysiaTodayString() } });
     getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_reset', { vendorId: vendor.id });
     res.json({ success: true, deletedOrders: result.count });
