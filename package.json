@@ -10,7 +10,7 @@
     "build:shared": "npm run build -w packages/shared",
     "build:api": "npm run build:shared && npm run build -w apps/api",
     "start:api": "npm run start -w apps/api",
-    "build:web": "npm run build -w apps/web"
+    "build:web": "npm run build:shared && npm run build -w apps/web"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
