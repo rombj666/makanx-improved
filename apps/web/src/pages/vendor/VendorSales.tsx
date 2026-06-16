@@ -91,15 +91,30 @@ export function VendorSales() {
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
   const MOBILE_COLORS = ['#111827', '#374151', '#6B7280', '#9CA3AF', '#D1D5DB', '#E5E7EB'];
 
+  const handleDateChange = (selectedDate: string) => {
+    console.info('[vendor-sales] selected date', selectedDate);
+    setDate(selectedDate);
+  };
+
   const fetchAll = async (targetDate = date) => {
     setLoading(true);
     try {
       const params = { date: targetDate };
+      const analyticsRequests = [
+        ['/analytics/vendor/summary', { params }],
+        ['/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }],
+        ['/analytics/products', { params }],
+        ['/analytics/vendor/orders', { params }],
+      ] as const;
+      console.info('[vendor-sales] fetching analytics', {
+        selectedDate: targetDate,
+        requests: analyticsRequests.map(([url, config]) => api.getUri({ url, ...config })),
+      });
       const [s, pt, p, o, sett, orderLimit, usg] = await Promise.all([
-        api.get('/analytics/vendor/summary', { params }),
-        api.get('/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }),
-        api.get('/analytics/products', { params }),
-        api.get('/analytics/vendor/orders', { params }),
+        api.get(analyticsRequests[0][0], analyticsRequests[0][1]),
+        api.get(analyticsRequests[1][0], analyticsRequests[1][1]),
+        api.get(analyticsRequests[2][0], analyticsRequests[2][1]),
+        api.get(analyticsRequests[3][0], analyticsRequests[3][1]),
         api.get('/vendor/settings'),
         api.get('/vendor/order-limit-settings'),
         api.get('/vendor/daily-usage'),
@@ -199,6 +214,10 @@ export function VendorSales() {
 
     const toastId = toast.loading('Generating professional report...');
     try {
+      console.info('[vendor-sales] exporting report', {
+        selectedDate: date,
+        request: api.getUri({ url: '/analytics/vendor/export', params: { date } }),
+      });
       const response = await api.get('/analytics/vendor/export', {
         params: { date },
         responseType: 'blob'
@@ -426,7 +445,7 @@ export function VendorSales() {
         <div className="flex items-center gap-4">
           <div>
             <label className="text-sm text-gray-600">Date</label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
+            <Input type="date" value={date} onChange={(e) => handleDateChange(e.target.value)} className="w-48" />
           </div>
           <Button onClick={() => fetchAll()} disabled={loading}>
             Refresh
@@ -775,7 +794,7 @@ export function VendorSales() {
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Date</div>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full mt-2" />
+          <Input type="date" value={date} onChange={(e) => handleDateChange(e.target.value)} className="w-full mt-2" />
           <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2">
             <button
               onClick={() => fetchAll()}

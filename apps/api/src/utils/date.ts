@@ -4,9 +4,6 @@
 export const MALAYSIA_TIMEZONE = 'Asia/Kuala_Lumpur';
 
 export function getMalaysiaDayRange(dateStr?: string) {
-  // If no date provided, use today
-  const baseDate = dateStr ? new Date(dateStr) : new Date();
-  
   // Use UTC methods to construct the range to avoid server timezone interference
   // Assuming dateStr is "YYYY-MM-DD"
   let y: number, m: number, d: number;
@@ -26,11 +23,11 @@ export function getMalaysiaDayRange(dateStr?: string) {
     d = mytNow.getUTCDate();
   }
   
-  // MYT 00:00:00 is UTC-8h
+  // MYT 00:00:00 is UTC-8h. Return a half-open range: [start, end).
   const start = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
   start.setUTCHours(start.getUTCHours() - 8);
   
-  const end = new Date(Date.UTC(y, m, d, 23, 59, 59, 999));
+  const end = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
   end.setUTCHours(end.getUTCHours() - 8);
   
   return { start, end };

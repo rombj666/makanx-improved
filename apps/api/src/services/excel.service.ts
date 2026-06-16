@@ -1,6 +1,11 @@
 import ExcelJS from 'exceljs';
 import { formatMalaysiaDateTime, formatMalaysiaTime } from '../utils/date';
 
+function orderSalesAmount(order: any) {
+  const itemTotal = order.items.reduce((sum: number, item: any) => sum + Number(item.price) * item.quantity, 0);
+  return itemTotal || Number(order.totalAmount);
+}
+
 export async function generateVendorSalesExcel(
   businessName: string,
   date: string,
@@ -50,7 +55,7 @@ export async function generateVendorSalesExcel(
 
   const totalOrders = orders.length;
   const totalDrinks = orders.reduce((sum, o) => sum + o.items.reduce((s: number, it: any) => s + it.quantity, 0), 0);
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+  const totalRevenue = orders.reduce((sum, o) => sum + orderSalesAmount(o), 0);
 
   const kpiValueRow = worksheet.addRow([
     totalOrders,
@@ -154,7 +159,7 @@ export async function generateVendorSalesExcel(
       orderQty,
       itemsSummary,
       remarks,
-      Number(o.totalAmount)
+      orderSalesAmount(o)
     ]);
     row.getCell(4).alignment = { wrapText: true };
     row.getCell(5).alignment = { wrapText: true };
