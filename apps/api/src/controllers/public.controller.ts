@@ -30,15 +30,6 @@ export const createVendorOrder = async (req: Request, res: Response) => {
     const result = await orderService.createOrderForVendorSlug(String(req.params.slug || ''), req.body);
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
-    if (error.code === 'PRODUCTION_LIMIT_EXCEEDED') {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-        code: error.code,
-        remainingCups: error.remainingCups,
-      });
-    }
-
     if (error.code === 'DEVICE_ORDER_EXISTS') {
       return res.status(409).json({
         success: false,

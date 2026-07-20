@@ -25,15 +25,6 @@ export const createOrder = async (req: Request, res: Response) => {
       });
     }
     
-    if (error.code === 'PRODUCTION_LIMIT_EXCEEDED') {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-        code: error.code,
-        remainingCups: error.remainingCups
-      });
-    }
-
     if (error.code === 'DEVICE_ORDER_EXISTS') {
       return res.status(409).json({
         success: false,

@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
-import { getIO } from '../socket';
 
 const settingsSchema = z.object({
   showPrices: z.boolean().optional(),
@@ -150,32 +149,3 @@ export const getDailyUsage = async (req: Request, res: Response) => {
 };
 
 export const recalculateUsage = getDailyUsage;
-
-export const toggleOrderingStatus = async (req: Request, res: Response) => {
-  try {
-    const { closed } = z.object({ closed: z.boolean() }).parse(req.body);
-    const vendor = await vendorFor(req.user!.userId);
-    await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: { orderingOpen: !closed } });
-    const date = getMalaysiaTodayString();
-    const usage = await saveDailyUsage(vendor.id, date, {
-      dailyLimit: vendor.settings!.dailyLimitQuantity,
-      orderingClosed: closed,
-    });
-    res.json({ success: true, data: usage });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-};
-
-export const resetTodayOrders = async (req: Request, res: Response) => {
-  try {
-    const vendor = await vendorFor(req.user!.userId);
-    const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
-    const result = await prisma.order.deleteMany({ where: { vendorId: vendor.id, createdAt: { gte: start, lt: end } } });
-    await prisma.vendorDailyUsage.deleteMany({ where: { vendorId: vendor.id, date: getMalaysiaTodayString() } });
-    getIO().to(`vendor:${vendor.id}`).emit('vendor_orders_reset', { vendorId: vendor.id });
-    res.json({ success: true, deletedOrders: result.count });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-};

@@ -36,6 +36,7 @@ interface Store {
   slug?: string;
   businessName: string;
   description?: string;
+  activeEvent?: { id: string; eventName: string; eventDate: string } | null;
   settings?: {
     orderingOpen: boolean;
     showPrices: boolean;
@@ -185,7 +186,7 @@ export function CustomerOrderPage() {
         ? await api.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
         : await api.post('/orders', orderPayload);
       cart.clear();
-      toast.success(`Order #${data.data.order.displayNumber} placed`);
+      toast.success(`Order #${data.data.order.eventOrderNumber} placed`);
       navigate(`/track/${data.data.order.id}`);
     } catch (error: any) {
       console.error('[customer-order] Checkout failed', error);
@@ -205,7 +206,11 @@ export function CustomerOrderPage() {
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-600">Smart QR Ordering System</div>
           <h1 className="mt-2 text-3xl font-bold">{store.businessName}</h1>
           {store.description && <p className="mt-2 max-w-xl text-neutral-600">{store.description}</p>}
-          {!store.settings?.orderingOpen && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">Ordering is currently closed.</p>}
+          {!store.settings?.orderingOpen && (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              Ordering is currently closed. Please wait for the next ordering session or contact our staff.
+            </p>
+          )}
         </div>
       </header>
 

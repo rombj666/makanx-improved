@@ -3,7 +3,6 @@ import { api } from '../../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { Modal } from '../../components/ui/Modal';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
@@ -80,8 +79,6 @@ export function VendorSales() {
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [updatingSettings, setUpdatingSettings] = useState(false);
   const [updatingOrderLimit, setUpdatingOrderLimit] = useState(false);
-  const [resettingDailyOrders, setResettingDailyOrders] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
 
   const trendChartRef = useRef<HTMLDivElement>(null);
@@ -172,16 +169,6 @@ export function VendorSales() {
     }
   };
 
-  const handleToggleOrdering = async (closed: boolean) => {
-    try {
-      const res = await api.post('/vendor/toggle-ordering', { closed });
-      setUsage(res.data.data);
-      toast.success(closed ? 'Ordering closed' : 'Ordering opened');
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to update status');
-    }
-  };
-
   const handleAddEmail = () => {
     if (!newEmail) return;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -231,23 +218,6 @@ export function VendorSales() {
     }
   };
 
-  const handleResetDailyOrders = async () => {
-    const toastId = toast.loading("Resetting today's orders...");
-    setResettingDailyOrders(true);
-    try {
-      await api.post('/vendor/sales/reset-today');
-      toast.success("Today's orders reset successfully", { id: toastId });
-      const today = format(new Date(), 'yyyy-MM-dd');
-      setDate(today);
-      await fetchAll(today);
-      setResetConfirmOpen(false);
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reset daily orders', { id: toastId });
-    } finally {
-      setResettingDailyOrders(false);
-    }
-  };
-
   useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,11 +258,11 @@ export function VendorSales() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
-              <CardTitle>Daily Drink Production Limit</CardTitle>
+              <CardTitle>Expected Cup Target</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Enable Limit</span>
+                <span className="text-sm font-medium">Show Target</span>
                 <Button 
                   size="sm" 
                   variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
@@ -305,7 +275,7 @@ export function VendorSales() {
               
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
-                  <label className="text-sm text-gray-600">Daily Quantity Limit</label>
+                  <label className="text-sm text-gray-600">Expected Cup Quantity</label>
                   <div className="flex gap-2">
                     <Input 
                       type="number" 
@@ -313,22 +283,12 @@ export function VendorSales() {
                       onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
                       className="w-32"
                     />
-                    <span className="text-sm self-center text-gray-500">drinks / day</span>
+                    <span className="text-sm self-center text-gray-500">cups</span>
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Auto-Stop Ordering on Limit</span>
-                <Button 
-                  size="sm" 
-                  variant={settings?.autoStopOrderingOnLimit ? "default" : "outline"}
-                  onClick={() => handleUpdateSettings({ autoStopOrderingOnLimit: !settings?.autoStopOrderingOnLimit })}
-                  disabled={updatingSettings}
-                >
-                  {settings?.autoStopOrderingOnLimit ? "ON" : "OFF"}
-                </Button>
-              </div>
+              <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-700">This target is for progress only and never stops customer orders.</p>
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-600">Report Recipients</label>
@@ -406,28 +366,13 @@ export function VendorSales() {
 
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
-              <CardTitle>Ordering Status & Usage</CardTitle>
+              <CardTitle>Cup Target Progress</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-500">Current Status</div>
-                  <div className={`text-lg font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
-                    {usage?.orderingClosed ? 'ORDERING CLOSED' : 'ORDERING OPEN'}
-                  </div>
-                </div>
-                <Button 
-                  variant={usage?.orderingClosed ? "default" : "destructive"}
-                  onClick={() => handleToggleOrdering(!usage?.orderingClosed)}
-                >
-                  {usage?.orderingClosed ? 'Open Ordering' : 'Close Ordering'}
-                </Button>
-              </div>
-
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Daily Usage</span>
+                    <span className="text-gray-500">Cup progress</span>
                     <span className="font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -436,6 +381,9 @@ export function VendorSales() {
                       style={{ width: `${Math.min(100, ((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) * 100)}%` }}
                     ></div>
                   </div>
+                  {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
+                    <p className="text-sm font-medium text-amber-700">Cup target has been reached. Orders are still being accepted.</p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -452,9 +400,6 @@ export function VendorSales() {
           </Button>
           <Button variant="outline" onClick={handleExport} disabled={loading}>
             Export
-          </Button>
-          <Button variant="destructive" onClick={() => setResetConfirmOpen(true)} disabled={loading || resettingDailyOrders}>
-            Reset Today's Orders
           </Button>
         </div>
 
@@ -640,10 +585,10 @@ export function VendorSales() {
 
         <div className="mt-4 space-y-4">
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Daily Drink Production Limit</div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Expected Cup Target</div>
             <div className="mt-3 space-y-4">
               <div className="flex min-w-0 items-center justify-between gap-3">
-                <span className="min-w-0 text-sm font-medium">Enable Limit</span>
+                <span className="min-w-0 text-sm font-medium">Show Target</span>
                 <Button 
                   size="sm" 
                   variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
@@ -657,7 +602,7 @@ export function VendorSales() {
               
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
-                  <label className="text-xs text-neutral-500">Limit Quantity</label>
+                  <label className="text-xs text-neutral-500">Expected Cup Quantity</label>
                   <div className="flex min-w-0 items-center gap-2">
                     <Input 
                       type="number" 
@@ -665,23 +610,12 @@ export function VendorSales() {
                       onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
                       className="w-24 min-w-0"
                     />
-                    <span className="min-w-0 text-xs text-neutral-500">drinks / day</span>
+                    <span className="min-w-0 text-xs text-neutral-500">cups</span>
                   </div>
                 </div>
               )}
 
-              <div className="flex min-w-0 items-center justify-between gap-3">
-                <span className="min-w-0 text-sm font-medium">Auto-Stop</span>
-                <Button 
-                  size="sm" 
-                  variant={settings?.autoStopOrderingOnLimit ? "default" : "outline"}
-                  onClick={() => handleUpdateSettings({ autoStopOrderingOnLimit: !settings?.autoStopOrderingOnLimit })}
-                  disabled={updatingSettings}
-                  className="shrink-0"
-                >
-                  {settings?.autoStopOrderingOnLimit ? "ON" : "OFF"}
-                </Button>
-              </div>
+              <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-700">This target is for progress only and never stops customer orders.</p>
 
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-neutral-500">Report Recipients</div>
@@ -757,26 +691,12 @@ export function VendorSales() {
           </Card>
 
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Ordering Status & Usage</div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Cup Target Progress</div>
             <div className="mt-3 space-y-4">
-              <div className="flex min-w-0 items-center justify-between gap-3">
-                <div className={`min-w-0 text-sm font-bold ${usage?.orderingClosed ? 'text-red-600' : 'text-green-600'}`}>
-                  {usage?.orderingClosed ? 'ORDERING CLOSED' : 'ORDERING OPEN'}
-                </div>
-                <Button 
-                  size="sm"
-                  variant={usage?.orderingClosed ? "default" : "destructive"}
-                  onClick={() => handleToggleOrdering(!usage?.orderingClosed)}
-                  className="shrink-0"
-                >
-                  {usage?.orderingClosed ? 'Open' : 'Close'}
-                </Button>
-              </div>
-
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
                   <div className="flex min-w-0 justify-between gap-3 text-xs">
-                    <span className="text-neutral-500">Daily Usage</span>
+                    <span className="text-neutral-500">Cup progress</span>
                     <span className="min-w-0 text-right font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
                   </div>
                   <div className="w-full bg-neutral-100 rounded-full h-2">
@@ -785,6 +705,9 @@ export function VendorSales() {
                       style={{ width: `${Math.min(100, ((usage?.usedQuantity || 0) / (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1)) * 100)}%` }}
                     ></div>
                   </div>
+                  {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
+                    <p className="text-xs font-medium text-amber-700">Cup target has been reached. Orders are still being accepted.</p>
+                  )}
                 </div>
               )}
 
@@ -794,28 +717,21 @@ export function VendorSales() {
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Date</div>
-          <Input type="date" value={date} onChange={(e) => handleDateChange(e.target.value)} className="w-full mt-2" />
-          <div className="mt-4 grid w-full min-w-0 grid-cols-2 gap-2">
+          <div className="mt-2 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+            <Input type="date" value={date} onChange={(e) => handleDateChange(e.target.value)} className="min-w-0" />
             <button
               onClick={() => fetchAll()}
               disabled={loading}
-              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
+              className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
             >
               Refresh
             </button>
             <button
               onClick={handleExport}
               disabled={loading}
-              className="h-11 min-w-0 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
+              className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
             >
               Export
-            </button>
-            <button
-              onClick={() => setResetConfirmOpen(true)}
-              disabled={loading || resettingDailyOrders}
-              className="col-span-2 h-11 min-w-0 rounded-2xl border border-red-700 bg-red-600 px-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:opacity-40"
-            >
-              Reset Today's Orders
             </button>
           </div>
         </div>
@@ -943,38 +859,6 @@ export function VendorSales() {
         </div>
       </div>
 
-      <Modal
-        isOpen={resetConfirmOpen}
-        onClose={() => {
-          if (!resettingDailyOrders) setResetConfirmOpen(false);
-        }}
-        title="Reset Today's Orders"
-      >
-        <div className="space-y-4">
-          <p className="text-sm leading-6 text-gray-700">
-            Are you sure you want to delete today's orders? This clears today's sales analytics, ready orders, kitchen view, and usage count. The configured daily quantity limit remains unchanged. This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setResetConfirmOpen(false)}
-              disabled={resettingDailyOrders}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleResetDailyOrders}
-              disabled={resettingDailyOrders}
-              isLoading={resettingDailyOrders}
-            >
-              Confirm Reset
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </>
   );
 }

@@ -21,6 +21,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  eventOrderNumber?: string | number | null;
   displayNumber?: string | number | null;
   status: string;
   totalAmount: string;

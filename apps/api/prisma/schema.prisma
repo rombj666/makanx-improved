@@ -20,20 +20,40 @@ model User {
 }
 
 model VendorProfile {
-  id           String         @id @default(uuid())
-  userId       String         @unique
-  slug         String         @unique
+  id           String             @id @default(uuid())
+  userId       String             @unique
+  slug         String             @unique
   businessName String
   description  String?
   category     String?
   phoneNumber  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   settings     VendorSettings?
   menuItems    MenuItem[]
   orders       Order[]
+  events       Event[]
   dailyUsages  VendorDailyUsage[]
+}
+
+model Event {
+  id              String        @id @default(uuid())
+  vendorId        String
+  eventName       String
+  eventDate       DateTime      @db.Date
+  location        String?
+  notes           String?
+  status          EventStatus   @default(DRAFT)
+  nextOrderNumber Int           @default(1)
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  vendor          VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orders          Order[]
+
+  @@index([vendorId, status])
+  @@index([vendorId, eventDate])
 }
 
 model VendorSettings {
@@ -67,48 +87,53 @@ model VendorDailyUsage {
 }
 
 model MenuItem {
-  id             String        @id @default(uuid())
-  vendorId       String
-  name           String
-  description    String?
-  price          Decimal       @db.Decimal(10, 2)
-  imageUrl       String?
-  isAvailable    Boolean       @default(true)
-  optionGroups   Json?
-  remarksEnabled Boolean       @default(true)
-  displayOrder   Int           @default(0)
-  basePrepMin    Int           @default(5)
-  extraPerItemMin Int          @default(1)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  vendor         VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  orderItems     OrderItem[]
+  id              String        @id @default(uuid())
+  vendorId        String
+  name            String
+  description     String?
+  price           Decimal       @db.Decimal(10, 2)
+  imageUrl        String?
+  isAvailable     Boolean       @default(true)
+  optionGroups    Json?
+  remarksEnabled  Boolean       @default(true)
+  displayOrder    Int           @default(0)
+  basePrepMin     Int           @default(5)
+  extraPerItemMin Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  vendor          VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
 
   @@index([vendorId, displayOrder])
 }
 
 model Order {
-  id            String        @id @default(uuid())
-  customerId    String
-  customerName  String?
-  customerPhone String?
-  customerEmail String?
-  deviceId      String?
-  vendorId      String
-  displayNumber Int
-  status        OrderStatus   @default(PREPARING)
-  paymentMode   PaymentMode   @default(PAY_AT_COUNTER)
-  paymentStatus PaymentStatus @default(PENDING)
-  totalAmount   Decimal       @db.Decimal(10, 2)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  acceptedAt    DateTime?
-  readyAt       DateTime?
-  completedAt   DateTime?
-  vendor        VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  items         OrderItem[]
+  id               String        @id @default(uuid())
+  customerId       String
+  customerName     String?
+  customerPhone    String?
+  customerEmail    String?
+  deviceId         String?
+  vendorId         String
+  displayNumber    Int
+  eventId          String
+  eventOrderNumber Int
+  status           OrderStatus   @default(PREPARING)
+  paymentMode      PaymentMode   @default(PAY_AT_COUNTER)
+  paymentStatus    PaymentStatus @default(PENDING)
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  acceptedAt       DateTime?
+  readyAt          DateTime?
+  completedAt      DateTime?
+  vendor           VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  event            Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  items            OrderItem[]
 
+  @@unique([eventId, eventOrderNumber])
   @@index([vendorId, createdAt])
+  @@index([eventId, createdAt])
   @@index([vendorId, deviceId, createdAt])
   @@index([status])
 }
@@ -169,4 +194,11 @@ enum PaymentStatus {
   PENDING
   PAID
   FAILED
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
 }

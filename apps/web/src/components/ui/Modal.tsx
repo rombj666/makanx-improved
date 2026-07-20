@@ -9,9 +9,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   mobileFullScreen?: boolean;
+  wide?: boolean;
 }
 
-export function Modal({ isOpen, onClose, title, children, mobileFullScreen }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, mobileFullScreen, wide }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export function Modal({ isOpen, onClose, title, children, mobileFullScreen }: Mo
   const containerClassName = mobileFullScreen
     ? 'bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 ' +
       '[@media(pointer:coarse)]:rounded-none [@media(pointer:coarse)]:max-w-none [@media(pointer:coarse)]:max-h-none [@media(pointer:coarse)]:h-[100dvh]'
-    : 'bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-auto flex flex-col animate-in fade-in zoom-in-95 duration-200';
+    : `bg-white rounded-lg shadow-xl w-full ${wide ? 'max-w-6xl' : 'max-w-md'} max-h-[90vh] overflow-auto flex flex-col animate-in fade-in zoom-in-95 duration-200`;
 
   return createPortal(
     <div className={overlayClassName}>

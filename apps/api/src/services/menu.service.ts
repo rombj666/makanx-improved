@@ -216,6 +216,11 @@ export const getPublicMenu = async (vendorId: string) => {
           maxDrinksPerOrder: true,
         },
       },
+      events: {
+        where: { status: 'ACTIVE' },
+        take: 1,
+        select: { id: true, eventName: true, eventDate: true },
+      },
       menuItems: {
         where: { isAvailable: true },
         orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
@@ -232,8 +237,11 @@ export const getPublicMenu = async (vendorId: string) => {
     },
   });
   if (!vendor) throw new Error('Store not found');
+  const { events, settings, ...profile } = vendor;
   return {
-    ...vendor,
+    ...profile,
+    activeEvent: events[0] || null,
+    settings: { ...(settings || {}), orderingOpen: events.length > 0 },
     menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
   };
 };
@@ -255,6 +263,11 @@ export const getPublicMenuBySlug = async (slug: string) => {
           maxDrinksPerOrder: true,
         },
       },
+      events: {
+        where: { status: 'ACTIVE' },
+        take: 1,
+        select: { id: true, eventName: true, eventDate: true },
+      },
       menuItems: {
         where: { isAvailable: true },
         orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
@@ -271,8 +284,11 @@ export const getPublicMenuBySlug = async (slug: string) => {
     },
   });
   if (!vendor) throw new Error('Store not found');
+  const { events, settings, ...profile } = vendor;
   return {
-    ...vendor,
+    ...profile,
+    activeEvent: events[0] || null,
+    settings: { ...(settings || {}), orderingOpen: events.length > 0 },
     menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
   };
 };

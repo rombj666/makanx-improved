@@ -29,6 +29,7 @@ export function computeDisplayEtaMinutesFromQuantity(totalItemQuantity: number) 
 export function extractExplicitDisplayNumber(order: any): string | null {
   const raw =
     order?.queueNumber ??
+    order?.eventOrderNumber ??
     order?.displayNumber ??
     order?.orderNumber ??
     order?.sequence ??

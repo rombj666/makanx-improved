@@ -1,8 +1,9 @@
-import { OrderStatus, PaymentMode, PaymentStatus, Prisma } from '@prisma/client';
+import { EventStatus, OrderStatus, PaymentMode, PaymentStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getIO } from '../socket';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
+import { ORDERING_CLOSED_MESSAGE } from './event.service';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -79,15 +80,6 @@ async function getVendorForUser(userId: string) {
   return vendor;
 }
 
-async function getUsedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
-  const { start, end } = getMalaysiaDayRange(date);
-  const result = await prisma.orderItem.aggregate({
-    where: { order: { vendorId, createdAt: { gte: start, lt: end } } },
-    _sum: { quantity: true },
-  });
-  return Number(result._sum.quantity || 0);
-}
-
 export async function createOrder(_customerId: string | undefined, input: unknown) {
   const parsed = createOrderSchema.parse(input);
   const vendor = await prisma.vendorProfile.findUnique({
@@ -96,7 +88,11 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   });
   if (!vendor) throw new Error('Store not found');
   const settings = vendor.settings;
-  if (settings && !settings.orderingOpen) throw new Error('Ordering is currently closed.');
+  const activeEvent = await prisma.event.findFirst({
+    where: { vendorId: vendor.id, status: EventStatus.ACTIVE },
+    select: { id: true },
+  });
+  if (!activeEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
 
   const requestedQuantity = parsed.items.reduce((sum, item) => sum + item.quantity, 0);
   if (settings?.deviceOrderLimitEnabled) {
@@ -106,27 +102,13 @@ export async function createOrder(_customerId: string | undefined, input: unknow
     }
     const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
     const existing = await prisma.order.findFirst({
-      where: { vendorId: vendor.id, deviceId: parsed.deviceId, createdAt: { gte: start, lt: end } },
+      where: { vendorId: vendor.id, eventId: activeEvent.id, deviceId: parsed.deviceId, createdAt: { gte: start, lt: end } },
       select: { id: true },
     });
     if (existing) {
       const error = new Error('This device has already placed an order today.');
       (error as any).code = 'DEVICE_ORDER_EXISTS';
       (error as any).existingOrderId = existing.id;
-      throw error;
-    }
-  }
-
-  if (settings?.dailyLimitEnabled) {
-    const used = await getUsedQuantity(vendor.id);
-    const usage = await prisma.vendorDailyUsage.findFirst({
-      where: { vendorId: vendor.id, date: getMalaysiaTodayString() },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (usage?.orderingClosed || used + requestedQuantity > settings.dailyLimitQuantity) {
-      const error = new Error('This store has reached its daily order limit.');
-      (error as any).code = 'PRODUCTION_LIMIT_EXCEEDED';
-      (error as any).remainingCups = Math.max(0, settings.dailyLimitQuantity - used);
       throw error;
     }
   }
@@ -154,7 +136,17 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   const totalAmount = preparedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const order = await prisma.$transaction(async (tx) => {
-    const latest = await tx.order.aggregate({ where: { vendorId: vendor.id }, _max: { displayNumber: true } });
+    const numberedEvents = await tx.$queryRaw<Array<{ id: string; eventOrderNumber: number }>>(Prisma.sql`
+      UPDATE "Event"
+      SET "nextOrderNumber" = "nextOrderNumber" + 1,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = ${activeEvent.id}
+        AND "vendorId" = ${vendor.id}
+        AND "status" = 'ACTIVE'
+      RETURNING "id", "nextOrderNumber" - 1 AS "eventOrderNumber"
+    `);
+    const numberedEvent = numberedEvents[0];
+    if (!numberedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
     return tx.order.create({
       data: {
         customerId: parsed.guestId,
@@ -163,12 +155,18 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         customerEmail: parsed.customerEmail?.trim() || null,
         deviceId: parsed.deviceId || null,
         vendorId: vendor.id,
-        displayNumber: Number(latest._max.displayNumber || 0) + 1,
+        eventId: numberedEvent.id,
+        eventOrderNumber: numberedEvent.eventOrderNumber,
+        displayNumber: numberedEvent.eventOrderNumber,
         paymentMode: parsed.paymentMode,
         totalAmount,
         items: { create: preparedItems },
       },
-      include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true, slug: true } } },
+      include: {
+        items: { include: { menuItem: true } },
+        event: { select: { eventName: true } },
+        vendor: { select: { businessName: true, slug: true } },
+      },
     });
   });
 
@@ -207,7 +205,11 @@ export async function getVendorProductionBatch(vendorId: string, _groupByWindow:
 export async function getOrderById(orderId: string) {
   return prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { menuItem: true } }, vendor: { select: { businessName: true, slug: true } } },
+    include: {
+      items: { include: { menuItem: true } },
+      event: { select: { eventName: true } },
+      vendor: { select: { businessName: true, slug: true } },
+    },
   });
 }
 
@@ -307,6 +309,6 @@ export async function getVendorServingOrder(vendorId: string) {
   return prisma.order.findFirst({
     where: { vendorId, status: OrderStatus.PREPARING },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, displayNumber: true, vendorId: true },
+    select: { id: true, displayNumber: true, eventOrderNumber: true, vendorId: true },
   });
 }

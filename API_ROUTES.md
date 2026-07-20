@@ -14,6 +14,12 @@
 - `GET|PATCH /api/vendor/settings`
 - `GET|PATCH /api/vendor/order-limit-settings`
 - `GET /api/vendor/daily-usage`
-- `POST /api/vendor/toggle-ordering`
-- `POST /api/vendor/sales/reset-today`
+- `GET /api/vendor/events/current`
+- `GET|POST /api/vendor/events`
+- `PATCH /api/vendor/events/:eventId`
+- `POST /api/vendor/events/:eventId/complete`
+- `POST /api/vendor/events/:eventId/archive`
+- `GET /api/vendor/events/:eventId/orders`
+- `GET /api/vendor/events/:eventId/export.csv`
+- `GET /api/vendor/events/:eventId/export.xlsx`
 - `GET /api/analytics/vendor/*`

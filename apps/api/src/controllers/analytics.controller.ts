@@ -8,6 +8,7 @@ const VALID_SALES_STATUSES: OrderStatus[] = [OrderStatus.READY];
 
 type SalesOrder = {
   id: string;
+  eventOrderNumber: number;
   displayNumber: number;
   totalAmount: Prisma.Decimal;
   createdAt: Date;
@@ -49,6 +50,7 @@ async function ordersFor(req: Request) {
     where,
     select: {
       id: true,
+      eventOrderNumber: true,
       displayNumber: true,
       totalAmount: true,
       createdAt: true,
@@ -166,7 +168,7 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
   try {
     const { orders } = await ordersFor(req);
     res.json({ success: true, data: orders.map((order) => ({
-      orderNumber: `#${order.displayNumber}`,
+      orderNumber: `#${order.eventOrderNumber}`,
       totalAmount: orderSalesAmount(order),
       createdAt: order.createdAt,
       completedAt: order.completedAt,

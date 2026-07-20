@@ -154,7 +154,7 @@ export async function generateVendorSalesExcel(
     const remarks = o.items.map((it: any) => it.remark).filter(Boolean).join('\n');
 
     const row = worksheet.addRow([
-      o.displayNumber,
+      o.eventOrderNumber,
       formatMalaysiaTime(o.createdAt),
       orderQty,
       itemsSummary,
@@ -169,6 +169,63 @@ export async function generateVendorSalesExcel(
 
   // Styling cleanups
   worksheet.views = [{ state: 'frozen', ySplit: 2 }];
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+export async function generateEventOrdersExcel(event: any, orders: any[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Smart QR Ordering System';
+  const worksheet = workbook.addWorksheet('Event Orders');
+
+  worksheet.columns = [
+    { header: 'Event name', key: 'eventName', width: 28 },
+    { header: 'Event date', key: 'eventDate', width: 14 },
+    { header: 'Event location', key: 'location', width: 24 },
+    { header: 'Event order number', key: 'eventOrderNumber', width: 19 },
+    { header: 'Customer name', key: 'customerName', width: 22 },
+    { header: 'Customer phone', key: 'customerPhone', width: 18 },
+    { header: 'Customer email', key: 'customerEmail', width: 28 },
+    { header: 'Ordered items', key: 'orderedItems', width: 48 },
+    { header: 'Total cups', key: 'totalCups', width: 12 },
+    { header: 'Total amount', key: 'totalAmount', width: 14 },
+    { header: 'Payment status', key: 'paymentStatus', width: 16 },
+    { header: 'Preparation status', key: 'preparationStatus', width: 34 },
+    { header: 'Order status', key: 'orderStatus', width: 16 },
+    { header: 'Created time', key: 'createdAt', width: 24 },
+  ];
+
+  for (const order of orders) {
+    worksheet.addRow({
+      eventName: event.eventName,
+      eventDate: event.eventDate.toISOString().slice(0, 10),
+      location: event.location || '',
+      eventOrderNumber: order.eventOrderNumber,
+      customerName: order.customerName || '',
+      customerPhone: order.customerPhone || '',
+      customerEmail: order.customerEmail || '',
+      orderedItems: order.items.map((item: any) => `${item.quantity}x ${item.menuItem.name}`).join(' | '),
+      totalCups: order.items.reduce((sum: number, item: any) => sum + item.quantity, 0),
+      totalAmount: Number(order.totalAmount),
+      paymentStatus: order.paymentStatus,
+      preparationStatus: order.items.map((item: any) => `${item.menuItem.name}: ${item.status}`).join(' | '),
+      orderStatus: order.status,
+      createdAt: formatMalaysiaDateTime(order.createdAt),
+    });
+  }
+
+  const header = worksheet.getRow(1);
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF171717' } };
+  header.alignment = { vertical: 'middle' };
+  header.height = 24;
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+  worksheet.autoFilter = { from: 'A1', to: 'N1' };
+  worksheet.getColumn('totalAmount').numFmt = '"RM "#,##0.00';
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1) row.alignment = { vertical: 'top', wrapText: true };
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
