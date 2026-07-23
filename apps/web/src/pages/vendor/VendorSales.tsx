@@ -10,13 +10,11 @@ import { Mail, Plus, X } from 'lucide-react';
 
 interface Summary {
   orders: number;
-  revenue: number;
 }
 
 interface ProductPerf {
   productName: string;
   qtySold: number;
-  revenue: number;
   optionBreakdown: Record<string, number>;
   remarks: string[];
 }
@@ -34,7 +32,6 @@ interface ProductTrendSeries {
 interface CompletedOrderItem {
   productName: string;
   qty: number;
-  price: number;
   remark?: string;
   selectedOptions?: any;
 }
@@ -61,8 +58,30 @@ interface CompletedOrder {
   orderNumber: string;
   createdAt: string;
   completedAt?: string;
-  totalAmount: number;
   items: CompletedOrderItem[];
+}
+
+function collectOptionText(value: unknown, result: string[] = []): string[] {
+  if (typeof value === 'string') {
+    result.push(value);
+  } else if (Array.isArray(value)) {
+    value.forEach((entry) => collectOptionText(entry, result));
+  } else if (value && typeof value === 'object') {
+    const entry = value as Record<string, unknown>;
+    ['title', 'label', 'name', 'value', 'choices'].forEach((key) => collectOptionText(entry[key], result));
+  }
+  return result;
+}
+
+function itemTemperature(item: CompletedOrderItem): 'hot' | 'cold' {
+  if (/lemonade/i.test(item.productName)) return 'cold';
+  const values = collectOptionText(item.selectedOptions);
+  for (const value of values) {
+    const match = value.trim().match(/(?:^|:\s*)(hot|cold)\s*$/i);
+    if (match) return match[1].toLowerCase() as 'hot' | 'cold';
+  }
+  // Temperature-less legacy drinks are counted as cold so every cup is represented.
+  return 'cold';
 }
 
 export function VendorSales() {
@@ -213,14 +232,18 @@ export function VendorSales() {
   }, [productTrend]);
 
   const productTotals = useMemo(() => {
-    return products.reduce(
-      (acc, p) => ({
-        qty: acc.qty + p.qtySold,
-        revenue: acc.revenue + p.revenue,
-      }),
-      { qty: 0, revenue: 0 }
-    );
+    return products.reduce((total, product) => total + product.qtySold, 0);
   }, [products]);
+
+  const temperatureSummary = useMemo(() => {
+    let hot = 0;
+    let cold = 0;
+    orders.forEach((order) => order.items.forEach((item) => {
+      if (itemTemperature(item) === 'hot') hot += item.qty;
+      else cold += item.qty;
+    }));
+    return { hot, cold, total: hot + cold };
+  }, [orders]);
 
   return (
     <>
@@ -260,7 +283,7 @@ export function VendorSales() {
                 </div>
               )}
 
-              <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-700">This target is for progress only and never stops customer orders.</p>
+              <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-700">Customer ordering closes automatically when this cup target is reached.</p>
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-600">Report Recipients</label>
@@ -447,6 +470,27 @@ export function VendorSales() {
 
         <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
+            <CardTitle>Drink Temperature Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="p-2">Drink Type</th>
+                  <th className="p-2 text-right">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b"><td className="p-2">Hot Drinks</td><td className="p-2 text-right">{temperatureSummary.hot}</td></tr>
+                <tr className="border-b"><td className="p-2">Cold Drinks</td><td className="p-2 text-right">{temperatureSummary.cold}</td></tr>
+                <tr className="bg-neutral-50 font-bold"><td className="p-2">Total Drinks</td><td className="p-2 text-right">{temperatureSummary.total}</td></tr>
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <CardHeader>
             <CardTitle>Product Breakdown</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -458,7 +502,6 @@ export function VendorSales() {
                   <tr className="text-left border-b">
                     <th className="p-2">Product</th>
                     <th className="p-2 text-right">Qty Sold</th>
-                    <th className="p-2 text-right">Revenue</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -478,14 +521,12 @@ export function VendorSales() {
                         )}
                       </td>
                       <td className="p-2 text-right">{p.qtySold}</td>
-                      <td className="p-2 text-right">RM {p.revenue.toFixed(2)}</td>
                     </tr>
                   ))}
                   {products.length > 0 && (
                     <tr className="bg-neutral-50 font-bold border-t-2 border-neutral-200">
                       <td className="p-2">Total</td>
-                      <td className="p-2 text-right">{productTotals.qty}</td>
-                      <td className="p-2 text-right">RM {products.reduce((s, p) => s + p.revenue, 0).toFixed(2)}</td>
+                      <td className="p-2 text-right">{productTotals}</td>
                     </tr>
                   )}
                 </tbody>
@@ -506,12 +547,11 @@ export function VendorSales() {
                   <th className="p-2">Created</th>
                   <th className="p-2">Items</th>
                   <th className="p-2">Remarks</th>
-                  <th className="p-2 text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length === 0 ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-sm text-gray-500">No orders for this date.</td></tr>
+                  <tr><td colSpan={4} className="p-6 text-center text-sm text-gray-500">No orders for this date.</td></tr>
                 ) : (
                   orders.map((o, idx) => (
                     <tr key={idx} className="border-b align-top">
@@ -534,7 +574,6 @@ export function VendorSales() {
                       <td className="p-2 text-orange-600 italic">
                         {o.items.map((it, i) => it.remark ? <div key={i}>• {it.remark}</div> : null)}
                       </td>
-                      <td className="p-2 text-right font-medium">RM {o.totalAmount.toFixed(2)}</td>
                     </tr>
                   ))
                 )}
@@ -584,7 +623,7 @@ export function VendorSales() {
                 </div>
               )}
 
-              <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-700">This target is for progress only and never stops customer orders.</p>
+              <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-700">Customer ordering closes automatically when this cup target is reached.</p>
 
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-neutral-500">Report Recipients</div>
@@ -703,10 +742,6 @@ export function VendorSales() {
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Orders</div>
             <div className="mt-2 text-2xl font-semibold text-black">{summary?.orders ?? 0}</div>
           </div>
-          <div className="min-w-0 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Revenue</div>
-            <div className="mt-2 text-2xl font-semibold text-black">RM {(summary?.revenue ?? 0).toFixed(2)}</div>
-          </div>
         </div>
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
@@ -766,6 +801,18 @@ export function VendorSales() {
         </div>
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+          <div className="text-sm font-semibold text-black">Drink Temperature Summary</div>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-neutral-100 text-sm">
+            <div className="grid grid-cols-[1fr_auto] gap-4 border-b bg-neutral-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-neutral-500">
+              <span>Drink Type</span><span>Quantity</span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-4 border-b px-3 py-2"><span>Hot Drinks</span><span>{temperatureSummary.hot}</span></div>
+            <div className="grid grid-cols-[1fr_auto] gap-4 border-b px-3 py-2"><span>Cold Drinks</span><span>{temperatureSummary.cold}</span></div>
+            <div className="grid grid-cols-[1fr_auto] gap-4 bg-neutral-50 px-3 py-2 font-bold"><span>Total Drinks</span><span>{temperatureSummary.total}</span></div>
+          </div>
+        </div>
+
+        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-sm font-semibold text-black">Product Breakdown</div>
           <div className="mt-3 space-y-2">
             {products.length === 0 ? (
@@ -775,15 +822,12 @@ export function VendorSales() {
                 {products.map((p, idx) => (
                   <div key={idx} className="min-w-0 rounded-2xl border border-neutral-100 p-3">
                     <div className="break-words text-sm font-semibold text-black">{p.productName}</div>
-                    <div className="mt-1 flex items-center justify-between gap-3 text-xs text-neutral-600">
-                      <span>Qty: {p.qtySold}</span>
-                      <span className="font-semibold text-black">RM {p.revenue.toFixed(2)}</span>
-                    </div>
+                    <div className="mt-1 text-xs text-neutral-600">Qty Sold: <span className="font-semibold text-black">{p.qtySold}</span></div>
                   </div>
                 ))}
                 <div className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-100 p-3 font-bold text-black">
                   <span>Total</span>
-                  <span className="text-right">{productTotals.qty} · RM {productTotals.revenue.toFixed(2)}</span>
+                  <span className="text-right">{productTotals}</span>
                 </div>
               </>
             )}
