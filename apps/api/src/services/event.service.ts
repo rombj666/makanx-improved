@@ -1,4 +1,4 @@
-import { EventStatus, OrderStatus, Prisma } from '@prisma/client';
+import { EventStatus, OrderingStatus, OrderStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { generateEventOrdersExcel } from './excel.service';
@@ -7,6 +7,8 @@ export const ACTIVE_EVENT_CONFLICT_MESSAGE =
   'There is already an active event. Please complete the current event before activating a new event.';
 export const ORDERING_CLOSED_MESSAGE =
   'Ordering is currently closed. Please wait for the next ordering session or contact our staff.';
+export const ORDER_LIMIT_REACHED_MESSAGE =
+  'Ordering is currently closed because the order limit has been reached.';
 
 const eventInputSchema = z.object({
   eventName: z.string().trim().min(1, 'Event name is required.').max(160),
@@ -29,33 +31,48 @@ function dateOnly(value: string) {
   return parsed;
 }
 
-async function summaryForEvent(event: any) {
+function effectiveOrderingStatus(event: any, totalCups: number, settings?: any): OrderingStatus {
+  if (settings === undefined) return event.orderingStatus;
+  if (event.orderingStatus === OrderingStatus.MANUALLY_CLOSED) return OrderingStatus.MANUALLY_CLOSED;
+  const limitEnabled = settings?.dailyLimitEnabled === true;
+  const limit = Number(settings?.dailyLimitQuantity || 0);
+  if (limitEnabled && limit > 0 && totalCups >= limit) return OrderingStatus.LIMIT_REACHED;
+  return OrderingStatus.OPEN;
+}
+
+async function summaryForEvent(event: any, settings?: any) {
   const [orders, cups] = await Promise.all([
     prisma.order.aggregate({
       where: { eventId: event.id },
       _count: { _all: true },
-      _sum: { totalAmount: true },
     }),
     prisma.orderItem.aggregate({
       where: { order: { eventId: event.id } },
       _sum: { quantity: true },
     }),
   ]);
+  const totalCups = Number(cups._sum.quantity || 0);
+  const orderingStatus = effectiveOrderingStatus(event, totalCups, settings);
+  if (event.status === EventStatus.ACTIVE && orderingStatus !== event.orderingStatus) {
+    await prisma.event.update({ where: { id: event.id }, data: { orderingStatus } });
+  }
   return {
     ...event,
+    orderingStatus,
     totalOrders: orders._count._all,
-    totalCups: Number(cups._sum.quantity || 0),
-    totalSales: Number(orders._sum.totalAmount || 0),
+    totalCups,
+    cupLimitEnabled: settings?.dailyLimitEnabled === true,
+    expectedCupQuantity: Number(settings?.dailyLimitQuantity || 0),
   };
 }
 
 export async function getCurrentEvent(userId: string) {
   const vendor = await vendorForUser(userId);
-  const event = await prisma.event.findFirst({
+  const [event, settings] = await Promise.all([prisma.event.findFirst({
     where: { vendorId: vendor.id, status: EventStatus.ACTIVE },
     orderBy: { createdAt: 'desc' },
-  });
-  return event ? summaryForEvent(event) : null;
+  }), prisma.vendorSettings.findUnique({ where: { vendorId: vendor.id } })]);
+  return event ? summaryForEvent(event, settings) : null;
 }
 
 export async function listEventHistory(userId: string, includeArchived = false) {
@@ -90,6 +107,7 @@ export async function createAndActivateEvent(userId: string, raw: unknown) {
         location: input.location || null,
         notes: input.notes || null,
         status: EventStatus.ACTIVE,
+        orderingStatus: OrderingStatus.OPEN,
         nextOrderNumber: 1,
       },
     });
@@ -127,6 +145,23 @@ export async function completeEvent(userId: string, eventId: string) {
   if (result.count === 0) throw new Error('Active event not found.');
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
   return summaryForEvent(event);
+}
+
+export async function updateOrderingStatus(userId: string, eventId: string, raw: unknown) {
+  const input = z.object({
+    orderingStatus: z.enum([OrderingStatus.OPEN, OrderingStatus.MANUALLY_CLOSED]),
+  }).parse(raw);
+  const vendor = await vendorForUser(userId);
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, vendorId: vendor.id, status: EventStatus.ACTIVE },
+  });
+  if (!event) throw new Error('Active event not found.');
+  const updated = await prisma.event.update({
+    where: { id: event.id },
+    data: { orderingStatus: input.orderingStatus },
+  });
+  const settings = await prisma.vendorSettings.findUnique({ where: { vendorId: vendor.id } });
+  return summaryForEvent(updated, settings);
 }
 
 export async function archiveEvent(userId: string, eventId: string) {
@@ -178,41 +213,6 @@ export async function getEventOrders(
   });
   const summary = await summaryForEvent(event);
   return { event: summary, orders };
-}
-
-function csvCell(value: unknown) {
-  const text = value === null || value === undefined ? '' : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function itemSummary(order: any) {
-  return order.items.map((item: any) => `${item.quantity}x ${item.menuItem.name}`).join(' | ');
-}
-
-export async function exportEventCsv(userId: string, eventId: string) {
-  const { event, orders } = await getEventOrders(userId, eventId);
-  const headers = [
-    'Event name', 'Event date', 'Event location', 'Event order number', 'Customer name',
-    'Customer phone', 'Customer email', 'Ordered items', 'Total cups', 'Total amount',
-    'Payment status', 'Preparation status', 'Order status', 'Created time',
-  ];
-  const rows = orders.map((order: any) => [
-    event.eventName,
-    event.eventDate.toISOString().slice(0, 10),
-    event.location || '',
-    order.eventOrderNumber,
-    order.customerName || '',
-    order.customerPhone || '',
-    order.customerEmail || '',
-    itemSummary(order),
-    order.items.reduce((sum: number, item: any) => sum + item.quantity, 0),
-    Number(order.totalAmount).toFixed(2),
-    order.paymentStatus,
-    order.items.map((item: any) => `${item.menuItem.name}: ${item.status}`).join(' | '),
-    order.status,
-    order.createdAt.toISOString(),
-  ]);
-  return [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
 }
 
 export async function exportEventExcel(userId: string, eventId: string) {

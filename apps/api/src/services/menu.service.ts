@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
 
 function isMissingColumnError(e: any, columnName: string) {
   const msg = String(e?.message || '');
@@ -214,12 +215,14 @@ export const getPublicMenu = async (vendorId: string) => {
           showPrices: true,
           deviceOrderLimitEnabled: true,
           maxDrinksPerOrder: true,
+          dailyLimitEnabled: true,
+          dailyLimitQuantity: true,
         },
       },
       events: {
         where: { status: 'ACTIVE' },
         take: 1,
-        select: { id: true, eventName: true, eventDate: true },
+        select: { id: true, eventName: true, eventDate: true, orderingStatus: true },
       },
       menuItems: {
         where: { isAvailable: true },
@@ -238,10 +241,36 @@ export const getPublicMenu = async (vendorId: string) => {
   });
   if (!vendor) throw new Error('Store not found');
   const { events, settings, ...profile } = vendor;
+  const activeEvent = events[0] || null;
+  const usedCups = activeEvent
+    ? Number((await prisma.orderItem.aggregate({
+        where: { order: { eventId: activeEvent.id } },
+        _sum: { quantity: true },
+      }))._sum.quantity || 0)
+    : 0;
+  const limitReached = !!activeEvent
+    && settings?.dailyLimitEnabled === true
+    && Number(settings.dailyLimitQuantity || 0) > 0
+    && usedCups >= Number(settings.dailyLimitQuantity);
+  const orderingStatus = !activeEvent
+    ? 'MANUALLY_CLOSED'
+    : activeEvent.orderingStatus === 'MANUALLY_CLOSED'
+      ? 'MANUALLY_CLOSED'
+      : limitReached ? 'LIMIT_REACHED' : 'OPEN';
+  if (activeEvent && activeEvent.orderingStatus !== orderingStatus) {
+    await prisma.event.update({ where: { id: activeEvent.id }, data: { orderingStatus } });
+  }
   return {
     ...profile,
-    activeEvent: events[0] || null,
-    settings: { ...(settings || {}), orderingOpen: events.length > 0 },
+    activeEvent,
+    settings: {
+      ...(settings || {}),
+      orderingOpen: orderingStatus === 'OPEN',
+      orderingStatus,
+      orderingClosedReason: orderingStatus === 'LIMIT_REACHED'
+        ? ORDER_LIMIT_REACHED_MESSAGE
+        : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
+    },
     menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
   };
 };
@@ -261,12 +290,14 @@ export const getPublicMenuBySlug = async (slug: string) => {
           showPrices: true,
           deviceOrderLimitEnabled: true,
           maxDrinksPerOrder: true,
+          dailyLimitEnabled: true,
+          dailyLimitQuantity: true,
         },
       },
       events: {
         where: { status: 'ACTIVE' },
         take: 1,
-        select: { id: true, eventName: true, eventDate: true },
+        select: { id: true, eventName: true, eventDate: true, orderingStatus: true },
       },
       menuItems: {
         where: { isAvailable: true },
@@ -285,10 +316,36 @@ export const getPublicMenuBySlug = async (slug: string) => {
   });
   if (!vendor) throw new Error('Store not found');
   const { events, settings, ...profile } = vendor;
+  const activeEvent = events[0] || null;
+  const usedCups = activeEvent
+    ? Number((await prisma.orderItem.aggregate({
+        where: { order: { eventId: activeEvent.id } },
+        _sum: { quantity: true },
+      }))._sum.quantity || 0)
+    : 0;
+  const limitReached = !!activeEvent
+    && settings?.dailyLimitEnabled === true
+    && Number(settings.dailyLimitQuantity || 0) > 0
+    && usedCups >= Number(settings.dailyLimitQuantity);
+  const orderingStatus = !activeEvent
+    ? 'MANUALLY_CLOSED'
+    : activeEvent.orderingStatus === 'MANUALLY_CLOSED'
+      ? 'MANUALLY_CLOSED'
+      : limitReached ? 'LIMIT_REACHED' : 'OPEN';
+  if (activeEvent && activeEvent.orderingStatus !== orderingStatus) {
+    await prisma.event.update({ where: { id: activeEvent.id }, data: { orderingStatus } });
+  }
   return {
     ...profile,
-    activeEvent: events[0] || null,
-    settings: { ...(settings || {}), orderingOpen: events.length > 0 },
+    activeEvent,
+    settings: {
+      ...(settings || {}),
+      orderingOpen: orderingStatus === 'OPEN',
+      orderingStatus,
+      orderingClosedReason: orderingStatus === 'LIMIT_REACHED'
+        ? ORDER_LIMIT_REACHED_MESSAGE
+        : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
+    },
     menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
   };
 };

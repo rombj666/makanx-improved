@@ -45,6 +45,7 @@ model Event {
   location        String?
   notes           String?
   status          EventStatus   @default(DRAFT)
+  orderingStatus  OrderingStatus @default(OPEN)
   nextOrderNumber Int           @default(1)
   completedAt     DateTime?
   createdAt       DateTime      @default(now())
@@ -201,4 +202,10 @@ enum EventStatus {
   ACTIVE
   COMPLETED
   ARCHIVED
+}
+
+enum OrderingStatus {
+  OPEN
+  MANUALLY_CLOSED
+  LIMIT_REACHED
 }

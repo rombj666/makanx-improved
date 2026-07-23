@@ -11,5 +11,4 @@ router.get('/vendor/products', analytics.vendorProductPerformance);
 router.get('/vendor/trend', analytics.vendorRevenueTrend);
 router.get('/vendor/product-trend', analytics.vendorProductTrend);
 router.get('/vendor/orders', analytics.vendorCompletedOrders);
-router.get('/vendor/export', analytics.vendorExportReport);
 export default router;

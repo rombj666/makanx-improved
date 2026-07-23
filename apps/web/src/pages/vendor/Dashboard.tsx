@@ -30,7 +30,15 @@ interface Order {
   } | null;
   items: OrderItem[];
   createdAt: string;
+  readyAt?: string | null;
   vendorId: string;
+  event?: {
+    id: string;
+    eventName: string;
+    eventDate: string;
+    location?: string | null;
+    status: string;
+  } | null;
 }
 
 export function VendorDashboard() {
@@ -46,6 +54,7 @@ export function VendorDashboard() {
 
   const [activeTab, setActiveTab] = useState<'kitchen' | 'history'>('kitchen');
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
+  const [expandedHistoryEvents, setExpandedHistoryEvents] = useState<Set<string>>(new Set());
 
   const fetchHistoryOrders = useCallback(async () => {
     try {
@@ -490,37 +499,86 @@ export function VendorDashboard() {
     </div>
   );
 
-  const HistoryOrderList = ({ data }: { data: Order[] }) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {data.length === 0 ? (
-        <div className="text-sm text-neutral-600 col-span-full">No previous orders.</div>
-      ) : (
-        data.map((order) => (
-          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 h-fit">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                <div className="text-xs text-neutral-500">
-                  {new Date(order.createdAt).toLocaleTimeString()}
-                </div>
-              </div>
-              <div className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 uppercase tracking-tight">
-                READY
+  const HistoryOrderList = ({ data }: { data: Order[] }) => {
+    const groups = new Map<string, { event: NonNullable<Order['event']> | null; orders: Order[] }>();
+    for (const order of data) {
+      const fallbackDate = order.createdAt.slice(0, 10);
+      const key = order.event?.id || `historical-${fallbackDate}`;
+      const existing = groups.get(key);
+      if (existing) existing.orders.push(order);
+      else groups.set(key, { event: order.event || null, orders: [order] });
+    }
+
+    const eventGroups = Array.from(groups.entries())
+      .map(([key, group]) => ({
+        key,
+        ...group,
+        cups: group.orders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0),
+        newestReadyTime: Math.max(...group.orders.map((order) => new Date(order.readyAt || order.createdAt).getTime())),
+      }))
+      .sort((a, b) => {
+        const aDate = a.event?.eventDate ? new Date(a.event.eventDate).getTime() : a.newestReadyTime;
+        const bDate = b.event?.eventDate ? new Date(b.event.eventDate).getTime() : b.newestReadyTime;
+        return bDate - aDate || b.newestReadyTime - a.newestReadyTime;
+      });
+
+    if (eventGroups.length === 0) return <div className="text-sm text-neutral-600">No previous orders.</div>;
+
+    return <div className="space-y-4">
+      {eventGroups.map((group) => {
+        const expanded = expandedHistoryEvents.has(group.key);
+        const eventDateValue = group.event?.eventDate || group.orders[0].createdAt;
+        const formattedDate = new Date(eventDateValue).toLocaleDateString('en-MY', {
+          timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'long', year: 'numeric',
+        });
+        const eventName = group.event?.eventName?.trim() || formattedDate;
+        const sortedOrders = [...group.orders].sort((a, b) =>
+          new Date(b.readyAt || b.createdAt).getTime() - new Date(a.readyAt || a.createdAt).getTime(),
+        );
+        return <section key={group.key} className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h3 className="font-bold text-black">Event: {eventName} — {formattedDate}</h3>
+              <div className="mt-1 flex flex-wrap gap-4 text-xs text-neutral-500">
+                <span>{group.orders.length} ready orders</span>
+                <span>{group.cups} cups</span>
               </div>
             </div>
-            <div className="mt-3 space-y-2">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center text-sm">
-                  <span className="font-medium text-black truncate pr-2">{item.quantity}x {item.menuItem.name}</span>
-                  <span className="text-green-600 font-bold text-[10px] uppercase shrink-0">Ready</span>
-                </div>
-              ))}
-            </div>
+            <button
+              onClick={() => setExpandedHistoryEvents((current) => {
+                const next = new Set(current);
+                if (next.has(group.key)) next.delete(group.key);
+                else next.add(group.key);
+                return next;
+              })}
+              className="h-10 rounded-xl border border-neutral-200 px-4 text-sm font-semibold"
+            >
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
-        ))
-      )}
-    </div>
-  );
+          {expanded && <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {sortedOrders.map((order) => <article key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-bold text-black">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
+                  <div className="text-xs text-neutral-500">
+                    Ready {new Date(order.readyAt || order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}
+                  </div>
+                </div>
+                <span className="rounded-full border border-green-100 bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">READY</span>
+              </div>
+              <div className="mt-3 space-y-3">
+                {order.items.map((item, index) => <div key={item.id || index} className="text-sm">
+                  <div className="flex justify-between gap-3 font-semibold"><span>{item.quantity}x {item.menuItem.name}</span><span className="text-green-700">{item.status || 'READY'}</span></div>
+                  {formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className="mt-1 text-xs text-neutral-500">{detail}</div>)}
+                </div>)}
+              </div>
+            </article>)}
+          </div>}
+        </section>;
+      })}
+    </div>;
+  };
 
   return (
     <>

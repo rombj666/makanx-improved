@@ -3,7 +3,7 @@ import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getIO } from '../socket';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
-import { ORDERING_CLOSED_MESSAGE } from './event.service';
+import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -135,40 +135,83 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   });
   const totalAmount = preparedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const order = await prisma.$transaction(async (tx) => {
-    const numberedEvents = await tx.$queryRaw<Array<{ id: string; eventOrderNumber: number }>>(Prisma.sql`
-      UPDATE "Event"
-      SET "nextOrderNumber" = "nextOrderNumber" + 1,
-          "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "id" = ${activeEvent.id}
-        AND "vendorId" = ${vendor.id}
-        AND "status" = 'ACTIVE'
-      RETURNING "id", "nextOrderNumber" - 1 AS "eventOrderNumber"
-    `);
-    const numberedEvent = numberedEvents[0];
-    if (!numberedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
-    return tx.order.create({
-      data: {
-        customerId: parsed.guestId,
-        customerName: parsed.customerName?.trim() || null,
-        customerPhone: parsed.customerPhone?.trim() || null,
-        customerEmail: parsed.customerEmail?.trim() || null,
-        deviceId: parsed.deviceId || null,
-        vendorId: vendor.id,
-        eventId: numberedEvent.id,
-        eventOrderNumber: numberedEvent.eventOrderNumber,
-        displayNumber: numberedEvent.eventOrderNumber,
-        paymentMode: parsed.paymentMode,
-        totalAmount,
-        items: { create: preparedItems },
-      },
-      include: {
-        items: { include: { menuItem: true } },
-        event: { select: { eventName: true } },
-        vendor: { select: { businessName: true, slug: true } },
-      },
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const lockedEvents = await tx.$queryRaw<Array<{
+        id: string;
+        nextOrderNumber: number;
+        orderingStatus: string;
+      }>>(Prisma.sql`
+        SELECT "id", "nextOrderNumber", "orderingStatus"
+        FROM "Event"
+        WHERE "id" = ${activeEvent.id}
+          AND "vendorId" = ${vendor.id}
+          AND "status" = 'ACTIVE'
+        FOR UPDATE
+      `);
+      const lockedEvent = lockedEvents[0];
+      if (!lockedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
+      if (lockedEvent.orderingStatus === 'MANUALLY_CLOSED') throw new Error(ORDERING_CLOSED_MESSAGE);
+
+      const cups = await tx.orderItem.aggregate({
+        where: { order: { eventId: lockedEvent.id } },
+        _sum: { quantity: true },
+      });
+      const usedQuantity = Number(cups._sum.quantity || 0);
+      const cupLimitEnabled = settings?.dailyLimitEnabled === true && Number(settings.dailyLimitQuantity) > 0;
+      const cupLimit = Number(settings?.dailyLimitQuantity || 0);
+      const projectedQuantity = usedQuantity + requestedQuantity;
+
+      if (cupLimitEnabled && usedQuantity >= cupLimit) {
+        const error = new Error(ORDER_LIMIT_REACHED_MESSAGE);
+        (error as any).code = 'ORDER_LIMIT_REACHED';
+        throw error;
+      }
+      if (cupLimitEnabled && projectedQuantity > cupLimit) {
+        throw new Error(`This order exceeds the remaining cup limit (${cupLimit - usedQuantity} cup(s) available).`);
+      }
+
+      const eventOrderNumber = Number(lockedEvent.nextOrderNumber);
+      await tx.event.update({
+        where: { id: lockedEvent.id },
+        data: {
+          nextOrderNumber: { increment: 1 },
+          orderingStatus: cupLimitEnabled && projectedQuantity >= cupLimit ? 'LIMIT_REACHED' : 'OPEN',
+        },
+      });
+
+      return tx.order.create({
+        data: {
+          customerId: parsed.guestId,
+          customerName: parsed.customerName?.trim() || null,
+          customerPhone: parsed.customerPhone?.trim() || null,
+          customerEmail: parsed.customerEmail?.trim() || null,
+          deviceId: parsed.deviceId || null,
+          vendorId: vendor.id,
+          eventId: lockedEvent.id,
+          eventOrderNumber,
+          displayNumber: eventOrderNumber,
+          paymentMode: parsed.paymentMode,
+          totalAmount,
+          items: { create: preparedItems },
+        },
+        include: {
+          items: { include: { menuItem: true } },
+          event: { select: { id: true, eventName: true, eventDate: true, location: true, status: true } },
+          vendor: { select: { businessName: true, slug: true } },
+        },
+      });
     });
-  });
+  } catch (error: any) {
+    if (error?.code === 'ORDER_LIMIT_REACHED') {
+      await prisma.event.updateMany({
+        where: { id: activeEvent.id, vendorId: vendor.id, status: EventStatus.ACTIVE },
+        data: { orderingStatus: 'LIMIT_REACHED' },
+      });
+    }
+    throw error;
+  }
 
   getIO().to(`vendor:${vendor.id}`).emit('order_created', order);
   return { order, estimatedMinutes: Math.max(...menuItems.map((item) => item.basePrepMin), 5) };
@@ -187,7 +230,10 @@ export async function getVendorOrders(userId: string) {
   const vendor = await getVendorForUser(userId);
   return prisma.order.findMany({
     where: { vendorId: vendor.id },
-    include: { items: { include: { menuItem: true } } },
+    include: {
+      items: { include: { menuItem: true } },
+      event: { select: { id: true, eventName: true, eventDate: true, location: true, status: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -207,7 +253,7 @@ export async function getOrderById(orderId: string) {
     where: { id: orderId },
     include: {
       items: { include: { menuItem: true } },
-      event: { select: { eventName: true } },
+      event: { select: { id: true, eventName: true, eventDate: true, location: true, status: true } },
       vendor: { select: { businessName: true, slug: true } },
     },
   });

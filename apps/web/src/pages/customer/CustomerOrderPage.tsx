@@ -39,6 +39,8 @@ interface Store {
   activeEvent?: { id: string; eventName: string; eventDate: string } | null;
   settings?: {
     orderingOpen: boolean;
+    orderingStatus?: 'OPEN' | 'MANUALLY_CLOSED' | 'LIMIT_REACHED';
+    orderingClosedReason?: string | null;
     showPrices: boolean;
     deviceOrderLimitEnabled: boolean;
     maxDrinksPerOrder: number;
@@ -190,7 +192,23 @@ export function CustomerOrderPage() {
       navigate(`/track/${data.data.order.id}`);
     } catch (error: any) {
       console.error('[customer-order] Checkout failed', error);
-      toast.error(error.response?.data?.error || error.response?.data?.message || 'Checkout failed');
+      const message = error.response?.data?.error || error.response?.data?.message || 'Checkout failed';
+      if (String(message).includes('order limit has been reached')) {
+        setStore((current) => current ? {
+          ...current,
+          settings: {
+            ...(current.settings || {
+              showPrices: true,
+              deviceOrderLimitEnabled: false,
+              maxDrinksPerOrder: 99,
+            }),
+            orderingOpen: false,
+            orderingStatus: 'LIMIT_REACHED',
+            orderingClosedReason: String(message),
+          },
+        } : current);
+      }
+      toast.error(message);
     } finally {
       setPlacing(false);
     }
@@ -208,7 +226,8 @@ export function CustomerOrderPage() {
           {store.description && <p className="mt-2 max-w-xl text-neutral-600">{store.description}</p>}
           {!store.settings?.orderingOpen && (
             <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              Ordering is currently closed. Please wait for the next ordering session or contact our staff.
+              {store.settings?.orderingClosedReason
+                || 'Ordering is currently closed. Please wait for the next ordering session or contact our staff.'}
             </p>
           )}
         </div>
@@ -262,7 +281,7 @@ export function CustomerOrderPage() {
                 </div>
               ))}
             </div>
-            <button onClick={checkout} disabled={placing} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-black font-bold text-white disabled:opacity-50">
+            <button onClick={checkout} disabled={placing || !store.settings?.orderingOpen} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-black font-bold text-white disabled:opacity-50">
               <ShoppingBag size={18} />
               {placing ? 'Placing order...' : showPrices ? `Checkout · RM${cart.total.toFixed(2)}` : 'Checkout'}
             </button>

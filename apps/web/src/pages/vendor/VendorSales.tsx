@@ -6,8 +6,6 @@ import { Button } from '../../components/ui/Button';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import { saveAs } from 'file-saver';
-import { useAuth } from '../../context/AuthContext';
 import { Mail, Plus, X } from 'lucide-react';
 
 interface Summary {
@@ -83,7 +81,6 @@ export function VendorSales() {
 
   const trendChartRef = useRef<HTMLDivElement>(null);
   const topProductsChartRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
 
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
   const MOBILE_COLORS = ['#111827', '#374151', '#6B7280', '#9CA3AF', '#D1D5DB', '#E5E7EB'];
@@ -191,31 +188,6 @@ export function VendorSales() {
   const handleRemoveEmail = (emailToRemove: string) => {
     const updatedEmails = (settings?.reportRecipientEmails || []).filter(e => e !== emailToRemove);
     handleUpdateSettings({ reportRecipientEmails: updatedEmails });
-  };
-
-  const handleExport = async () => {
-    if (orders.length === 0) {
-      toast.error('No orders to export');
-      return;
-    }
-
-    const toastId = toast.loading('Generating professional report...');
-    try {
-      console.info('[vendor-sales] exporting report', {
-        selectedDate: date,
-        request: api.getUri({ url: '/analytics/vendor/export', params: { date } }),
-      });
-      const response = await api.get('/analytics/vendor/export', {
-        params: { date },
-        responseType: 'blob'
-      });
-      
-      const fileName = `vendor-sales-report-${user?.vendorProfile?.businessName?.toLowerCase().replace(/\s+/g, '-') || 'report'}-${date}.xlsx`;
-      saveAs(response.data, fileName);
-      toast.success('Report generated', { id: toastId });
-    } catch (e: any) {
-      toast.error('Failed to generate report', { id: toastId });
-    }
   };
 
   useEffect(() => {
@@ -382,7 +354,7 @@ export function VendorSales() {
                     ></div>
                   </div>
                   {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
-                    <p className="text-sm font-medium text-amber-700">Cup target has been reached. Orders are still being accepted.</p>
+                    <p className="text-sm font-medium text-amber-700">Cup target has been reached. Customer ordering is closed.</p>
                   )}
                 </div>
               )}
@@ -397,9 +369,6 @@ export function VendorSales() {
           </div>
           <Button onClick={() => fetchAll()} disabled={loading}>
             Refresh
-          </Button>
-          <Button variant="outline" onClick={handleExport} disabled={loading}>
-            Export
           </Button>
         </div>
 
@@ -706,7 +675,7 @@ export function VendorSales() {
                     ></div>
                   </div>
                   {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
-                    <p className="text-xs font-medium text-amber-700">Cup target has been reached. Orders are still being accepted.</p>
+                    <p className="text-xs font-medium text-amber-700">Cup target has been reached. Customer ordering is closed.</p>
                   )}
                 </div>
               )}
@@ -717,7 +686,7 @@ export function VendorSales() {
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
           <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Date</div>
-          <div className="mt-2 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+          <div className="mt-2 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
             <Input type="date" value={date} onChange={(e) => handleDateChange(e.target.value)} className="min-w-0" />
             <button
               onClick={() => fetchAll()}
@@ -725,13 +694,6 @@ export function VendorSales() {
               className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
             >
               Refresh
-            </button>
-            <button
-              onClick={handleExport}
-              disabled={loading}
-              className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black transition active:scale-[0.99] disabled:opacity-40"
-            >
-              Export
             </button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
-import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
+import { getMalaysiaTodayString } from '../utils/date';
 
 const settingsSchema = z.object({
   showPrices: z.boolean().optional(),
@@ -26,13 +26,17 @@ async function vendorFor(userId: string) {
   return vendor;
 }
 
-async function usedQuantity(vendorId: string, date = getMalaysiaTodayString()) {
-  const { start, end } = getMalaysiaDayRange(date);
+async function activeEventUsage(vendorId: string) {
+  const event = await prisma.event.findFirst({
+    where: { vendorId, status: 'ACTIVE' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!event) return { event: null, usedQuantity: 0 };
   const aggregate = await prisma.orderItem.aggregate({
-    where: { order: { vendorId, createdAt: { gte: start, lt: end } } },
+    where: { order: { eventId: event.id } },
     _sum: { quantity: true },
   });
-  return Number(aggregate._sum.quantity || 0);
+  return { event, usedQuantity: Number(aggregate._sum.quantity || 0) };
 }
 
 async function saveDailyUsage(
@@ -98,6 +102,16 @@ export const updateSettings = async (req: Request, res: Response) => {
         ...(emails !== undefined ? { reportRecipientEmails: emails } : {}),
       },
     });
+    const { event, usedQuantity: eventCups } = await activeEventUsage(vendor.id);
+    if (event && event.orderingStatus !== 'MANUALLY_CLOSED') {
+      const limitReached = settings.dailyLimitEnabled
+        && settings.dailyLimitQuantity > 0
+        && eventCups >= settings.dailyLimitQuantity;
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { orderingStatus: limitReached ? 'LIMIT_REACHED' : 'OPEN' },
+      });
+    }
     res.json({ success: true, data: responseSettings(settings) });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
@@ -137,12 +151,14 @@ export const getDailyUsage = async (req: Request, res: Response) => {
   try {
     const vendor = await vendorFor(req.user!.userId);
     const date = getMalaysiaTodayString();
-    const used = await usedQuantity(vendor.id, date);
+    const { event, usedQuantity: used } = await activeEventUsage(vendor.id);
+    const orderingClosed = event ? event.orderingStatus !== 'OPEN' : true;
     const usage = await saveDailyUsage(vendor.id, date, {
       usedQuantity: used,
       dailyLimit: vendor.settings!.dailyLimitQuantity,
+      orderingClosed,
     });
-    res.json({ success: true, data: usage });
+    res.json({ success: true, data: { ...usage, eventId: event?.id || null, orderingClosed } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }

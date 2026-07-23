@@ -53,6 +53,17 @@ export const complete = async (req: Request, res: Response) => {
   }
 };
 
+export const updateOrdering = async (req: Request, res: Response) => {
+  try {
+    res.json({
+      success: true,
+      data: await eventService.updateOrderingStatus(req.user!.userId, req.params.id, req.body),
+    });
+  } catch (error: any) {
+    res.status(statusFor(error)).json({ success: false, error: message(error) });
+  }
+};
+
 export const archive = async (req: Request, res: Response) => {
   try {
     res.json({ success: true, data: await eventService.archiveEvent(req.user!.userId, req.params.id) });
@@ -68,17 +79,6 @@ export const orders = async (req: Request, res: Response) => {
       search: typeof req.query.search === 'string' ? req.query.search : undefined,
     });
     res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(statusFor(error)).json({ success: false, error: message(error) });
-  }
-};
-
-export const exportCsv = async (req: Request, res: Response) => {
-  try {
-    const csv = await eventService.exportEventCsv(req.user!.userId, req.params.id);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="event-${req.params.id}-orders.csv"`);
-    res.send(`\uFEFF${csv}`);
   } catch (error: any) {
     res.status(statusFor(error)).json({ success: false, error: message(error) });
   }

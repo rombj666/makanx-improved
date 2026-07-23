@@ -1,231 +1,244 @@
 import ExcelJS from 'exceljs';
-import { formatMalaysiaDateTime, formatMalaysiaTime } from '../utils/date';
+import { formatMalaysiaDateTime } from '../utils/date';
 
-function orderSalesAmount(order: any) {
-  const itemTotal = order.items.reduce((sum: number, item: any) => sum + Number(item.price) * item.quantity, 0);
-  return itemTotal || Number(order.totalAmount);
+const EM_DASH = '—';
+const thinBorder: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+  left: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+  bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+  right: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+};
+
+interface NormalizedOptions {
+  temperature: string;
+  sugar: string;
+  other: string;
 }
 
-export async function generateVendorSalesExcel(
-  businessName: string,
-  date: string,
-  orders: any[]
-): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Sales Report');
+function cleanChoice(value: unknown) {
+  return String(value || '')
+    .trim()
+    .replace(/^(?:choice|option|temperature|sugar(?: option)?):\s*/i, '')
+    .trim();
+}
 
-  // 1. Column Configuration
-  worksheet.columns = [
-    { header: 'A', key: 'a', width: 20 },
-    { header: 'B', key: 'b', width: 20 },
-    { header: 'C', key: 'c', width: 15 },
-    { header: 'D', key: 'd', width: 25 },
-    { header: 'E', key: 'e', width: 45 },
-    { header: 'F', key: 'f', width: 20 },
-  ];
+function knownTemperature(value: unknown) {
+  const cleaned = cleanChoice(value).toLowerCase();
+  if (cleaned === 'hot') return 'Hot';
+  if (cleaned === 'cold') return 'Cold';
+  return null;
+}
 
-  // 2. Report Header
-  const titleCell = worksheet.getCell('A1');
-  titleCell.value = 'Vendor Sales Analytics Report';
-  titleCell.font = { name: 'Arial', size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  worksheet.mergeCells('A1:F2');
+function normalizeOptions(item: any): NormalizedOptions {
+  const groups = Array.isArray(item?.selectedOptions) ? item.selectedOptions : [];
+  let temperature = EM_DASH;
+  let sugar = EM_DASH;
+  const other: string[] = [];
 
-  // 3. Metadata Section
-  worksheet.addRow([]);
-  const metaStart = worksheet.lastRow!.number + 1;
-  worksheet.addRow(['Vendor Name:', businessName || 'N/A']);
-  worksheet.addRow(['Report Date:', date]);
-  worksheet.addRow(['Generated At:', formatMalaysiaDateTime(new Date())]);
-  
-  for (let i = metaStart; i < metaStart + 3; i++) {
-    worksheet.getCell(`A${i}`).font = { bold: true };
+  for (const group of groups) {
+    const title = String(typeof group === 'string' ? group : group?.title || '').trim();
+    const titleLower = title.toLowerCase();
+    const choices = Array.isArray(group?.choices)
+      ? group.choices
+          .map((choice: any) => cleanChoice(typeof choice === 'string' ? choice : choice?.label))
+          .filter(Boolean)
+      : [];
+    const temperatureChoice = choices.map(knownTemperature).find(Boolean);
+    const titleTemperature = knownTemperature(title);
+
+    if (temperatureChoice || titleTemperature) {
+      temperature = temperatureChoice || titleTemperature || EM_DASH;
+      const remaining = choices.filter((choice: string) => !knownTemperature(choice));
+      if (remaining.length > 0) other.push(...remaining);
+      continue;
+    }
+
+    if (titleLower.includes('temperature') || titleLower === 'choice' || titleLower === 'option') {
+      if (choices.length > 0) other.push(...choices);
+      continue;
+    }
+
+    if (titleLower.includes('sugar') || choices.some((choice: string) => /^(?:no\s+)?sugar$/i.test(choice))) {
+      sugar = choices.join(', ') || cleanChoice(title) || EM_DASH;
+      continue;
+    }
+
+    if (choices.length > 0) {
+      other.push(title ? `${title}: ${choices.join(', ')}` : choices.join(', '));
+    }
   }
 
-  // 4. KPI Summary Section
-  worksheet.addRow([]);
-  worksheet.addRow(['KPI SUMMARY']).font = { bold: true, size: 14 };
-  const kpiHeaderRow = worksheet.addRow(['Total Orders', 'Total Drinks', 'Total Revenue']);
-  kpiHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  kpiHeaderRow.eachCell(c => {
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF444444' } };
-    c.alignment = { horizontal: 'center' };
+  return { temperature, sugar, other: other.join(' | ') || EM_DASH };
+}
+
+function styleSectionTitle(row: ExcelJS.Row) {
+  row.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FF111111' } };
+  row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E7E7' } };
+  row.height = 22;
+}
+
+function styleHeader(row: ExcelJS.Row) {
+  row.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' } };
+  row.alignment = { vertical: 'middle', horizontal: 'left' };
+  row.height = 22;
+  row.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF333333' } };
+    cell.border = thinBorder;
   });
+}
 
-  const totalOrders = orders.length;
-  const totalDrinks = orders.reduce((sum, o) => sum + o.items.reduce((s: number, it: any) => s + it.quantity, 0), 0);
-  const totalRevenue = orders.reduce((sum, o) => sum + orderSalesAmount(o), 0);
-
-  const kpiValueRow = worksheet.addRow([
-    totalOrders,
-    totalDrinks,
-    `RM ${totalRevenue.toFixed(2)}`
-  ]);
-  kpiValueRow.alignment = { horizontal: 'center' };
-  kpiValueRow.font = { size: 12 };
-
-  worksheet.addRow([]);
-
-  // 5. Product Performance Table
-  // Prepare product breakdown data
-  const productBreakdown: Record<string, { productName: string; qtySold: number; revenue: number; optionBreakdown: Record<string, number> }> = {};
-  
-  orders.forEach(order => {
-    order.items.forEach((item: any) => {
-      const name = item.menuItem?.name || 'Unknown';
-      if (!productBreakdown[name]) {
-        productBreakdown[name] = { productName: name, qtySold: 0, revenue: 0, optionBreakdown: {} };
-      }
-      productBreakdown[name].qtySold += item.quantity;
-      productBreakdown[name].revenue += Number(item.price) * item.quantity;
-
-      if (item.selectedOptions && Array.isArray(item.selectedOptions)) {
-        const optionString = item.selectedOptions
-          .map((g: any) => {
-            const choices = g.choices.map((c: any) => c.label).join(', ');
-            return `${g.title}: ${choices}`;
-          })
-          .join(' | ') || 'No options';
-        
-        productBreakdown[name].optionBreakdown[optionString] = (productBreakdown[name].optionBreakdown[optionString] || 0) + item.quantity;
-      }
-    });
+function styleDataRow(row: ExcelJS.Row, quantityColumns: number[] = []) {
+  row.eachCell((cell, column) => {
+    cell.border = thinBorder;
+    cell.alignment = {
+      vertical: 'top',
+      horizontal: quantityColumns.includes(column) ? 'right' : 'left',
+      wrapText: column === 4,
+    };
   });
+}
 
-  worksheet.addRow(['PRODUCT PERFORMANCE BREAKDOWN']).font = { bold: true, size: 14 };
-  const prodHeader = worksheet.addRow(['Product', 'Options Breakdown', 'Quantity Sold', 'Revenue']);
-  prodHeader.font = { bold: true };
-  prodHeader.eachCell(c => {
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-    c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-  });
-
-  Object.values(productBreakdown).forEach(p => {
-    const optionSummary = Object.entries(p.optionBreakdown)
-      .map(([opt, qty]) => `• ${opt}: ${qty}`)
-      .join('\n');
-    
-    const row = worksheet.addRow([
-      p.productName,
-      optionSummary,
-      p.qtySold,
-      p.revenue
-    ]);
-    row.getCell(2).alignment = { wrapText: true };
-    row.getCell(3).alignment = { horizontal: 'right' };
-    row.getCell(4).alignment = { horizontal: 'right' };
-    row.getCell(4).numFmt = '"RM "#,##0.00';
-  });
-
-  // Total row for products
-  const prodTotalRow = worksheet.addRow([
-    'Total',
-    '',
-    totalDrinks,
-    totalRevenue
-  ]);
-  prodTotalRow.font = { bold: true };
-  prodTotalRow.eachCell(c => {
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
-    c.border = { top: { style: 'medium' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-  });
-  prodTotalRow.getCell(3).alignment = { horizontal: 'right' };
-  prodTotalRow.getCell(4).alignment = { horizontal: 'right' };
-  prodTotalRow.getCell(4).numFmt = '"RM "#,##0.00';
-
-  worksheet.addRow([]);
-
-  // 6. Detailed Orders Table
-  worksheet.addRow(['DETAILED ORDERS']).font = { bold: true, size: 14 };
-  const orderHeader = worksheet.addRow(['Order #', 'Created Time (MYT)', 'Total Quantity', 'Items Summary', 'Remarks', 'Total Amount']);
-  orderHeader.font = { bold: true };
-  orderHeader.eachCell(c => {
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-    c.border = { bottom: { style: 'thin' }, top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-  });
-
-  orders.forEach(o => {
-    const orderQty = o.items.reduce((s: number, it: any) => s + it.quantity, 0);
-    const itemsSummary = o.items.map((it: any) => {
-      const opts = it.selectedOptions?.map((g: any) => g.choices.map((c: any) => c.label).join(', ')).join(' | ');
-      return `${it.quantity}x ${it.menuItem?.name}${opts ? ` (${opts})` : ''}`;
-    }).join('\n');
-    const remarks = o.items.map((it: any) => it.remark).filter(Boolean).join('\n');
-
-    const row = worksheet.addRow([
-      o.eventOrderNumber,
-      formatMalaysiaTime(o.createdAt),
-      orderQty,
-      itemsSummary,
-      remarks,
-      orderSalesAmount(o)
-    ]);
-    row.getCell(4).alignment = { wrapText: true };
-    row.getCell(5).alignment = { wrapText: true };
-    row.getCell(6).alignment = { horizontal: 'right' };
-    row.getCell(6).numFmt = '"RM "#,##0.00';
-  });
-
-  // Styling cleanups
-  worksheet.views = [{ state: 'frozen', ySplit: 2 }];
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+function addSection(worksheet: ExcelJS.Worksheet, title: string) {
+  if (worksheet.rowCount > 1) worksheet.addRow([]);
+  const row = worksheet.addRow([title]);
+  styleSectionTitle(row);
 }
 
 export async function generateEventOrdersExcel(event: any, orders: any[]): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Smart QR Ordering System';
-  const worksheet = workbook.addWorksheet('Event Orders');
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet('Event Report', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
 
   worksheet.columns = [
-    { header: 'Event name', key: 'eventName', width: 28 },
-    { header: 'Event date', key: 'eventDate', width: 14 },
-    { header: 'Event location', key: 'location', width: 24 },
-    { header: 'Event order number', key: 'eventOrderNumber', width: 19 },
-    { header: 'Customer name', key: 'customerName', width: 22 },
-    { header: 'Customer phone', key: 'customerPhone', width: 18 },
-    { header: 'Customer email', key: 'customerEmail', width: 28 },
-    { header: 'Ordered items', key: 'orderedItems', width: 48 },
-    { header: 'Total cups', key: 'totalCups', width: 12 },
-    { header: 'Total amount', key: 'totalAmount', width: 14 },
-    { header: 'Payment status', key: 'paymentStatus', width: 16 },
-    { header: 'Preparation status', key: 'preparationStatus', width: 34 },
-    { header: 'Order status', key: 'orderStatus', width: 16 },
-    { header: 'Created time', key: 'createdAt', width: 24 },
+    { key: 'a', width: 27 },
+    { key: 'b', width: 25 },
+    { key: 'c', width: 22 },
+    { key: 'd', width: 38 },
+    { key: 'e', width: 14 },
+    { key: 'f', width: 22 },
+    { key: 'g', width: 18 },
   ];
 
+  const title = worksheet.addRow(['Event Production Report']);
+  title.height = 32;
+  for (let column = 1; column <= 7; column += 1) {
+    title.getCell(column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
+  }
+  title.getCell(1).font = { name: 'Arial', size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
+
+  const productTotals = new Map<string, number>();
+  const combinations = new Map<string, { product: string; options: NormalizedOptions; quantity: number }>();
+  let totalCups = 0;
+  let hotDrinks = 0;
+  let coldDrinks = 0;
+
   for (const order of orders) {
-    worksheet.addRow({
-      eventName: event.eventName,
-      eventDate: event.eventDate.toISOString().slice(0, 10),
-      location: event.location || '',
-      eventOrderNumber: order.eventOrderNumber,
-      customerName: order.customerName || '',
-      customerPhone: order.customerPhone || '',
-      customerEmail: order.customerEmail || '',
-      orderedItems: order.items.map((item: any) => `${item.quantity}x ${item.menuItem.name}`).join(' | '),
-      totalCups: order.items.reduce((sum: number, item: any) => sum + item.quantity, 0),
-      totalAmount: Number(order.totalAmount),
-      paymentStatus: order.paymentStatus,
-      preparationStatus: order.items.map((item: any) => `${item.menuItem.name}: ${item.status}`).join(' | '),
-      orderStatus: order.status,
-      createdAt: formatMalaysiaDateTime(order.createdAt),
-    });
+    for (const item of order.items || []) {
+      const product = String(item.menuItem?.name || 'Unknown product').trim();
+      const quantity = Number(item.quantity || 0);
+      const options = normalizeOptions(item);
+      totalCups += quantity;
+      productTotals.set(product, (productTotals.get(product) || 0) + quantity);
+
+      if (options.temperature === 'Hot') hotDrinks += quantity;
+      else coldDrinks += quantity;
+
+      const key = JSON.stringify([product, options.temperature, options.sugar, options.other]);
+      const existing = combinations.get(key);
+      if (existing) existing.quantity += quantity;
+      else combinations.set(key, { product, options, quantity });
+    }
   }
 
-  const header = worksheet.getRow(1);
-  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF171717' } };
-  header.alignment = { vertical: 'middle' };
-  header.height = 24;
-  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-  worksheet.autoFilter = { from: 'A1', to: 'N1' };
-  worksheet.getColumn('totalAmount').numFmt = '"RM "#,##0.00';
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber > 1) row.alignment = { vertical: 'top', wrapText: true };
+  addSection(worksheet, 'EVENT INFORMATION');
+  const information = [
+    ['Event name', event.eventName || EM_DASH],
+    ['Event date', event.eventDate instanceof Date ? event.eventDate.toISOString().slice(0, 10) : String(event.eventDate || '').slice(0, 10)],
+    ['Location', event.location || EM_DASH],
+    ['Status', event.status || EM_DASH],
+  ];
+  for (const values of information) {
+    const row = worksheet.addRow(values);
+    row.getCell(1).font = { bold: true };
+    styleDataRow(row);
+  }
+
+  addSection(worksheet, 'EVENT SUMMARY');
+  let row = worksheet.addRow(['Total Orders', 'Total Cups', 'Hot Drinks', 'Cold Drinks']);
+  styleHeader(row);
+  row = worksheet.addRow([orders.length, totalCups, hotDrinks, coldDrinks]);
+  styleDataRow(row, [1, 2, 3, 4]);
+
+  addSection(worksheet, 'HOT AND COLD DRINK SUMMARY');
+  row = worksheet.addRow(['Drink Type', 'Total Cups']);
+  styleHeader(row);
+  for (const values of [
+    ['Hot Drinks', hotDrinks],
+    ['Cold Drinks', coldDrinks],
+    ['Total Drinks', totalCups],
+  ]) {
+    row = worksheet.addRow(values);
+    if (values[0] === 'Total Drinks') row.font = { bold: true };
+    styleDataRow(row, [2]);
+  }
+
+  addSection(worksheet, 'PRODUCT TOTALS');
+  row = worksheet.addRow(['Product', 'Total Quantity']);
+  styleHeader(row);
+  for (const [product, quantity] of Array.from(productTotals.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+    row = worksheet.addRow([product, quantity]);
+    styleDataRow(row, [2]);
+  }
+
+  addSection(worksheet, 'PRODUCT AND OPTION BREAKDOWN');
+  row = worksheet.addRow(['Product', 'Temperature', 'Sugar Option', 'Other Option', 'Quantity']);
+  styleHeader(row);
+  const breakdownRows = Array.from(combinations.values()).sort((a, b) =>
+    a.product.localeCompare(b.product)
+      || a.options.temperature.localeCompare(b.options.temperature)
+      || a.options.sugar.localeCompare(b.options.sugar)
+      || a.options.other.localeCompare(b.options.other),
+  );
+  for (const entry of breakdownRows) {
+    row = worksheet.addRow([
+      entry.product,
+      entry.options.temperature,
+      entry.options.sugar,
+      entry.options.other,
+      entry.quantity,
+    ]);
+    styleDataRow(row, [5]);
+  }
+
+  addSection(worksheet, 'ORDER DETAILS');
+  row = worksheet.addRow([
+    'Event Order Number', 'Order Time (MYT)', 'Product', 'Options', 'Quantity',
+    'Preparation Status', 'Order Status',
+  ]);
+  styleHeader(row);
+  for (const order of [...orders].sort((a, b) => Number(a.eventOrderNumber) - Number(b.eventOrderNumber))) {
+    for (const item of order.items || []) {
+      const options = normalizeOptions(item);
+      row = worksheet.addRow([
+        `Order #${order.eventOrderNumber}`,
+        formatMalaysiaDateTime(order.createdAt),
+        item.menuItem?.name || 'Unknown product',
+        `Temperature: ${options.temperature} | Sugar Option: ${options.sugar} | Other Option: ${options.other}`,
+        Number(item.quantity || 0),
+        item.status,
+        order.status,
+      ]);
+      styleDataRow(row, [5]);
+    }
+  }
+
+  worksheet.eachRow((worksheetRow) => {
+    worksheetRow.font = { name: 'Arial', ...worksheetRow.font };
   });
+  worksheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

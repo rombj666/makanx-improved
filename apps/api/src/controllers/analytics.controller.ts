@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { formatMalaysiaDateTime, getMalaysiaDayRange } from '../utils/date';
-import { generateVendorSalesExcel } from '../services/excel.service';
 
 const VALID_SALES_STATUSES: OrderStatus[] = [OrderStatus.READY];
 
@@ -180,18 +179,6 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
         selectedOptions: item.selectedOptions,
       })),
     })) });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-};
-
-export const vendorExportReport = async (req: Request, res: Response) => {
-  try {
-    const { vendor, date, orders } = await ordersFor(req);
-    const buffer = await generateVendorSalesExcel(vendor.businessName, date, orders as any);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=vendor-sales-${date}.xlsx`);
-    res.send(buffer);
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }

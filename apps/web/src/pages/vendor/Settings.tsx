@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Archive, CalendarDays, CheckCircle2, Copy, Download, Edit3, Eye,
-  FileSpreadsheet, History, MapPin, Plus, QrCode, Search,
+  History, MapPin, Plus, QrCode, Search,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 
 type EventStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+type OrderingStatus = 'OPEN' | 'MANUALLY_CLOSED' | 'LIMIT_REACHED';
 
 interface EventSummary {
   id: string;
@@ -20,12 +21,12 @@ interface EventSummary {
   location?: string | null;
   notes?: string | null;
   status: EventStatus;
+  orderingStatus: OrderingStatus;
   nextOrderNumber: number;
   completedAt?: string | null;
   createdAt: string;
   totalOrders: number;
   totalCups: number;
-  totalSales: number;
 }
 
 interface EventOrder {
@@ -34,8 +35,6 @@ interface EventOrder {
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
-  totalAmount: string | number;
-  paymentStatus: string;
   status: string;
   createdAt: string;
   items: Array<{
@@ -43,6 +42,7 @@ interface EventOrder {
     quantity: number;
     status: string;
     remark?: string | null;
+    selectedOptions?: Array<{ title?: string; choices?: Array<{ label?: string }> }> | null;
     menuItem: { name: string };
   }>;
 }
@@ -58,10 +58,6 @@ function eventDate(value: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-MY', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
-}
-
-function money(value: number | string) {
-  return `RM ${Number(value || 0).toFixed(2)}`;
 }
 
 function StatusBadge({ status }: { status: EventStatus }) {
@@ -207,13 +203,27 @@ export function VendorSettings() {
     }
   };
 
-  const downloadExport = async (item: EventSummary, format: 'csv' | 'xlsx') => {
+  const updateOrdering = async (orderingStatus: 'OPEN' | 'MANUALLY_CLOSED') => {
+    if (!currentEvent) return;
+    setSaving(true);
     try {
-      const response = await api.get(`/vendor/events/${item.id}/export.${format}`, { responseType: 'blob' });
+      const { data } = await api.patch(`/vendor/events/${currentEvent.id}/ordering`, { orderingStatus });
+      setCurrentEvent(data.data);
+      toast.success(data.data.orderingStatus === 'OPEN' ? 'Ordering opened' : 'Ordering closed');
+    } catch (error: any) {
+      toast.error(apiError(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadReport = async (item: EventSummary) => {
+    try {
+      const response = await api.get(`/vendor/events/${item.id}/export.xlsx`, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${item.eventName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'event'}-orders.${format}`;
+      link.download = `${item.eventName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'event'}-report.xlsx`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error: any) {
@@ -270,6 +280,14 @@ export function VendorSettings() {
                 <p className="mt-2 text-xs text-neutral-500">Created {new Date(currentEvent.createdAt).toLocaleString()}</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => downloadReport(currentEvent)}><Download size={16} className="mr-2" />Download Report</Button>
+                <Button
+                  variant="outline"
+                  disabled={saving || currentEvent.orderingStatus === 'LIMIT_REACHED'}
+                  onClick={() => updateOrdering(currentEvent.orderingStatus === 'OPEN' ? 'MANUALLY_CLOSED' : 'OPEN')}
+                >
+                  {currentEvent.orderingStatus === 'OPEN' ? 'Close Ordering' : 'Open Ordering'}
+                </Button>
                 <Button variant="outline" onClick={openEdit}><Edit3 size={16} className="mr-2" />Edit Event</Button>
                 <Button className="bg-black hover:bg-neutral-800" onClick={() => setCompleteModal(true)}><CheckCircle2 size={16} className="mr-2" />Complete Event</Button>
               </div>
@@ -278,7 +296,7 @@ export function VendorSettings() {
               {[
                 ['Total orders', currentEvent.totalOrders],
                 ['Total cups', currentEvent.totalCups],
-                ['Total sales', money(currentEvent.totalSales)],
+                ['Ordering status', currentEvent.orderingStatus.replace(/_/g, ' ')],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
                   <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
@@ -307,9 +325,9 @@ export function VendorSettings() {
           </label>
         </div>
         <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[800px] text-left text-sm">
             <thead><tr className="border-b text-xs uppercase tracking-wide text-neutral-500">
-              {['Event Name', 'Event Date', 'Location', 'Total Orders', 'Total Cups', 'Total Sales', 'Status', 'Actions'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}
+              {['Event Name', 'Event Date', 'Location', 'Total Orders', 'Total Cups', 'Status', 'Actions'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}
             </tr></thead>
             <tbody>
               {history.map((item) => (
@@ -319,17 +337,15 @@ export function VendorSettings() {
                   <td className="px-3 py-4 text-neutral-600">{item.location || '—'}</td>
                   <td className="px-3 py-4">{item.totalOrders}</td>
                   <td className="px-3 py-4">{item.totalCups}</td>
-                  <td className="px-3 py-4">{money(item.totalSales)}</td>
                   <td className="px-3 py-4"><StatusBadge status={item.status} /></td>
                   <td className="px-3 py-4"><div className="flex flex-wrap gap-2">
-                    <button onClick={() => { setOrders([]); setSearch(''); setStatusFilter(''); setSelectedEvent(item); }} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><Eye size={14} />View Orders</button>
-                    <button onClick={() => downloadExport(item, 'csv')} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><Download size={14} />CSV</button>
-                    <button onClick={() => downloadExport(item, 'xlsx')} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><FileSpreadsheet size={14} />Excel</button>
+                    <button onClick={() => { setOrders([]); setSearch(''); setStatusFilter(''); setSelectedEvent(item); }} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><Eye size={14} />View Event</button>
+                    <button onClick={() => downloadReport(item)} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><Download size={14} />Download Report</button>
                     {item.status === 'COMPLETED' && <button onClick={() => archiveEvent(item)} title="Archive event" className="rounded-lg border px-2.5 py-2 text-neutral-600"><Archive size={14} /></button>}
                   </div></td>
                 </tr>
               ))}
-              {!loading && history.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-neutral-500">No completed events yet.</td></tr>}
+              {!loading && history.length === 0 && <tr><td colSpan={7} className="px-3 py-10 text-center text-neutral-500">No completed events yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -352,17 +368,17 @@ export function VendorSettings() {
 
       <Modal wide isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} title={selectedEvent ? `${selectedEvent.eventName} — Orders` : 'Event Orders'}>
         {selectedEvent && <div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[['Total orders', selectedEvent.totalOrders], ['Total cups', selectedEvent.totalCups], ['Total sales', money(selectedEvent.totalSales)]].map(([label, value]) => <div key={label} className="rounded-xl bg-neutral-100 p-3"><div className="text-xs uppercase text-neutral-500">{label}</div><div className="mt-1 text-lg font-bold">{value}</div></div>)}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[['Total orders', selectedEvent.totalOrders], ['Total cups', selectedEvent.totalCups]].map(([label, value]) => <div key={label} className="rounded-xl bg-neutral-100 p-3"><div className="text-xs uppercase text-neutral-500">{label}</div><div className="mt-1 text-lg font-bold">{value}</div></div>)}
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_190px]">
             <label className="relative"><Search className="absolute left-3 top-3 text-neutral-400" size={16} /><Input className="pl-9" placeholder="Search order no. or customer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">All order statuses</option><option value="PREPARING">Preparing</option><option value="READY">Ready</option></select>
           </div>
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-neutral-500">{['Order No.', 'Customer', 'Items', 'Cups', 'Amount', 'Payment', 'Status', 'Created'].map((heading) => <th key={heading} className="px-3 py-3">{heading}</th>)}</tr></thead>
-              <tbody>{orders.map((order) => <tr key={order.id} className="border-b border-neutral-100 align-top"><td className="px-3 py-4 text-lg font-bold">#{order.eventOrderNumber}</td><td className="px-3 py-4"><div className="font-medium">{order.customerName || 'Guest'}</div><div className="text-xs text-neutral-500">{order.customerPhone || order.customerEmail || 'No contact details'}</div></td><td className="px-3 py-4">{order.items.map((item) => <div key={item.id}>{item.quantity}x {item.menuItem.name}{item.remark ? <span className="text-neutral-500"> — {item.remark}</span> : null}</div>)}</td><td className="px-3 py-4">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</td><td className="px-3 py-4">{money(order.totalAmount)}</td><td className="px-3 py-4">{order.paymentStatus}</td><td className="px-3 py-4">{order.status}</td><td className="px-3 py-4 whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td></tr>)}
-                {!ordersLoading && orders.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-neutral-500">No matching orders.</td></tr>}
+            <table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-neutral-500">{['Order No.', 'Customer', 'Items', 'Cups', 'Status', 'Created'].map((heading) => <th key={heading} className="px-3 py-3">{heading}</th>)}</tr></thead>
+              <tbody>{orders.map((order) => <tr key={order.id} className="border-b border-neutral-100 align-top"><td className="px-3 py-4 text-lg font-bold">#{order.eventOrderNumber}</td><td className="px-3 py-4"><div className="font-medium">{order.customerName || 'Guest'}</div><div className="text-xs text-neutral-500">{order.customerPhone || order.customerEmail || 'No contact details'}</div></td><td className="px-3 py-4">{order.items.map((item) => <div key={item.id} className="mb-2"><div>{item.quantity}x {item.menuItem.name}</div>{(item.selectedOptions || []).map((group, index) => <div key={index} className="text-xs text-neutral-500">{group.title}: {(group.choices || []).map((choice) => choice.label).filter(Boolean).join(', ')}</div>)}{item.remark ? <div className="text-xs text-neutral-500">Note: {item.remark}</div> : null}</div>)}</td><td className="px-3 py-4">{order.items.reduce((sum, item) => sum + item.quantity, 0)}</td><td className="px-3 py-4">{order.status}</td><td className="px-3 py-4 whitespace-nowrap">{new Date(order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}</td></tr>)}
+                {!ordersLoading && orders.length === 0 && <tr><td colSpan={6} className="px-3 py-10 text-center text-neutral-500">No matching orders.</td></tr>}
               </tbody></table>
             {ordersLoading && <p className="py-6 text-center text-sm text-neutral-500">Loading orders…</p>}
           </div>
