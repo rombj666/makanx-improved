@@ -4,6 +4,7 @@ import prisma from '../utils/prisma';
 import { getIO } from '../socket';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
+import { evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -94,7 +95,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   });
   if (!activeEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
 
-  const requestedQuantity = parsed.items.reduce((sum, item) => sum + item.quantity, 0);
+  const requestedQuantity = sumDrinkQuantities(parsed.items);
   if (settings?.deviceOrderLimitEnabled) {
     if (!parsed.deviceId) throw new Error('Device ID is required.');
     if (requestedQuantity > settings.maxDrinksPerOrder) {
@@ -154,22 +155,43 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       if (!lockedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
       if (lockedEvent.orderingStatus === 'MANUALLY_CLOSED') throw new Error(ORDERING_CLOSED_MESSAGE);
 
+      // Keep the event lock until the order and its items are committed. Every
+      // concurrent customer order for this event must pass through this lock,
+      // so the aggregate below always includes the previously accepted order.
+      const lockedSettings = await tx.$queryRaw<Array<{
+        dailyLimitEnabled: boolean;
+        dailyLimitQuantity: number;
+      }>>(Prisma.sql`
+        SELECT "dailyLimitEnabled", "dailyLimitQuantity"
+        FROM "VendorSettings"
+        WHERE "vendorId" = ${vendor.id}
+        FOR SHARE
+      `);
+
       const cups = await tx.orderItem.aggregate({
         where: { order: { eventId: lockedEvent.id } },
         _sum: { quantity: true },
       });
       const usedQuantity = Number(cups._sum.quantity || 0);
-      const cupLimitEnabled = settings?.dailyLimitEnabled === true && Number(settings.dailyLimitQuantity) > 0;
-      const cupLimit = Number(settings?.dailyLimitQuantity || 0);
-      const projectedQuantity = usedQuantity + requestedQuantity;
+      const cupSettings = lockedSettings[0];
+      const cupLimit = evaluateCupLimit({
+        enabled: cupSettings?.dailyLimitEnabled === true,
+        target: Number(cupSettings?.dailyLimitQuantity || 0),
+        usedQuantity,
+        requestedQuantity,
+      });
 
-      if (cupLimitEnabled && usedQuantity >= cupLimit) {
+      if (cupLimit.alreadyReached) {
         const error = new Error(ORDER_LIMIT_REACHED_MESSAGE);
         (error as any).code = 'ORDER_LIMIT_REACHED';
         throw error;
       }
-      if (cupLimitEnabled && projectedQuantity > cupLimit) {
-        throw new Error(`This order exceeds the remaining cup limit (${cupLimit - usedQuantity} cup(s) available).`);
+      if (cupLimit.wouldExceed) {
+        const error = new Error(
+          `This order exceeds the remaining cup limit (${cupLimit.remainingQuantity} cup(s) available).`,
+        );
+        (error as any).code = 'ORDER_LIMIT_EXCEEDED';
+        throw error;
       }
 
       const eventOrderNumber = Number(lockedEvent.nextOrderNumber);
@@ -177,7 +199,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         where: { id: lockedEvent.id },
         data: {
           nextOrderNumber: { increment: 1 },
-          orderingStatus: cupLimitEnabled && projectedQuantity >= cupLimit ? 'LIMIT_REACHED' : 'OPEN',
+          orderingStatus: cupLimit.reachesTarget ? 'LIMIT_REACHED' : 'OPEN',
         },
       });
 
@@ -202,11 +224,16 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           vendor: { select: { businessName: true, slug: true } },
         },
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   } catch (error: any) {
     if (error?.code === 'ORDER_LIMIT_REACHED') {
       await prisma.event.updateMany({
-        where: { id: activeEvent.id, vendorId: vendor.id, status: EventStatus.ACTIVE },
+        where: {
+          id: activeEvent.id,
+          vendorId: vendor.id,
+          status: EventStatus.ACTIVE,
+          orderingStatus: { not: 'MANUALLY_CLOSED' },
+        },
         data: { orderingStatus: 'LIMIT_REACHED' },
       });
     }

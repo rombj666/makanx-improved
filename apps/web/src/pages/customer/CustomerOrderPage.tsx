@@ -193,7 +193,7 @@ export function CustomerOrderPage() {
     } catch (error: any) {
       console.error('[customer-order] Checkout failed', error);
       const message = error.response?.data?.error || error.response?.data?.message || 'Checkout failed';
-      if (String(message).includes('order limit has been reached')) {
+      if (String(message).includes('cup limit has been reached')) {
         setStore((current) => current ? {
           ...current,
           settings: {
@@ -218,7 +218,7 @@ export function CustomerOrderPage() {
   if (!store) return <div className="p-10 text-center">Store not found.</div>;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-neutral-50 pb-52">
+    <main className={`min-h-screen overflow-x-hidden bg-neutral-50 ${store.settings?.orderingOpen ? 'pb-52' : 'pb-10'}`}>
       <header className="border-b border-neutral-200 bg-white px-4 py-8 text-black">
         <div className="mx-auto max-w-4xl">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-600">Smart QR Ordering System</div>
@@ -233,32 +233,33 @@ export function CustomerOrderPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2">
-        {menu.map((item) => (
-          <article key={item.id} className="min-w-0 rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
-            {item.imageUrl && <img src={item.imageUrl} alt="" className="h-40 w-full rounded-2xl object-cover" />}
-            <div className="mt-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="break-words font-bold">{item.name}</h2>
-                {item.description && <p className="mt-1 text-sm text-neutral-600">{item.description}</p>}
-                {(item.optionGroups?.length || 0) > 0 && (
-                  <p className="mt-2 text-xs font-medium text-neutral-500">Customization available</p>
-                )}
+      {store.settings?.orderingOpen && (
+        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2">
+          {menu.map((item) => (
+            <article key={item.id} className="min-w-0 rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+              {item.imageUrl && <img src={item.imageUrl} alt="" className="h-40 w-full rounded-2xl object-cover" />}
+              <div className="mt-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="break-words font-bold">{item.name}</h2>
+                  {item.description && <p className="mt-1 text-sm text-neutral-600">{item.description}</p>}
+                  {(item.optionGroups?.length || 0) > 0 && (
+                    <p className="mt-2 text-xs font-medium text-neutral-500">Customization available</p>
+                  )}
+                </div>
+                {showPrices && <span className="shrink-0 font-bold">RM{Number(item.price).toFixed(2)}</span>}
               </div>
-              {showPrices && <span className="shrink-0 font-bold">RM{Number(item.price).toFixed(2)}</span>}
-            </div>
-            <button
-              disabled={!store.settings?.orderingOpen}
-              onClick={() => openItem(item)}
-              className="mt-4 h-11 w-full rounded-xl bg-black font-semibold text-white disabled:bg-neutral-300"
-            >
-              Add to order
-            </button>
-          </article>
-        ))}
-      </div>
+              <button
+                onClick={() => openItem(item)}
+                className="mt-4 h-11 w-full rounded-xl bg-black font-semibold text-white"
+              >
+                Add to order
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
 
-      {cart.totalItems > 0 && (
+      {store.settings?.orderingOpen && cart.totalItems > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-4 shadow-2xl">
           <div className="mx-auto max-w-4xl">
             <div className="max-h-48 space-y-3 overflow-y-auto">
@@ -289,7 +290,7 @@ export function CustomerOrderPage() {
         </div>
       )}
 
-      {customizingItem && (
+      {store.settings?.orderingOpen && customizingItem && (
         <div className="fixed inset-0 z-50 bg-black/60" onMouseDown={() => setCustomizingItem(null)}>
           <div
             className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[85vh] sm:w-[min(92vw,560px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl"

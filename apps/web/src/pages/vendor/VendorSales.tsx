@@ -283,8 +283,6 @@ export function VendorSales() {
                 </div>
               )}
 
-              <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-700">Customer ordering closes automatically when this cup target is reached.</p>
-
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-600">Report Recipients</label>
                 <div className="flex gap-2">
@@ -622,8 +620,6 @@ export function VendorSales() {
                   </div>
                 </div>
               )}
-
-              <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-700">Customer ordering closes automatically when this cup target is reached.</p>
 
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-neutral-500">Report Recipients</div>

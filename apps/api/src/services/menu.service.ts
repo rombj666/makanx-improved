@@ -271,7 +271,9 @@ export const getPublicMenu = async (vendorId: string) => {
         ? ORDER_LIMIT_REACHED_MESSAGE
         : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
     },
-    menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
+    menuItems: orderingStatus === 'OPEN'
+      ? vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) }))
+      : [],
   };
 };
 
@@ -346,7 +348,9 @@ export const getPublicMenuBySlug = async (slug: string) => {
         ? ORDER_LIMIT_REACHED_MESSAGE
         : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
     },
-    menuItems: vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) })),
+    menuItems: orderingStatus === 'OPEN'
+      ? vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) }))
+      : [],
   };
 };
 

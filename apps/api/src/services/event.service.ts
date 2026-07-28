@@ -8,7 +8,7 @@ export const ACTIVE_EVENT_CONFLICT_MESSAGE =
 export const ORDERING_CLOSED_MESSAGE =
   'Ordering is currently closed. Please wait for the next ordering session or contact our staff.';
 export const ORDER_LIMIT_REACHED_MESSAGE =
-  'Ordering is currently closed because the order limit has been reached.';
+  'Ordering is closed because the cup limit has been reached.';
 
 const eventInputSchema = z.object({
   eventName: z.string().trim().min(1, 'Event name is required.').max(160),
