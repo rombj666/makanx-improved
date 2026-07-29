@@ -2,6 +2,7 @@ import { EventStatus, OrderingStatus, OrderStatus, Prisma } from '@prisma/client
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { generateEventOrdersExcel } from './excel.service';
+import { dailyCupUsageWhere, effectiveOrderingStatus } from './cup-limit';
 
 export const ACTIVE_EVENT_CONFLICT_MESSAGE =
   'There is already an active event. Please complete the current event before activating a new event.';
@@ -31,17 +32,8 @@ function dateOnly(value: string) {
   return parsed;
 }
 
-function effectiveOrderingStatus(event: any, totalCups: number, settings?: any): OrderingStatus {
-  if (settings === undefined) return event.orderingStatus;
-  if (event.orderingStatus === OrderingStatus.MANUALLY_CLOSED) return OrderingStatus.MANUALLY_CLOSED;
-  const limitEnabled = settings?.dailyLimitEnabled === true;
-  const limit = Number(settings?.dailyLimitQuantity || 0);
-  if (limitEnabled && limit > 0 && totalCups >= limit) return OrderingStatus.LIMIT_REACHED;
-  return OrderingStatus.OPEN;
-}
-
 async function summaryForEvent(event: any, settings?: any) {
-  const [orders, cups] = await Promise.all([
+  const [orders, cups, todayCups] = await Promise.all([
     prisma.order.aggregate({
       where: { eventId: event.id },
       _count: { _all: true },
@@ -50,17 +42,33 @@ async function summaryForEvent(event: any, settings?: any) {
       where: { order: { eventId: event.id } },
       _sum: { quantity: true },
     }),
+    prisma.orderItem.aggregate({
+      where: dailyCupUsageWhere(event.id),
+      _sum: { quantity: true },
+    }),
   ]);
   const totalCups = Number(cups._sum.quantity || 0);
-  const orderingStatus = effectiveOrderingStatus(event, totalCups, settings);
+  const todayCupQuantity = Number(todayCups._sum.quantity || 0);
+  const orderingStatus = settings === undefined
+    ? event.orderingStatus
+    : effectiveOrderingStatus({
+        storedStatus: event.orderingStatus,
+        limitEnabled: settings?.dailyLimitEnabled === true,
+        limitQuantity: Number(settings?.dailyLimitQuantity || 0),
+        usedQuantity: todayCupQuantity,
+      });
   if (event.status === EventStatus.ACTIVE && orderingStatus !== event.orderingStatus) {
-    await prisma.event.update({ where: { id: event.id }, data: { orderingStatus } });
+    await prisma.event.updateMany({
+      where: { id: event.id, orderingStatus: event.orderingStatus },
+      data: { orderingStatus },
+    });
   }
   return {
     ...event,
     orderingStatus,
     totalOrders: orders._count._all,
     totalCups,
+    todayCupQuantity,
     cupLimitEnabled: settings?.dailyLimitEnabled === true,
     expectedCupQuantity: Number(settings?.dailyLimitQuantity || 0),
   };

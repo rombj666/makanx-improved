@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getMalaysiaTodayString } from '../utils/date';
+import { dailyCupUsageWhere, effectiveOrderingStatus } from '../services/cup-limit';
 
 const settingsSchema = z.object({
   showPrices: z.boolean().optional(),
@@ -33,7 +34,7 @@ async function activeEventUsage(vendorId: string) {
   });
   if (!event) return { event: null, usedQuantity: 0 };
   const aggregate = await prisma.orderItem.aggregate({
-    where: { order: { eventId: event.id } },
+    where: dailyCupUsageWhere(event.id),
     _sum: { quantity: true },
   });
   return { event, usedQuantity: Number(aggregate._sum.quantity || 0) };
@@ -104,12 +105,15 @@ export const updateSettings = async (req: Request, res: Response) => {
     });
     const { event, usedQuantity: eventCups } = await activeEventUsage(vendor.id);
     if (event && event.orderingStatus !== 'MANUALLY_CLOSED') {
-      const limitReached = settings.dailyLimitEnabled
-        && settings.dailyLimitQuantity > 0
-        && eventCups >= settings.dailyLimitQuantity;
-      await prisma.event.update({
-        where: { id: event.id },
-        data: { orderingStatus: limitReached ? 'LIMIT_REACHED' : 'OPEN' },
+      const orderingStatus = effectiveOrderingStatus({
+        storedStatus: event.orderingStatus,
+        limitEnabled: settings.dailyLimitEnabled,
+        limitQuantity: settings.dailyLimitQuantity,
+        usedQuantity: eventCups,
+      });
+      await prisma.event.updateMany({
+        where: { id: event.id, orderingStatus: { not: 'MANUALLY_CLOSED' } },
+        data: { orderingStatus },
       });
     }
     res.json({ success: true, data: responseSettings(settings) });
@@ -152,13 +156,27 @@ export const getDailyUsage = async (req: Request, res: Response) => {
     const vendor = await vendorFor(req.user!.userId);
     const date = getMalaysiaTodayString();
     const { event, usedQuantity: used } = await activeEventUsage(vendor.id);
-    const orderingClosed = event ? event.orderingStatus !== 'OPEN' : true;
+    const orderingStatus = event
+      ? effectiveOrderingStatus({
+          storedStatus: event.orderingStatus,
+          limitEnabled: vendor.settings!.dailyLimitEnabled,
+          limitQuantity: vendor.settings!.dailyLimitQuantity,
+          usedQuantity: used,
+        })
+      : 'MANUALLY_CLOSED';
+    const orderingClosed = orderingStatus !== 'OPEN';
+    if (event && event.orderingStatus !== orderingStatus) {
+      await prisma.event.updateMany({
+        where: { id: event.id, orderingStatus: event.orderingStatus },
+        data: { orderingStatus },
+      });
+    }
     const usage = await saveDailyUsage(vendor.id, date, {
       usedQuantity: used,
       dailyLimit: vendor.settings!.dailyLimitQuantity,
       orderingClosed,
     });
-    res.json({ success: true, data: { ...usage, eventId: event?.id || null, orderingClosed } });
+    res.json({ success: true, data: { ...usage, eventId: event?.id || null, orderingStatus, orderingClosed } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }

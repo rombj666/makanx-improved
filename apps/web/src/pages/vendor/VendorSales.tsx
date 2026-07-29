@@ -7,6 +7,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, 
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import { Mail, Plus, X } from 'lucide-react';
+import { getMalaysiaTodayString, millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
+import { useSocket } from '../../context/SocketContext';
 
 interface Summary {
   orders: number;
@@ -50,6 +52,7 @@ interface OrderLimitSettings {
 }
 
 interface DailyUsage {
+  date: string;
   usedQuantity: number;
   dailyLimit: number;
   orderingClosed: boolean;
@@ -85,7 +88,8 @@ function itemTemperature(item: CompletedOrderItem): 'hot' | 'cold' {
 }
 
 export function VendorSales() {
-  const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const { socket } = useSocket();
+  const [date, setDate] = useState<string>(() => getMalaysiaTodayString());
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [productTrend, setProductTrend] = useState<ProductTrendSeries[]>([]);
@@ -211,8 +215,39 @@ export function VendorSales() {
 
   useEffect(() => {
     fetchAll();
+    let midnightTimer: ReturnType<typeof setTimeout>;
+    const scheduleDailyUsageReset = () => {
+      midnightTimer = setTimeout(async () => {
+        try {
+          const { data } = await api.get('/vendor/daily-usage');
+          setUsage(data.data);
+        } catch (error) {
+          console.error('[vendor-sales] Failed to refresh daily usage at Malaysia midnight', error);
+        } finally {
+          scheduleDailyUsageReset();
+        }
+      }, millisecondsUntilNextMalaysiaMidnight() + 250);
+    };
+    scheduleDailyUsageReset();
+    return () => clearTimeout(midnightTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refreshDailyUsage = async () => {
+      try {
+        const { data } = await api.get('/vendor/daily-usage');
+        setUsage(data.data);
+      } catch (error) {
+        console.error('[vendor-sales] Failed to refresh daily usage after an order', error);
+      }
+    };
+    socket.on('order_created', refreshDailyUsage);
+    return () => {
+      socket.off('order_created', refreshDailyUsage);
+    };
+  }, [socket]);
 
   const productTrendDataset = useMemo(() => {
     const buckets = new Set<string>();
@@ -253,11 +288,11 @@ export function VendorSales() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
-              <CardTitle>Expected Cup Target</CardTitle>
+              <CardTitle>Daily Cup Limit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Show Target</span>
+                <span className="text-sm font-medium">Enable Daily Limit</span>
                 <Button 
                   size="sm" 
                   variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
@@ -270,7 +305,7 @@ export function VendorSales() {
               
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
-                  <label className="text-sm text-gray-600">Expected Cup Quantity</label>
+                  <label className="text-sm text-gray-600">Daily Cup Quantity Limit</label>
                   <div className="flex gap-2">
                     <Input 
                       type="number" 
@@ -278,8 +313,9 @@ export function VendorSales() {
                       onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
                       className="w-32"
                     />
-                    <span className="text-sm self-center text-gray-500">cups</span>
+                    <span className="text-sm self-center text-gray-500">cups / day</span>
                   </div>
+                  <p className="text-xs text-gray-500">Resets daily at 12:00 AM Malaysia time.</p>
                 </div>
               )}
 
@@ -359,13 +395,13 @@ export function VendorSales() {
 
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
-              <CardTitle>Cup Target Progress</CardTitle>
+              <CardTitle>Today&apos;s Cup Limit Progress</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Cup progress</span>
+                    <span className="text-gray-500">Today&apos;s cup usage</span>
                     <span className="font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -375,7 +411,7 @@ export function VendorSales() {
                     ></div>
                   </div>
                   {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
-                    <p className="text-sm font-medium text-amber-700">Cup target has been reached. Customer ordering is closed.</p>
+                    <p className="text-sm font-medium text-amber-700">Today&apos;s cup limit has been reached. Customer ordering is closed.</p>
                   )}
                 </div>
               )}
@@ -591,10 +627,10 @@ export function VendorSales() {
 
         <div className="mt-4 space-y-4">
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Expected Cup Target</div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Daily Cup Limit</div>
             <div className="mt-3 space-y-4">
               <div className="flex min-w-0 items-center justify-between gap-3">
-                <span className="min-w-0 text-sm font-medium">Show Target</span>
+                <span className="min-w-0 text-sm font-medium">Enable Daily Limit</span>
                 <Button 
                   size="sm" 
                   variant={settings?.dailyDrinkLimitEnabled ? "default" : "outline"}
@@ -608,7 +644,7 @@ export function VendorSales() {
               
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
-                  <label className="text-xs text-neutral-500">Expected Cup Quantity</label>
+                  <label className="text-xs text-neutral-500">Daily Cup Quantity Limit</label>
                   <div className="flex min-w-0 items-center gap-2">
                     <Input 
                       type="number" 
@@ -616,8 +652,9 @@ export function VendorSales() {
                       onBlur={(e) => handleUpdateSettings({ dailyDrinkLimitQuantity: parseInt(e.target.value) })}
                       className="w-24 min-w-0"
                     />
-                    <span className="min-w-0 text-xs text-neutral-500">cups</span>
+                    <span className="min-w-0 text-xs text-neutral-500">cups / day</span>
                   </div>
+                  <p className="text-xs text-neutral-500">Resets daily at 12:00 AM Malaysia time.</p>
                 </div>
               )}
 
@@ -695,12 +732,12 @@ export function VendorSales() {
           </Card>
 
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Cup Target Progress</div>
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Today&apos;s Cup Limit Progress</div>
             <div className="mt-3 space-y-4">
               {settings?.dailyDrinkLimitEnabled && (
                 <div className="space-y-2">
                   <div className="flex min-w-0 justify-between gap-3 text-xs">
-                    <span className="text-neutral-500">Cup progress</span>
+                    <span className="text-neutral-500">Today&apos;s cup usage</span>
                     <span className="min-w-0 text-right font-bold">{usage?.usedQuantity || 0} / {usage?.dailyLimit || settings?.dailyDrinkLimitQuantity} drinks</span>
                   </div>
                   <div className="w-full bg-neutral-100 rounded-full h-2">
@@ -710,7 +747,7 @@ export function VendorSales() {
                     ></div>
                   </div>
                   {(usage?.usedQuantity || 0) >= (usage?.dailyLimit || settings?.dailyDrinkLimitQuantity || 1) && (
-                    <p className="text-xs font-medium text-amber-700">Cup target has been reached. Customer ordering is closed.</p>
+                    <p className="text-xs font-medium text-amber-700">Today&apos;s cup limit has been reached. Customer ordering is closed.</p>
                   )}
                 </div>
               )}

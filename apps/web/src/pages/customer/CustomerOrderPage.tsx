@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
 import { getOrCreateDeviceId } from '../../lib/deviceOrderLock';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
+import { millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
 
 interface OptionChoice {
   id: string;
@@ -67,17 +68,37 @@ export function CustomerOrderPage() {
   });
 
   useEffect(() => {
-    const loadMenu = vendorSlug
-      ? api.get(`/public/vendors/${encodeURIComponent(vendorSlug)}/menu`)
-      : api.get(`/menu-items/public/${encodeURIComponent(vendorId)}`);
+    let cancelled = false;
+    let midnightTimer: ReturnType<typeof setTimeout>;
 
-    loadMenu
-      .then(({ data }) => setStore(data.data))
-      .catch((error) => {
+    const loadMenu = async (initialLoad = false) => {
+      if (initialLoad) setLoading(true);
+      try {
+        const { data } = vendorSlug
+          ? await api.get(`/public/vendors/${encodeURIComponent(vendorSlug)}/menu`)
+          : await api.get(`/menu-items/public/${encodeURIComponent(vendorId)}`);
+        if (!cancelled) setStore(data.data);
+      } catch (error) {
         console.error('[customer-menu] Failed to load store menu', error);
-        toast.error('Store menu could not be loaded');
-      })
-      .finally(() => setLoading(false));
+        if (!cancelled) toast.error('Store menu could not be loaded');
+      } finally {
+        if (initialLoad && !cancelled) setLoading(false);
+      }
+    };
+
+    const scheduleMidnightRefresh = () => {
+      midnightTimer = setTimeout(async () => {
+        await loadMenu();
+        if (!cancelled) scheduleMidnightRefresh();
+      }, millisecondsUntilNextMalaysiaMidnight() + 250);
+    };
+
+    void loadMenu(true);
+    scheduleMidnightRefresh();
+    return () => {
+      cancelled = true;
+      clearTimeout(midnightTimer);
+    };
   }, [vendorId, vendorSlug]);
 
   const menu = useMemo(() => store?.menuItems || [], [store]);
@@ -216,6 +237,15 @@ export function CustomerOrderPage() {
 
   if (loading) return <div className="p-10 text-center">Loading menu...</div>;
   if (!store) return <div className="p-10 text-center">Store not found.</div>;
+  if (store.settings?.orderingStatus === 'LIMIT_REACHED') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-neutral-50 p-6">
+        <p className="text-center text-base font-semibold text-neutral-800">
+          Ordering is closed because the cup limit has been reached.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main className={`min-h-screen overflow-x-hidden bg-neutral-50 ${store.settings?.orderingOpen ? 'pb-52' : 'pb-10'}`}>

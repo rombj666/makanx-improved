@@ -4,7 +4,7 @@ import prisma from '../utils/prisma';
 import { getIO } from '../socket';
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
-import { evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
+import { dailyCupUsageWhere, evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -136,9 +136,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   });
   const totalAmount = preparedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  let order;
-  try {
-    order = await prisma.$transaction(async (tx) => {
+  const order = await prisma.$transaction(async (tx) => {
       const lockedEvents = await tx.$queryRaw<Array<{
         id: string;
         nextOrderNumber: number;
@@ -146,14 +144,16 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       }>>(Prisma.sql`
         SELECT "id", "nextOrderNumber", "orderingStatus"
         FROM "Event"
-        WHERE "id" = ${activeEvent.id}
-          AND "vendorId" = ${vendor.id}
+        WHERE "vendorId" = ${vendor.id}
           AND "status" = 'ACTIVE'
+        ORDER BY "createdAt" DESC
+        LIMIT 1
         FOR UPDATE
       `);
       const lockedEvent = lockedEvents[0];
       if (!lockedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
       if (lockedEvent.orderingStatus === 'MANUALLY_CLOSED') throw new Error(ORDERING_CLOSED_MESSAGE);
+      const orderCreatedAt = new Date();
 
       // Keep the event lock until the order and its items are committed. Every
       // concurrent customer order for this event must pass through this lock,
@@ -169,7 +169,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       `);
 
       const cups = await tx.orderItem.aggregate({
-        where: { order: { eventId: lockedEvent.id } },
+        where: dailyCupUsageWhere(lockedEvent.id, orderCreatedAt),
         _sum: { quantity: true },
       });
       const usedQuantity = Number(cups._sum.quantity || 0);
@@ -181,16 +181,9 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         requestedQuantity,
       });
 
-      if (cupLimit.alreadyReached) {
+      if (cupLimit.alreadyReached || cupLimit.wouldExceed) {
         const error = new Error(ORDER_LIMIT_REACHED_MESSAGE);
-        (error as any).code = 'ORDER_LIMIT_REACHED';
-        throw error;
-      }
-      if (cupLimit.wouldExceed) {
-        const error = new Error(
-          `This order exceeds the remaining cup limit (${cupLimit.remainingQuantity} cup(s) available).`,
-        );
-        (error as any).code = 'ORDER_LIMIT_EXCEEDED';
+        (error as any).code = cupLimit.alreadyReached ? 'ORDER_LIMIT_REACHED' : 'ORDER_LIMIT_EXCEEDED';
         throw error;
       }
 
@@ -216,6 +209,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           displayNumber: eventOrderNumber,
           paymentMode: parsed.paymentMode,
           totalAmount,
+          createdAt: orderCreatedAt,
           items: { create: preparedItems },
         },
         include: {
@@ -225,20 +219,6 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         },
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
-  } catch (error: any) {
-    if (error?.code === 'ORDER_LIMIT_REACHED') {
-      await prisma.event.updateMany({
-        where: {
-          id: activeEvent.id,
-          vendorId: vendor.id,
-          status: EventStatus.ACTIVE,
-          orderingStatus: { not: 'MANUALLY_CLOSED' },
-        },
-        data: { orderingStatus: 'LIMIT_REACHED' },
-      });
-    }
-    throw error;
-  }
 
   getIO().to(`vendor:${vendor.id}`).emit('order_created', order);
   return { order, estimatedMinutes: Math.max(...menuItems.map((item) => item.basePrepMin), 5) };

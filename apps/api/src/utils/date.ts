@@ -17,7 +17,7 @@ export function getMalaysiaDayRange(dateStr?: string) {
     // For non-string or other formats, we need to be careful. 
     // If it's "now", we want "today" in Malaysia.
     // Malaysia is 8 hours ahead of UTC.
-    const mytNow = new Date(new Date().getTime() + (8 * 60 * 60 * 1000));
+    const mytNow = new Date(Date.now() + (8 * 60 * 60 * 1000));
     y = mytNow.getUTCFullYear();
     m = mytNow.getUTCMonth();
     d = mytNow.getUTCDate();
@@ -33,8 +33,10 @@ export function getMalaysiaDayRange(dateStr?: string) {
   return { start, end };
 }
 
-export function getMalaysiaTodayString() {
-  const mytNow = new Date(new Date().getTime() + (8 * 60 * 60 * 1000));
+export function getMalaysiaTodayString(now: Date | string | number = new Date()) {
+  const instant = new Date(now);
+  if (Number.isNaN(instant.getTime())) throw new Error('Invalid date.');
+  const mytNow = new Date(instant.getTime() + (8 * 60 * 60 * 1000));
   const y = mytNow.getUTCFullYear();
   const m = String(mytNow.getUTCMonth() + 1).padStart(2, '0');
   const d = String(mytNow.getUTCDate()).padStart(2, '0');

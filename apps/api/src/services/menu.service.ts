@@ -2,6 +2,7 @@ import prisma from '../utils/prisma';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
+import { dailyCupUsageWhere, effectiveOrderingStatus } from './cup-limit';
 
 function isMissingColumnError(e: any, columnName: string) {
   const msg = String(e?.message || '');
@@ -244,21 +245,23 @@ export const getPublicMenu = async (vendorId: string) => {
   const activeEvent = events[0] || null;
   const usedCups = activeEvent
     ? Number((await prisma.orderItem.aggregate({
-        where: { order: { eventId: activeEvent.id } },
+        where: dailyCupUsageWhere(activeEvent.id),
         _sum: { quantity: true },
       }))._sum.quantity || 0)
     : 0;
-  const limitReached = !!activeEvent
-    && settings?.dailyLimitEnabled === true
-    && Number(settings.dailyLimitQuantity || 0) > 0
-    && usedCups >= Number(settings.dailyLimitQuantity);
   const orderingStatus = !activeEvent
     ? 'MANUALLY_CLOSED'
-    : activeEvent.orderingStatus === 'MANUALLY_CLOSED'
-      ? 'MANUALLY_CLOSED'
-      : limitReached ? 'LIMIT_REACHED' : 'OPEN';
+    : effectiveOrderingStatus({
+        storedStatus: activeEvent.orderingStatus,
+        limitEnabled: settings?.dailyLimitEnabled === true,
+        limitQuantity: Number(settings?.dailyLimitQuantity || 0),
+        usedQuantity: usedCups,
+      });
   if (activeEvent && activeEvent.orderingStatus !== orderingStatus) {
-    await prisma.event.update({ where: { id: activeEvent.id }, data: { orderingStatus } });
+    await prisma.event.updateMany({
+      where: { id: activeEvent.id, orderingStatus: activeEvent.orderingStatus },
+      data: { orderingStatus },
+    });
   }
   return {
     ...profile,
@@ -321,21 +324,23 @@ export const getPublicMenuBySlug = async (slug: string) => {
   const activeEvent = events[0] || null;
   const usedCups = activeEvent
     ? Number((await prisma.orderItem.aggregate({
-        where: { order: { eventId: activeEvent.id } },
+        where: dailyCupUsageWhere(activeEvent.id),
         _sum: { quantity: true },
       }))._sum.quantity || 0)
     : 0;
-  const limitReached = !!activeEvent
-    && settings?.dailyLimitEnabled === true
-    && Number(settings.dailyLimitQuantity || 0) > 0
-    && usedCups >= Number(settings.dailyLimitQuantity);
   const orderingStatus = !activeEvent
     ? 'MANUALLY_CLOSED'
-    : activeEvent.orderingStatus === 'MANUALLY_CLOSED'
-      ? 'MANUALLY_CLOSED'
-      : limitReached ? 'LIMIT_REACHED' : 'OPEN';
+    : effectiveOrderingStatus({
+        storedStatus: activeEvent.orderingStatus,
+        limitEnabled: settings?.dailyLimitEnabled === true,
+        limitQuantity: Number(settings?.dailyLimitQuantity || 0),
+        usedQuantity: usedCups,
+      });
   if (activeEvent && activeEvent.orderingStatus !== orderingStatus) {
-    await prisma.event.update({ where: { id: activeEvent.id }, data: { orderingStatus } });
+    await prisma.event.updateMany({
+      where: { id: activeEvent.id, orderingStatus: activeEvent.orderingStatus },
+      data: { orderingStatus },
+    });
   }
   return {
     ...profile,

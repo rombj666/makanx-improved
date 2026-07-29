@@ -283,10 +283,10 @@ export function VendorSettings() {
                 <Button variant="outline" onClick={() => downloadReport(currentEvent)}><Download size={16} className="mr-2" />Download Report</Button>
                 <Button
                   variant="outline"
-                  disabled={saving || currentEvent.orderingStatus === 'LIMIT_REACHED'}
-                  onClick={() => updateOrdering(currentEvent.orderingStatus === 'OPEN' ? 'MANUALLY_CLOSED' : 'OPEN')}
+                  disabled={saving}
+                  onClick={() => updateOrdering(currentEvent.orderingStatus === 'MANUALLY_CLOSED' ? 'OPEN' : 'MANUALLY_CLOSED')}
                 >
-                  {currentEvent.orderingStatus === 'OPEN' ? 'Close Ordering' : 'Open Ordering'}
+                  {currentEvent.orderingStatus === 'MANUALLY_CLOSED' ? 'Open Ordering' : 'Close Ordering'}
                 </Button>
                 <Button variant="outline" onClick={openEdit}><Edit3 size={16} className="mr-2" />Edit Event</Button>
                 <Button className="bg-black hover:bg-neutral-800" onClick={() => setCompleteModal(true)}><CheckCircle2 size={16} className="mr-2" />Complete Event</Button>
