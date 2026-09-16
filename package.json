@@ -20,5 +20,10 @@
     "qrcode.react": "^4.2.0",
     "recharts": "^3.7.0",
     "web": "^0.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "0.3.7",
+    "@cloudflare/workers-types": "5.20260916.1",
+    "wrangler": "4.132.0"
   }
 }

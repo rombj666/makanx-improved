@@ -23,7 +23,7 @@ const port = process.env.PORT || 3001;
 initSocket(httpServer);
 
 // Security Middleware
-app.set('trust proxy', 1); // Trust first proxy (Railway/Render/Load Balancers)
+app.set('trust proxy', 1); // Cloudflare router replaces X-Forwarded-For with the edge client IP.
 
 const stripQuotes = (s: string) => s.replace(/^['"`]+|['"`]+$/g, '');
 const normalizeOrigin = (s: string) => stripQuotes(s.trim()).replace(/\/+$/, '');
@@ -93,12 +93,16 @@ app.get('/', (_req, res) => {
   res.send('Smart QR Ordering System API Running');
 });
 
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'smart-qr-api' });
+});
+
 app.get('/test-route', (req, res) => {
   res.send('TEST OK');
 });
 
 if (require.main === module) {
-  httpServer.listen(port, () => {
+  httpServer.listen(Number(port), '0.0.0.0', () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);
   });
 }

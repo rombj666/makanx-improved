@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "smart-qr-api",
+  "main": "cloudflare/index.ts",
+  "compatibility_date": "2026-09-16",
+  "containers": [{
+    "class_name": "ApiContainer",
+    "image": "./Dockerfile",
+    "image_build_context": ".",
+    "max_instances": 1,
+    "instance_type": "standard-1"
+  }],
+  "durable_objects": {
+    "bindings": [{ "name": "API_CONTAINER", "class_name": "ApiContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ApiContainer"] }],
+  "vars": { "NODE_ENV": "production" }
+}
