@@ -252,9 +252,14 @@ export async function getVendorOrders(userId: string) {
   });
 }
 
-export const getVendorLiveOrders = getVendorOrders;
+export async function getVendorLiveOrders(userId: string) {
+  const vendor = await getVendorForUser(userId);
+  await normalizeLiveOrders(vendor.id);
+  return getVendorOrders(userId);
+}
 
 export async function getVendorProductionBatch(vendorId: string, _groupByWindow: boolean) {
+  await normalizeLiveOrders(vendorId);
   return prisma.order.findMany({
     where: { vendorId, status: OrderStatus.PREPARING },
     include: { items: { include: { menuItem: true } } },
@@ -314,19 +319,66 @@ export async function updateOrderStatus(orderId: string, userId: string, status:
   return notifyOrder(orderId);
 }
 
+// Lock parents before touching items so simultaneous final-item actions serialize.
+async function lockOrders(tx: Prisma.TransactionClient, vendorId: string, orderIds: string[]) {
+  if (!orderIds.length) return;
+  await tx.$queryRaw(Prisma.sql`
+    SELECT "id" FROM "Order"
+    WHERE "vendorId" = ${vendorId} AND "id" IN (${Prisma.join(orderIds)})
+    ORDER BY "id" FOR UPDATE
+  `);
+}
+
+async function reconcileReadyOrder(tx: Prisma.TransactionClient, orderId: string, settlePayment = false) {
+  const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order || order.status !== OrderStatus.PREPARING || !order.items.length
+    || order.items.some((item) => item.status !== 'READY')) return;
+  await tx.order.update({
+    where: { id: orderId },
+    data: {
+      status: OrderStatus.READY,
+      readyAt: order.readyAt ?? new Date(),
+      // Preserve the existing whole-order completion/payment behavior for
+      // individual and whole-order actions. Batch repair does not settle payment.
+      ...(settlePayment ? { completedAt: new Date(), paymentStatus: PaymentStatus.PAID } : {}),
+    },
+  });
+}
+
+async function normalizeLiveOrders(vendorId: string) {
+  await prisma.$transaction(async (tx) => {
+    const candidates = await tx.order.findMany({
+      where: {
+        vendorId, status: OrderStatus.PREPARING,
+        event: { status: EventStatus.ACTIVE },
+        items: { some: {}, every: { status: 'READY' } },
+      },
+      select: { id: true },
+    });
+    await lockOrders(tx, vendorId, candidates.map((order) => order.id));
+    for (const order of candidates) await reconcileReadyOrder(tx, order.id);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+}
+
 export async function markOrderItemReady(userId: string, orderId: string, itemId: string) {
-  const { order } = await assertOrderOwner(orderId, userId);
+  const { vendor, order } = await assertOrderOwner(orderId, userId);
   if (!order.items.some((item) => item.id === itemId)) throw new Error('Item not found');
-  await prisma.orderItem.update({ where: { id: itemId }, data: { status: 'READY' } });
-  const remaining = await prisma.orderItem.count({ where: { orderId, status: 'PREPARING' } });
-  if (remaining === 0) await updateOrderStatus(orderId, userId, OrderStatus.READY);
+  await prisma.$transaction(async (tx) => {
+    await lockOrders(tx, vendor.id, [orderId]);
+    await tx.orderItem.update({ where: { id: itemId }, data: { status: 'READY' } });
+    await reconcileReadyOrder(tx, orderId, true);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   return notifyOrder(orderId);
 }
 
 export async function markOrderItemsReady(userId: string, orderId: string) {
-  await assertOrderOwner(orderId, userId);
-  await prisma.orderItem.updateMany({ where: { orderId }, data: { status: 'READY' } });
-  return updateOrderStatus(orderId, userId, OrderStatus.READY);
+  const { vendor } = await assertOrderOwner(orderId, userId);
+  await prisma.$transaction(async (tx) => {
+    await lockOrders(tx, vendor.id, [orderId]);
+    await tx.orderItem.updateMany({ where: { orderId }, data: { status: 'READY' } });
+    await reconcileReadyOrder(tx, orderId, true);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  return notifyOrder(orderId);
 }
 
 export async function markBatchItemsReady(
@@ -338,20 +390,30 @@ export async function markBatchItemsReady(
   remark?: string,
 ) {
   const vendor = await getVendorForUser(userId);
-  const result = await prisma.orderItem.updateMany({
-    where: {
+  const result = await prisma.$transaction(async (tx) => {
+    const where: Prisma.OrderItemWhereInput = {
       menuItemId,
       status: 'PREPARING',
       ...(selectedOptions ? { selectedOptions: { equals: selectedOptions as Prisma.InputJsonValue } } : {}),
       ...(remark !== undefined ? { remark: remark.trim() || null } : {}),
       order: {
         vendorId: vendor.id,
+        status: OrderStatus.PREPARING,
         createdAt: { gte: new Date(windowStartISO), lt: new Date(windowEndISO) },
       },
-    },
-    data: { status: 'READY' },
-  });
-  return { updatedCount: result.count };
+    };
+    const items = await tx.orderItem.findMany({ where, select: { id: true, orderId: true } });
+    const orderIds = [...new Set(items.map((item) => item.orderId))];
+    await lockOrders(tx, vendor.id, orderIds);
+    const updated = await tx.orderItem.updateMany({
+      where: { ...where, id: { in: items.map((item) => item.id) } },
+      data: { status: 'READY' },
+    });
+    for (const orderId of orderIds) await reconcileReadyOrder(tx, orderId);
+    return { updatedCount: updated.count, orderIds };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  const orders = await Promise.all(result.orderIds.map(notifyOrder));
+  return { updatedCount: result.updatedCount, orders: orders.filter(Boolean) };
 }
 
 export async function bulkStatusUpdate(userId: string, orderIds: string[], status: OrderStatus) {

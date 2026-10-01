@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
+import { applyLiveOrder, belongsInKitchen } from '../../lib/liveOrders';
 import { useSocket } from '../../context/SocketContext';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
@@ -49,6 +50,7 @@ export function VendorDashboard() {
 
   // Request deduplication and backoff
   const isFetchingRef = useRef(false);
+  const orderRevision = useRef(0);
   const lastFetchRef = useRef(0);
   const [isThrottled, setIsThrottled] = useState(false);
 
@@ -56,9 +58,18 @@ export function VendorDashboard() {
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [expandedHistoryEvents, setExpandedHistoryEvents] = useState<Set<string>>(new Set());
 
+  // Apply committed API results immediately, even when refreshes are throttled.
+  const applyOrder = useCallback((order: Order) => {
+    orderRevision.current += 1;
+    setProductionOrders((previous) => applyLiveOrder(previous, order, 'kitchen'));
+    setHistoryOrders((previous) => applyLiveOrder(previous, order, 'ready'));
+  }, []);
+
   const fetchHistoryOrders = useCallback(async () => {
+    const revision = orderRevision.current;
     try {
       const { data } = await api.get('/orders/vendor-live');
+      if (revision !== orderRevision.current) return;
       if (data.success) {
         // In the new flow, orders marked READY are the "finished" ones for the history tab
         const ready = (data.data || []).filter((o: Order) => o.status === 'READY');
@@ -76,11 +87,13 @@ export function VendorDashboard() {
 
     isFetchingRef.current = true;
     lastFetchRef.current = now;
+    const revision = orderRevision.current;
     try {
       const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
+      if (revision !== orderRevision.current) return;
       if (res.data.success) {
         // Only PREPARING orders for the kitchen view
-        const preparing = (res.data.data || []).filter((o: Order) => o.status === 'PREPARING');
+        const preparing = (res.data.data || []).filter(belongsInKitchen);
         setProductionOrders(preparing);
       }
     } catch (err: any) {
@@ -101,13 +114,15 @@ export function VendorDashboard() {
 
     isFetchingRef.current = true;
     lastFetchRef.current = now;
+    const revision = orderRevision.current;
     try {
       const [prodRes, liveRes] = await Promise.all([
         api.get(`/orders/vendor/production-batch?groupByWindow=false`),
         api.get('/orders/vendor-live')
       ]);
+      if (revision !== orderRevision.current) return;
       if (prodRes.data.success) {
-        const preparing = (prodRes.data.data || []).filter((o: Order) => o.status === 'PREPARING');
+        const preparing = (prodRes.data.data || []).filter(belongsInKitchen);
         setProductionOrders(preparing);
       }
       if (liveRes.data.success) {
@@ -182,37 +197,7 @@ export function VendorDashboard() {
       });
 
       socket.on('order_updated', (updatedOrder: Order) => {
-        // Update production orders
-        setProductionOrders((prev) => {
-          if (updatedOrder.status === 'PREPARING') {
-            const idx = prev.findIndex((o) => o.id === updatedOrder.id);
-            if (idx >= 0) {
-              const next = prev.slice();
-              next[idx] = updatedOrder;
-              return next;
-            }
-            return [updatedOrder, ...prev];
-          } else {
-            // If it's no longer preparing, remove it
-            return prev.filter((o) => o.id !== updatedOrder.id);
-          }
-        });
-
-        // Update history orders
-        setHistoryOrders((prev) => {
-          if (updatedOrder.status === 'READY') {
-            const idx = prev.findIndex((o) => o.id === updatedOrder.id);
-            if (idx >= 0) {
-              const next = prev.slice();
-              next[idx] = updatedOrder;
-              return next;
-            }
-            return [updatedOrder, ...prev];
-          } else {
-            // If it's no longer ready, remove it
-            return prev.filter((o) => o.id !== updatedOrder.id);
-          }
-        });
+        applyOrder(updatedOrder);
         scheduleRefetch();
       });
 
@@ -227,7 +212,7 @@ export function VendorDashboard() {
         socket.off('vendor_orders_changed');
       }
     };
-  }, [socket, refetchAll]);
+  }, [socket, refetchAll, applyOrder]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -254,7 +239,8 @@ export function VendorDashboard() {
   }, [fetchProductionBatch, fetchHistoryOrders, isThrottled]);
 
   const markOrderReady = async (id: string) => {
-    await api.post(`/orders/${id}/items/mark-ready`);
+    const res = await api.post(`/orders/${id}/items/mark-ready`);
+    if (res.data.success) applyOrder(res.data.data);
     await refetchAll();
   };
 
@@ -385,13 +371,14 @@ export function VendorDashboard() {
                       className="bg-green-600 text-white shrink-0 w-[100px]"
                       onClick={async () => {
                         try {
-                          await api.post('/orders/vendor/production/mark-ready', {
+                          const res = await api.post('/orders/vendor/production/mark-ready', {
                             menuItemId: it.menuItemId,
                             windowStart: windowStartISO,
                             windowEnd: windowEndISO,
                             selectedOptions: it.selectedOptions,
                             remark: it.remark,
                           });
+                          if (res.data.success) res.data.data.orders.forEach(applyOrder);
                           toast.success(`${it.name} marked ready`);
                           await refetchAll();
                         } catch (e: any) {
@@ -456,6 +443,7 @@ export function VendorDashboard() {
                           onClick={async () => {
                             try {
                               const res = await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
+                              if (res.data.success) applyOrder(res.data.data);
                               if (res.data.success && res.data.data.status === 'READY') {
                                 toast.success('Order is fully ready!');
                               } else {
@@ -764,7 +752,8 @@ export function VendorDashboard() {
                             <button
                               onClick={async () => {
                                 try {
-                                  await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
+                                  const res = await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
+                                  if (res.data.success) applyOrder(res.data.data);
                                   toast.success(`${item.menuItem.name} marked ready`);
                                   await refetchAll();
                                 } catch (e: any) {
