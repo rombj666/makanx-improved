@@ -4,7 +4,7 @@ import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { getOrCreateGuestId } from '../../lib/guest';
-import { getOrCreateDeviceId } from '../../lib/deviceOrderLock';
+import { hasOrderLock, saveOrderLock, DEVICE_ORDER_LOCK_MESSAGE } from '../../lib/deviceOrderLock';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
 
@@ -188,12 +188,15 @@ export function CustomerOrderPage() {
 
   const checkout = async () => {
     if (!store?.settings?.orderingOpen || cart.lines.length === 0) return;
+    if (hasOrderLock(vendorKey)) {
+      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
+      return;
+    }
     setPlacing(true);
     try {
       const orderPayload = {
         vendorId: store.id,
         guestId: getOrCreateGuestId(),
-        deviceId: getOrCreateDeviceId(),
         paymentMode: 'PAY_AT_COUNTER',
         items: cart.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -208,6 +211,7 @@ export function CustomerOrderPage() {
       const { data } = store.slug
         ? await api.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
         : await api.post('/orders', orderPayload);
+      saveOrderLock(vendorKey, data.data.order.id);
       cart.clear();
       toast.success(`Order #${data.data.order.eventOrderNumber} placed`);
       navigate(`/track/${data.data.order.id}`);

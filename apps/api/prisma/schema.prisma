@@ -115,6 +115,7 @@ model Order {
   customerPhone    String?
   customerEmail    String?
   deviceId         String?
+  deviceOrderDate  String?
   vendorId         String
   displayNumber    Int
   eventId          String
@@ -133,6 +134,10 @@ model Order {
   items            OrderItem[]
 
   @@unique([eventId, eventOrderNumber])
+  // One order per device per Malaysia calendar day per event. deviceId /
+  // deviceOrderDate are nullable so guest rows without a device simply stay
+  // outside this uniqueness scope (Postgres treats NULLs as distinct).
+  @@unique([eventId, deviceId, deviceOrderDate])
   @@index([vendorId, createdAt])
   @@index([eventId, createdAt])
   @@index([vendorId, deviceId, createdAt])

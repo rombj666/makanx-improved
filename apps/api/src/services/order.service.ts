@@ -2,9 +2,8 @@ import { EventStatus, OrderStatus, PaymentMode, PaymentStatus, Prisma } from '@p
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getIO } from '../socket';
-import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
-import { dailyCupUsageWhere, evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
+import { currentMalaysiaDayRange, dailyCupUsageWhere, evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -19,7 +18,6 @@ const createOrderSchema = z.object({
   })).min(1),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_COUNTER),
   guestId: z.string().min(1),
-  deviceId: z.string().optional(),
   customerName: z.string().max(100).optional(),
   customerPhone: z.string().max(30).optional(),
   customerEmail: z.union([z.string().email(), z.literal('')]).optional(),
@@ -81,7 +79,7 @@ async function getVendorForUser(userId: string) {
   return vendor;
 }
 
-export async function createOrder(_customerId: string | undefined, input: unknown) {
+export async function createOrder(_customerId: string | undefined, input: unknown, deviceId?: string) {
   const parsed = createOrderSchema.parse(input);
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: parsed.vendorId },
@@ -97,20 +95,9 @@ export async function createOrder(_customerId: string | undefined, input: unknow
 
   const requestedQuantity = sumDrinkQuantities(parsed.items);
   if (settings?.deviceOrderLimitEnabled) {
-    if (!parsed.deviceId) throw new Error('Device ID is required.');
+    if (!deviceId) throw new Error('Device ID is required.');
     if (requestedQuantity > settings.maxDrinksPerOrder) {
       throw new Error(`Maximum ${settings.maxDrinksPerOrder} item(s) per order.`);
-    }
-    const { start, end } = getMalaysiaDayRange(getMalaysiaTodayString());
-    const existing = await prisma.order.findFirst({
-      where: { vendorId: vendor.id, eventId: activeEvent.id, deviceId: parsed.deviceId, createdAt: { gte: start, lt: end } },
-      select: { id: true },
-    });
-    if (existing) {
-      const error = new Error('This device has already placed an order today.');
-      (error as any).code = 'DEVICE_ORDER_EXISTS';
-      (error as any).existingOrderId = existing.id;
-      throw error;
     }
   }
 
@@ -154,6 +141,25 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       if (!lockedEvent) throw new Error(ORDERING_CLOSED_MESSAGE);
       if (lockedEvent.orderingStatus === 'MANUALLY_CLOSED') throw new Error(ORDERING_CLOSED_MESSAGE);
       const orderCreatedAt = new Date();
+
+      // Per-device daily order check now runs inside the same event-row lock
+      // that serializes cup-limit accounting. The database unique constraint
+      // (eventId, deviceId, deviceOrderDate) is the final backstop that makes
+      // a second order from the same device on the same day impossible even
+      // under concurrent racing requests.
+      if (settings?.deviceOrderLimitEnabled && deviceId) {
+        const deviceDate = currentMalaysiaDayRange(orderCreatedAt).date;
+        const existing = await tx.order.findFirst({
+          where: { eventId: lockedEvent.id, deviceId, deviceOrderDate: deviceDate },
+          select: { id: true },
+        });
+        if (existing) {
+          const error = new Error('This device has already placed an order today.');
+          (error as any).code = 'DEVICE_ORDER_EXISTS';
+          (error as any).existingOrderId = existing.id;
+          throw error;
+        }
+      }
 
       // Keep the event lock until the order and its items are committed. Every
       // concurrent customer order for this event must pass through this lock,
@@ -202,7 +208,8 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           customerName: parsed.customerName?.trim() || null,
           customerPhone: parsed.customerPhone?.trim() || null,
           customerEmail: parsed.customerEmail?.trim() || null,
-          deviceId: parsed.deviceId || null,
+          deviceId: deviceId || null,
+          deviceOrderDate: currentMalaysiaDayRange(orderCreatedAt).date,
           vendorId: vendor.id,
           eventId: lockedEvent.id,
           eventOrderNumber,
@@ -224,13 +231,13 @@ export async function createOrder(_customerId: string | undefined, input: unknow
   return { order, estimatedMinutes: Math.max(...menuItems.map((item) => item.basePrepMin), 5) };
 }
 
-export async function createOrderForVendorSlug(slug: string, input: unknown) {
+export async function createOrderForVendorSlug(slug: string, input: unknown, deviceId?: string) {
   const vendor = await prisma.vendorProfile.findUnique({
     where: { slug },
     select: { id: true },
   });
   if (!vendor) throw new Error('Store not found');
-  return createOrder(undefined, { ...(input as any), vendorId: vendor.id });
+  return createOrder(undefined, { ...(input as any), vendorId: vendor.id }, deviceId);
 }
 
 export async function getVendorOrders(userId: string) {

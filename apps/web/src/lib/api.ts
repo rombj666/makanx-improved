@@ -8,6 +8,9 @@ export const API_ORIGIN = API_URL.replace(/\/api$/, '');
 
 export const api = axios.create({
   baseURL: API_URL,
+  // Server-issued device identity travels in an HttpOnly cookie, so every
+  // request must carry the browser credential cookie (and accept Set-Cookie).
+  withCredentials: true,
   // DO NOT set default Content-Type to 'application/json' here.
   // Axios sets it automatically for JSON, and handles multipart for FormData.
   headers: {

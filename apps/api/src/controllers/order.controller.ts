@@ -15,7 +15,7 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const result = await orderService.createOrder(req.user?.userId, req.body);
+    const result = await orderService.createOrder(req.user?.userId, req.body, req.deviceId);
     return res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error instanceof ZodError) {

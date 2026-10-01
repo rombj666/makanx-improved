@@ -1,26 +1,9 @@
 export const ONE_DRINK_ORDER_MESSAGE = 'Only 1 drink can be ordered per device.';
 export const DEVICE_ORDER_LOCK_MESSAGE = 'This device has already placed an order for this vendor today.';
 
-const DEVICE_ID_KEY = 'smart_qr_device_id';
-
-function makeId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-export function getOrCreateDeviceId() {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_KEY);
-    if (existing && existing.trim() !== '') return existing;
-    const next = makeId();
-    localStorage.setItem(DEVICE_ID_KEY, next);
-    return next;
-  } catch {
-    return makeId();
-  }
-}
+// Device identity is now issued by the server as an HttpOnly cookie
+// (smart_qr_device_id). The client no longer fabricates its own device id,
+// so the old localStorage-based getOrCreateDeviceId has been removed.
 
 export function getOrderLockKey(vendorKey: string) {
   return `smart_qr_order_lock_${vendorKey}`;

@@ -12,6 +12,7 @@ import vendorRoutes from './routes/vendor.routes';
 import publicRoutes from './routes/public.routes';
 
 import { configureSecurity } from './middleware/security';
+import { deviceMiddleware } from './middleware/device';
 
 dotenv.config();
 
@@ -80,6 +81,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 const apiRouter = express.Router();
+apiRouter.use(deviceMiddleware);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/public', publicRoutes);
 apiRouter.use('/orders', orderRoutes);

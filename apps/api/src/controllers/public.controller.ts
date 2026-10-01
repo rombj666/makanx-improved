@@ -27,7 +27,7 @@ export const getVendorMenu = async (req: Request, res: Response) => {
 
 export const createVendorOrder = async (req: Request, res: Response) => {
   try {
-    const result = await orderService.createOrderForVendorSlug(String(req.params.slug || ''), req.body);
+    const result = await orderService.createOrderForVendorSlug(String(req.params.slug || ''), req.body, req.deviceId);
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     if (error.code === 'DEVICE_ORDER_EXISTS') {
