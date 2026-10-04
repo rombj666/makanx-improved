@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+import { generateGuestToken, verifyGuestToken } from '../utils/jwt';
 import { Router } from 'express';
 import * as authController from '../controllers/auth.controller';
 import { requireAuth } from '../middleware/auth';
@@ -14,7 +16,26 @@ const resetLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+router.post('/guest', (req, res) => {
+  let guestId: string;
+  if (req.headers.authorization) {
+    const match = /^Bearer ([^ ]+)$/i.exec(req.headers.authorization);
+    try {
+      if (!match) throw new Error('Invalid credential');
+      guestId = verifyGuestToken(match[1]).guestId;
+    } catch {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+  } else {
+    // Never exchange a client-supplied legacy guestId or unsigned device cookie.
+    guestId = `guest:${randomUUID()}`;
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ success: true, data: { guestId, guestAccessToken: generateGuestToken(guestId) } });
+});
+
 router.post('/login', authController.login);
+router.post('/logout', authController.logout);
 router.get('/me', requireAuth, authController.getMe);
 
 // Password Reset

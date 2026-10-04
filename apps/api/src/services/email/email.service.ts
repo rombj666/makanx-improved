@@ -20,9 +20,6 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   try {
-    const toLabel = Array.isArray(to) ? to.join(', ') : to;
-    console.log(`[EmailService] Attempting to send email to ${toLabel} with subject: "${subject}"...`);
-    
     const emailPayload: any = {
       from,
       to,
@@ -42,14 +39,13 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     const result = await resend.emails.send(emailPayload);
 
     if (result.error) {
-      console.error(`[EmailService] Resend API error for ${to}:`, result.error);
+      console.error('[EmailService] Provider rejected email delivery');
       return { ok: false, error: 'Resend API error', detail: result.error };
     }
 
-    console.log(`[EmailService] Email sent successfully to ${to}, Message ID: ${result.data?.id}`);
     return { ok: true, messageId: result.data?.id };
   } catch (err: any) {
-    console.error(`[EmailService] Exception while sending email to ${to}:`, err?.message || err);
+    console.error('[EmailService] Email delivery failed');
     return { ok: false, error: 'Exception during send', detail: err?.message || err };
   }
 }

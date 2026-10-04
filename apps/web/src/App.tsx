@@ -35,9 +35,10 @@ function VendorLayout() {
 
 export default function App() {
   return (
+    <BrowserRouter>
     <AuthProvider>
       <SocketProvider>
-        <BrowserRouter>
+
           <Routes>
             <Route element={<CustomerLayout />}>
               <Route path="/v/:vendorSlug" element={<CustomerOrderPage />} />
@@ -57,8 +58,9 @@ export default function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
           <Toaster />
-        </BrowserRouter>
+
       </SocketProvider>
     </AuthProvider>
+    </BrowserRouter>
   );
 }

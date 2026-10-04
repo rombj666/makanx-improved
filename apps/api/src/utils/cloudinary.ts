@@ -27,7 +27,8 @@ export const uploadToCloudinary = (
         folder,
         public_id: publicId,
         resource_type: 'image',
-        // Optional: transformations like resizing can be added here
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        format: 'webp', // Decode and re-encode; never deliver original active content.
       },
       (error, result) => {
         if (error) return reject(error);

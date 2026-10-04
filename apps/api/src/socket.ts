@@ -1,8 +1,9 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { verifyToken } from './utils/jwt';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { verifyToken, verifyGuestToken } from './utils/jwt';
+import { decode, JwtPayload } from 'jsonwebtoken';
+import prisma from './utils/prisma';
+import { vendorTokenFromCookieHeader } from './utils/vendor-auth-cookie';
 
 let io: Server;
 
@@ -26,16 +27,17 @@ export const initSocket = (httpServer: HttpServer) => {
   const defaultDevOrigins = isProd ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
   const allowedOrigins = Array.from(new Set([...originsFromEnv, ...defaultDevOrigins].map(normalize)));
-  const allowAllOrigins = allowedOrigins.includes('*');
+  if (allowedOrigins.includes('*')) {
+    throw new Error('CORS_ORIGIN and CLIENT_URL must list explicit origins when credentials are enabled');
+  }
 
-  console.log('[socket] allowed origins', { allowAll: allowAllOrigins, origins: allowedOrigins.filter((o) => o !== '*') });
+  console.log('[socket] allowed origins', { origins: allowedOrigins });
 
   io = new Server(httpServer, {
     cors: {
       origin: (origin, cb) => {
         if (!origin) return cb(null, true);
         const cleaned = normalize(origin);
-        if (allowAllOrigins) return cb(null, true);
         if (allowedOrigins.includes(cleaned)) return cb(null, cleaned);
         return cb(null, false);
       },
@@ -44,130 +46,61 @@ export const initSocket = (httpServer: HttpServer) => {
     }
   });
 
-  io.use((socket, next) => {
-    const token = (socket.handshake as any)?.auth?.token;
-    const guestId = (socket.handshake as any)?.auth?.guestId;
-    if (typeof guestId === 'string' && guestId.trim() !== '') {
-      (socket.data as any).guestId = guestId.trim();
+  io.use(async (socket, next) => {
+    const bearerToken = socket.handshake.auth?.token;
+    const cookieToken = vendorTokenFromCookieHeader(socket.handshake.headers.cookie);
+    const reject = () => {
+      const error = new Error('Authentication required: invalid or expired token') as Error & { data: object };
+      error.data = { code: 'SOCKET_AUTH_ERROR' };
+      next(error);
+    };
+    const token = typeof bearerToken === 'string' && bearerToken ? bearerToken : (cookieToken || '');
+    if (!token) return reject();
+    try {
+      let vendorUserId: string | undefined;
+      if (typeof bearerToken === 'string' && bearerToken) {
+        // Bearer is exclusively a guest credential after the vendor migration.
+        socket.data.guestId = verifyGuestToken(token).guestId;
+      } else {
+        vendorUserId = verifyToken(token).userId;
+      }
+      if (vendorUserId) {
+        const vendor = await prisma.vendorProfile.findUnique({
+          where: { userId: vendorUserId }, select: { id: true },
+        });
+        if (!vendor) return reject();
+        socket.data.room = `vendor:${vendor.id}`;
+      } else {
+        socket.data.room = `user:${socket.data.guestId}`;
+      }
+      // Read expiry only after signature and identity verification above.
+      const verifiedToken = vendorUserId && cookieToken ? cookieToken : token;
+      const expiresAt = (decode(verifiedToken) as JwtPayload).exp;
+      if (typeof expiresAt !== 'number' || expiresAt * 1000 <= Date.now()) return reject();
+      socket.data.expiresAt = expiresAt * 1000;
+      next();
+    } catch {
+      return reject();
     }
-    if (typeof token === 'string' && token.trim() !== '') {
-      try {
-        const decoded: any = verifyToken(token.trim());
-        (socket.data as any).userId = decoded?.userId;
-        (socket.data as any).role = decoded?.role;
-      } catch {}
-    }
-    next();
   });
 
   io.on('connection', (socket: Socket) => {
-    console.log('Client connected:', socket.id);
-
-    const autoGuestId = String((socket.data as any)?.guestId || '').trim();
-    if (autoGuestId) {
-      socket.join(`user:${autoGuestId}`);
-      console.log(`Socket ${socket.id} joined guest room user:${autoGuestId}`);
-    }
-
-    const autoUserId = String((socket.data as any)?.userId || '').trim();
-    const autoRole = String((socket.data as any)?.role || '').trim();
-    if (autoUserId) {
-      socket.join(`user:${autoUserId}`);
-      console.log(`Socket ${socket.id} joined user:${autoUserId}`);
-    }
-    if (autoUserId && autoRole === 'VENDOR') {
-      prisma.vendorProfile
-        .findUnique({ where: { userId: autoUserId } })
-        .then((vendorProfile) => {
-          if (vendorProfile) {
-            (socket.data as any).vendorId = vendorProfile.id;
-            socket.join(`vendor:${vendorProfile.id}`);
-            console.log(`Socket ${socket.id} joined vendor:${vendorProfile.id}`);
-          } else {
-            console.warn(`Vendor profile not found for user ${autoUserId}`);
-          }
-        })
-        .catch((e) => {
-          console.error('Socket vendor auto-join failed:', e);
-        });
-    }
-
-    socket.on('join', async (payload: string) => {
-      if (payload && payload.startsWith('user:')) {
-        const guestId = payload.split(':')[1];
-        if (guestId) {
-          socket.join(`user:${guestId}`);
-          console.log(`Socket ${socket.id} joined guest room user:${guestId}`);
-          (socket.data as any).guestId = guestId;
-        }
+    let expiryTimer: ReturnType<typeof setTimeout>;
+    const enforceExpiry = () => {
+      const remaining = socket.data.expiresAt - Date.now();
+      if (remaining <= 0) {
+        socket.emit('auth_error', { code: 'SOCKET_AUTH_ERROR', message: 'Session expired. Please authenticate again.' });
+        socket.disconnect(true);
         return;
       }
-
-      try {
-        const decoded: any = verifyToken(payload);
-        const { userId, role } = decoded;
-
-        (socket.data as any).userId = userId;
-        (socket.data as any).role = role;
-        socket.join(`user:${userId}`);
-        console.log(`Socket ${socket.id} joined user:${userId}`);
-
-        if (role === 'VENDOR') {
-          const vendorProfile = await prisma.vendorProfile.findUnique({
-            where: { userId }
-          });
-
-          if (vendorProfile) {
-            (socket.data as any).vendorId = vendorProfile.id;
-            socket.join(`vendor:${vendorProfile.id}`);
-            console.log(`Socket ${socket.id} joined vendor:${vendorProfile.id}`);
-          } else {
-            console.warn(`Vendor profile not found for user ${userId}`);
-          }
-        }
-      } catch (e) {
-        console.error('Socket join failed:', e);
-      }
-    });
-
-    socket.on('join_vendor', async (vendorId: string) => {
-      const claimed = String(vendorId || '').trim();
-      const bound = String((socket.data as any)?.vendorId || '').trim();
-      if (bound && claimed && bound !== claimed) {
-        console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
-        return;
-      }
-      if (!bound && claimed) {
-        const role = String((socket.data as any)?.role || '').trim();
-        const userId = String((socket.data as any)?.userId || '').trim();
-        if (role !== 'VENDOR' || !userId) {
-          console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
-          return;
-        }
-        try {
-          const vendorProfile = await prisma.vendorProfile.findUnique({ where: { userId } });
-          const actual = String(vendorProfile?.id || '').trim();
-          if (!actual || actual !== claimed) {
-            console.warn(`Socket ${socket.id} denied join_vendor vendor:${claimed}`);
-            return;
-          }
-          (socket.data as any).vendorId = actual;
-          socket.join(`vendor:${actual}`);
-          console.log(`Socket ${socket.id} joined vendor:${actual}`);
-        } catch (e) {
-          console.error('Socket join_vendor lookup failed:', e);
-        }
-        return;
-      }
-      if (bound) {
-        socket.join(`vendor:${bound}`);
-        console.log(`Socket ${socket.id} joined vendor:${bound}`);
-      }
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
+      // Guest tokens may outlive Node's maximum timeout; reschedule without overflow.
+      expiryTimer = setTimeout(enforceExpiry, Math.min(remaining, 2_147_483_647));
+      expiryTimer.unref();
+    };
+    enforceExpiry();
+    if (socket.connected) void socket.join(socket.data.room);
+    // Room membership is server-owned. No client join/join_vendor handlers exist.
+    socket.on('disconnect', () => clearTimeout(expiryTimer));
   });
 
   return io;

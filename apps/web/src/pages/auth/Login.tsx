@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { SESSION_EXPIRED_MESSAGE, VENDOR_SESSION_EXPIRED } from '../../lib/vendorSession';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -21,6 +22,13 @@ type LoginForm = z.infer<typeof loginSchema>;
 export function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => {
+    const onExpired = () => setSessionExpired(true);
+    window.addEventListener(VENDOR_SESSION_EXPIRED, onExpired);
+    return () => window.removeEventListener(VENDOR_SESSION_EXPIRED, onExpired);
+  }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,8 +42,8 @@ export function Login() {
     setErrorMessage(null);
     try {
       const res = await api.post('/auth/login', data);
-      const { user, token } = res.data.data;
-      login(token, user);
+      const { user } = res.data.data;
+      login(user);
       toast.success('Welcome back!');
       
       navigate('/vendor', { replace: true });
@@ -60,6 +68,9 @@ export function Login() {
           </p>
         </CardHeader>
         <CardContent className="p-6 sm:p-8 pt-4">
+          {(sessionExpired || searchParams.get('reason') === 'session-expired') && (
+            <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{SESSION_EXPIRED_MESSAGE}</p>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-2">
               <Input

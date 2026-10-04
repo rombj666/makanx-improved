@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
-import { getOrCreateGuestId } from '../../lib/guest';
+import { ensureGuestToken, guestApi } from '../../lib/guest';
 import { hasOrderLock, saveOrderLock, DEVICE_ORDER_LOCK_MESSAGE } from '../../lib/deviceOrderLock';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
@@ -26,7 +26,7 @@ interface MenuItem {
   id: string;
   name: string;
   description?: string;
-  price: number;
+  price?: number;
   imageUrl?: string;
   optionGroups?: OptionGroup[];
   remarksEnabled?: boolean;
@@ -43,8 +43,7 @@ interface Store {
     orderingStatus?: 'OPEN' | 'MANUALLY_CLOSED' | 'LIMIT_REACHED';
     orderingClosedReason?: string | null;
     showPrices: boolean;
-    deviceOrderLimitEnabled: boolean;
-    maxDrinksPerOrder: number;
+    maxDrinksPerOrder: number | null;
   };
   menuItems: MenuItem[];
 }
@@ -64,7 +63,7 @@ export function CustomerOrderPage() {
     storeId: store?.id || vendorKey,
     vendorId: store?.id || vendorKey,
     vendorName: store?.businessName || '',
-    maxItems: store?.settings?.deviceOrderLimitEnabled ? store.settings.maxDrinksPerOrder : 99,
+    maxItems: store?.settings?.maxDrinksPerOrder ?? 99,
   });
 
   useEffect(() => {
@@ -93,6 +92,7 @@ export function CustomerOrderPage() {
       }, millisecondsUntilNextMalaysiaMidnight() + 250);
     };
 
+    void ensureGuestToken().catch(() => toast.error('Order access could not be established. Please retry or contact the store.'));
     void loadMenu(true);
     scheduleMidnightRefresh();
     return () => {
@@ -125,7 +125,7 @@ export function CustomerOrderPage() {
       cart.addLine({
         menuItemId: item.id,
         name: item.name,
-        price: Number(item.price),
+        price: Number(item.price || 0),
         quantity: 1,
         remark: '',
         imageUrl: item.imageUrl || '',
@@ -175,7 +175,7 @@ export function CustomerOrderPage() {
     cart.addLine({
       menuItemId: customizingItem.id,
       name: customizingItem.name,
-      price: Number(customizingItem.price) + customizationPrice,
+      price: Number(customizingItem.price || 0) + customizationPrice,
       quantity: 1,
       remark: remark.trim(),
       imageUrl: customizingItem.imageUrl || '',
@@ -196,7 +196,6 @@ export function CustomerOrderPage() {
     try {
       const orderPayload = {
         vendorId: store.id,
-        guestId: getOrCreateGuestId(),
         paymentMode: 'PAY_AT_COUNTER',
         items: cart.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -209,8 +208,8 @@ export function CustomerOrderPage() {
           })),
       };
       const { data } = store.slug
-        ? await api.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
-        : await api.post('/orders', orderPayload);
+        ? await guestApi.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
+        : await guestApi.post('/orders', orderPayload);
       saveOrderLock(vendorKey, data.data.order.id);
       cart.clear();
       toast.success(`Order #${data.data.order.eventOrderNumber} placed`);
@@ -224,8 +223,7 @@ export function CustomerOrderPage() {
           settings: {
             ...(current.settings || {
               showPrices: true,
-              deviceOrderLimitEnabled: false,
-              maxDrinksPerOrder: 99,
+              maxDrinksPerOrder: null,
             }),
             orderingOpen: false,
             orderingStatus: 'LIMIT_REACHED',
@@ -398,7 +396,7 @@ export function CustomerOrderPage() {
               className="mt-4 h-12 w-full rounded-2xl bg-black font-bold text-white disabled:cursor-not-allowed disabled:bg-neutral-300"
             >
               {showPrices
-                ? `Add to cart · RM${(Number(customizingItem.price) + customizationPrice).toFixed(2)}`
+                ? `Add to cart · RM${(Number(customizingItem.price || 0) + customizationPrice).toFixed(2)}`
                 : 'Add to cart'}
             </button>
           </div>

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { formatMalaysiaDateTime, getMalaysiaDayRange } from '../utils/date';
+import { moneyNumber, sumMoney } from '../utils/money';
 
 const VALID_SALES_STATUSES: OrderStatus[] = [OrderStatus.READY];
 
@@ -25,8 +26,8 @@ type SalesOrder = {
 };
 
 function orderSalesAmount(order: Pick<SalesOrder, 'items' | 'totalAmount'>) {
-  const itemTotal = order.items.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
-  return itemTotal || Number(order.totalAmount);
+  if (!order.items.length) return order.totalAmount;
+  return sumMoney(order.items.map((item) => item.price.mul(item.quantity)));
 }
 
 async function context(req: Request) {
@@ -72,7 +73,7 @@ async function ordersFor(req: Request) {
     orderBy: { createdAt: 'asc' },
   });
   const matchingOrderItems = orders.reduce((sum, order) => sum + order.items.length, 0);
-  const matchingRevenue = orders.reduce((sum, order) => sum + orderSalesAmount(order), 0);
+  const matchingRevenue = moneyNumber(sumMoney(orders.map(orderSalesAmount)));
   console.info('[analytics:sales-report]', {
     selectedDate: ctx.date,
     malaysiaRange: {
@@ -98,8 +99,12 @@ async function ordersFor(req: Request) {
 export const vendorSalesSummary = async (req: Request, res: Response) => {
   try {
     const { orders } = await ordersFor(req);
-    const revenue = orders.reduce((sum, order) => sum + orderSalesAmount(order), 0);
-    res.json({ success: true, data: { orders: orders.length, revenue, avgOrder: orders.length ? revenue / orders.length : 0 } });
+    const revenue = sumMoney(orders.map(orderSalesAmount));
+    res.json({ success: true, data: {
+      orders: orders.length,
+      revenue: moneyNumber(revenue),
+      avgOrder: orders.length ? moneyNumber(revenue.div(orders.length)) : 0,
+    } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }
@@ -114,17 +119,20 @@ export const vendorProductPerformance = async (req: Request, res: Response) => {
         const current = products.get(item.menuItemId) || {
           productName: item.menuItem.name,
           qtySold: 0,
-          revenue: 0,
+          revenue: new Prisma.Decimal(0),
           optionBreakdown: {},
           remarks: [],
         };
         current.qtySold += item.quantity;
-        current.revenue += Number(item.price) * item.quantity;
+        current.revenue = current.revenue.add(item.price.mul(item.quantity));
         if (item.remark) current.remarks.push(item.remark);
         products.set(item.menuItemId, current);
       }
     }
-    res.json({ success: true, data: Array.from(products.values()) });
+    res.json({ success: true, data: Array.from(products.values()).map((product) => ({
+      ...product,
+      revenue: moneyNumber(product.revenue),
+    })) });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }
@@ -135,12 +143,12 @@ export const productPerformance = vendorProductPerformance;
 export const vendorRevenueTrend = async (req: Request, res: Response) => {
   try {
     const { orders } = await ordersFor(req);
-    const buckets = Array.from({ length: 24 }, (_, hour) => ({ hour, revenue: 0 }));
+    const buckets = Array.from({ length: 24 }, (_, hour) => ({ hour, revenue: new Prisma.Decimal(0) }));
     for (const order of orders) {
       const hour = new Date(order.createdAt.getTime() + 8 * 60 * 60 * 1000).getUTCHours();
-      buckets[hour].revenue += Number(order.totalAmount);
+      buckets[hour].revenue = buckets[hour].revenue.add(orderSalesAmount(order));
     }
-    res.json({ success: true, data: buckets });
+    res.json({ success: true, data: buckets.map((bucket) => ({ ...bucket, revenue: moneyNumber(bucket.revenue) })) });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }
@@ -168,13 +176,13 @@ export const vendorCompletedOrders = async (req: Request, res: Response) => {
     const { orders } = await ordersFor(req);
     res.json({ success: true, data: orders.map((order) => ({
       orderNumber: `#${order.eventOrderNumber}`,
-      totalAmount: orderSalesAmount(order),
+      totalAmount: moneyNumber(orderSalesAmount(order)),
       createdAt: order.createdAt,
       completedAt: order.completedAt,
       items: order.items.map((item) => ({
         productName: item.menuItem.name,
         qty: item.quantity,
-        price: Number(item.price),
+        price: moneyNumber(item.price),
         remark: item.remark,
         selectedOptions: item.selectedOptions,
       })),

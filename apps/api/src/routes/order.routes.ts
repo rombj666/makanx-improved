@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as orderController from '../controllers/order.controller';
-import { requireAuth, requireRole, optionalAuth } from '../middleware/auth';
+import { requireAuth, requireRole, optionalAuth, requireGuestAuth, requireOrderAuth } from '../middleware/auth';
 import { Role } from '@prisma/client';
 
 const router = Router();
@@ -26,8 +26,8 @@ router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderControl
 
 console.log('[order] Registering customer specific routes');
 // Customer
-router.post('/', optionalAuth, orderController.createOrder);
-router.get('/my-orders', optionalAuth, orderController.getCustomerOrders);
+router.post('/', requireGuestAuth, orderController.createOrder);
+router.get('/my-orders', requireGuestAuth, orderController.getCustomerOrders);
 
 console.log('[order] Registering order specific actions');
 // Order specific actions (keep above generic /:id)
@@ -47,6 +47,6 @@ router.patch('/:id/status', requireAuth, requireRole([Role.VENDOR]), orderContro
 
 console.log('[order] Registering generic order lookup (must be last)');
 // Generic order lookup MUST be last to avoid catching specific string routes
-router.get('/:id', optionalAuth, orderController.getOrderById);
+router.get('/:id', requireOrderAuth, orderController.getOrderById);
 
 export default router;

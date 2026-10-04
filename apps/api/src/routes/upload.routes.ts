@@ -1,6 +1,6 @@
 
 import { Router } from 'express';
-import { uploadMemory } from '../middleware/uploadCloudinary';
+import { uploadImage } from '../middleware/uploadCloudinary';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { requireAuth } from '../middleware/auth';
 
@@ -11,11 +11,14 @@ const router = Router();
 router.post(
   '/image',
   requireAuth,
-  uploadMemory.single('file'),
+  uploadImage,
   async (req: any, res: any) => {
     try {
       const file = req.file;
-      const type = req.query.type || 'generic'; // vendorLogo, menuItem, etc.
+      const type = typeof req.query.type === 'string' ? req.query.type : 'generic';
+      if (!['generic', 'vendorLogo', 'menuItem'].includes(type)) {
+        return res.status(400).json({ success: false, message: 'Invalid upload type' });
+      }
 
       if (!file) {
         return res.status(400).json({ success: false, message: 'No file uploaded' });

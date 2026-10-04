@@ -1,9 +1,10 @@
-import { EventStatus, OrderStatus, PaymentMode, PaymentStatus, Prisma } from '@prisma/client';
+import { EventStatus, OrderStatus, PaymentMode, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getIO } from '../socket';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
 import { currentMalaysiaDayRange, dailyCupUsageWhere, evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
+import { calculateLineTotal, money, sumMoney } from '../utils/money';
 
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
@@ -112,16 +113,17 @@ export async function createOrder(_customerId: string | undefined, input: unknow
     const menuItem = menuItems.find((candidate) => candidate.id === item.menuItemId)!;
     const groups = Array.isArray(menuItem.optionGroups) ? menuItem.optionGroups as any[] : [];
     const snapshot = selectedOptionSnapshot(groups, item.selectedOptions);
-    const extras = snapshot.flatMap((group) => group.choices).reduce((sum, choice) => sum + choice.priceDelta, 0);
+    const extras = sumMoney(snapshot.flatMap((group) => group.choices).map((choice) => choice.priceDelta));
     return {
       menuItemId: item.menuItemId,
       quantity: item.quantity,
-      price: Number(menuItem.price) + extras,
+      price: money(menuItem.price).add(extras),
       remark: item.remark?.trim() || null,
       selectedOptions: snapshot,
+      status: 'PREPARING' as const,
     };
   });
-  const totalAmount = preparedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const totalAmount = calculateLineTotal(preparedItems);
 
   const order = await prisma.$transaction(async (tx) => {
       const lockedEvents = await tx.$queryRaw<Array<{
@@ -215,6 +217,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           eventOrderNumber,
           displayNumber: eventOrderNumber,
           paymentMode: parsed.paymentMode,
+          status: OrderStatus.PREPARING,
           totalAmount,
           createdAt: orderCreatedAt,
           items: { create: preparedItems },
@@ -290,32 +293,46 @@ async function assertOrderOwner(orderId: string, userId: string) {
   const vendor = await getVendorForUser(userId);
   const order = await prisma.order.findFirst({
     where: { id: orderId, vendorId: vendor.id },
-    include: { items: true },
+    include: { items: true, event: { select: { status: true } } },
   });
   if (!order) throw new Error('Order not found');
   return { vendor, order };
 }
 
+function assertReadyTarget(status: unknown): asserts status is OrderStatus {
+  if (status !== OrderStatus.READY) throw new Error('Only PREPARING to READY is allowed');
+}
+
+function assertActivePreparationOrder(order: any) {
+  if (order.event?.status !== EventStatus.ACTIVE) throw new Error('Historical orders cannot be changed');
+  if (order.status !== OrderStatus.PREPARING && order.status !== OrderStatus.READY) {
+    throw new Error('Order is outside the preparation workflow');
+  }
+}
+
 async function notifyOrder(orderId: string) {
   const order = await getOrderById(orderId);
   if (order) {
-    getIO().to(`user:${order.customerId}`).emit('order_updated', order);
+    getIO().to(`user:${order.customerId}`).emit('order_updated', customerOrderView(order));
     getIO().to(`vendor:${order.vendorId}`).emit('order_updated', order);
   }
   return order;
 }
 
 export async function updateOrderStatus(orderId: string, userId: string, status: OrderStatus) {
-  await assertOrderOwner(orderId, userId);
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status,
-      ...(status === OrderStatus.READY
-        ? { readyAt: new Date(), completedAt: new Date(), paymentStatus: PaymentStatus.PAID }
-        : {}),
-    },
-  });
+  assertReadyTarget(status);
+  const { vendor } = await assertOrderOwner(orderId, userId);
+  await prisma.$transaction(async (tx) => {
+    await lockOrders(tx, vendor.id, [orderId]);
+    const order = await loadPreparationOrder(tx, orderId);
+    if (!order) throw new Error('Order not found');
+    assertActivePreparationOrder(order);
+    if (order.status === OrderStatus.READY) return;
+    if (!order.items.length || order.items.some((item) => item.status !== 'READY')) {
+      throw new Error('All order items must be READY before the order can be READY');
+    }
+    await reconcileReadyOrder(tx, orderId);
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   return notifyOrder(orderId);
 }
 
@@ -329,20 +346,26 @@ async function lockOrders(tx: Prisma.TransactionClient, vendorId: string, orderI
   `);
 }
 
-async function reconcileReadyOrder(tx: Prisma.TransactionClient, orderId: string, settlePayment = false) {
-  const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+async function loadPreparationOrder(tx: Prisma.TransactionClient, orderId: string) {
+  return tx.order.findUnique({
+    where: { id: orderId },
+    include: { items: true, event: { select: { status: true } } },
+  });
+}
+
+async function reconcileReadyOrder(tx: Prisma.TransactionClient, orderId: string) {
+  const order = await loadPreparationOrder(tx, orderId);
   if (!order || order.status !== OrderStatus.PREPARING || !order.items.length
-    || order.items.some((item) => item.status !== 'READY')) return;
+    || order.event.status !== EventStatus.ACTIVE
+    || order.items.some((item) => item.status !== 'READY')) return false;
   await tx.order.update({
     where: { id: orderId },
     data: {
       status: OrderStatus.READY,
-      readyAt: order.readyAt ?? new Date(),
-      // Preserve the existing whole-order completion/payment behavior for
-      // individual and whole-order actions. Batch repair does not settle payment.
-      ...(settlePayment ? { completedAt: new Date(), paymentStatus: PaymentStatus.PAID } : {}),
+      readyAt: new Date(),
     },
   });
+  return true;
 }
 
 async function normalizeLiveOrders(vendorId: string) {
@@ -362,21 +385,52 @@ async function normalizeLiveOrders(vendorId: string) {
 
 export async function markOrderItemReady(userId: string, orderId: string, itemId: string) {
   const { vendor, order } = await assertOrderOwner(orderId, userId);
+  assertActivePreparationOrder(order);
   if (!order.items.some((item) => item.id === itemId)) throw new Error('Item not found');
   await prisma.$transaction(async (tx) => {
     await lockOrders(tx, vendor.id, [orderId]);
-    await tx.orderItem.update({ where: { id: itemId }, data: { status: 'READY' } });
-    await reconcileReadyOrder(tx, orderId, true);
+    const locked = await loadPreparationOrder(tx, orderId);
+    if (!locked) throw new Error('Order not found');
+    assertActivePreparationOrder(locked);
+    const item = locked.items.find((candidate) => candidate.id === itemId);
+    if (!item) throw new Error('Item not found');
+    if (item.status !== 'PREPARING' && item.status !== 'READY') {
+      throw new Error('Order item is outside the preparation workflow');
+    }
+    if (locked.status === OrderStatus.READY) {
+      if (locked.items.every((candidate) => candidate.status === 'READY')) return;
+      throw new Error('READY order cannot be changed');
+    }
+    if (item.status === 'READY') {
+      await reconcileReadyOrder(tx, orderId);
+      return;
+    }
+    await tx.orderItem.updateMany({
+      where: { id: itemId, orderId, status: 'PREPARING' },
+      data: { status: 'READY' },
+    });
+    await reconcileReadyOrder(tx, orderId);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   return notifyOrder(orderId);
 }
 
 export async function markOrderItemsReady(userId: string, orderId: string) {
-  const { vendor } = await assertOrderOwner(orderId, userId);
+  const { vendor, order } = await assertOrderOwner(orderId, userId);
+  assertActivePreparationOrder(order);
   await prisma.$transaction(async (tx) => {
     await lockOrders(tx, vendor.id, [orderId]);
-    await tx.orderItem.updateMany({ where: { orderId }, data: { status: 'READY' } });
-    await reconcileReadyOrder(tx, orderId, true);
+    const locked = await loadPreparationOrder(tx, orderId);
+    if (!locked) throw new Error('Order not found');
+    assertActivePreparationOrder(locked);
+    if (locked.status === OrderStatus.READY) {
+      if (locked.items.length && locked.items.every((item) => item.status === 'READY')) return;
+      throw new Error('READY order cannot be changed');
+    }
+    if (!locked.items.length || locked.items.some((item) => item.status !== 'PREPARING' && item.status !== 'READY')) {
+      throw new Error('Order items are outside the preparation workflow');
+    }
+    await tx.orderItem.updateMany({ where: { orderId, status: 'PREPARING' }, data: { status: 'READY' } });
+    await reconcileReadyOrder(tx, orderId);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   return notifyOrder(orderId);
 }
@@ -399,6 +453,7 @@ export async function markBatchItemsReady(
       order: {
         vendorId: vendor.id,
         status: OrderStatus.PREPARING,
+        event: { status: EventStatus.ACTIVE },
         createdAt: { gte: new Date(windowStartISO), lt: new Date(windowEndISO) },
       },
     };
@@ -417,14 +472,34 @@ export async function markBatchItemsReady(
 }
 
 export async function bulkStatusUpdate(userId: string, orderIds: string[], status: OrderStatus) {
+  assertReadyTarget(status);
   const vendor = await getVendorForUser(userId);
-  const result = await prisma.order.updateMany({
-    where: { id: { in: orderIds }, vendorId: vendor.id },
-    data: status === OrderStatus.READY
-      ? { status, readyAt: new Date(), completedAt: new Date(), paymentStatus: PaymentStatus.PAID }
-      : { status },
-  });
-  return { updatedCount: result.count };
+  const uniqueIds = [...new Set(orderIds)];
+  const updatedCount = await prisma.$transaction(async (tx) => {
+    await lockOrders(tx, vendor.id, uniqueIds);
+    const orders = await tx.order.findMany({
+      where: { id: { in: uniqueIds }, vendorId: vendor.id },
+      include: { items: true, event: { select: { status: true } } },
+    });
+    if (orders.length !== uniqueIds.length) throw new Error('One or more orders were not found');
+    for (const order of orders) {
+      assertActivePreparationOrder(order);
+      if (!order.items.length || order.items.some((item) => item.status !== 'PREPARING' && item.status !== 'READY')) {
+        throw new Error('Order items are outside the preparation workflow');
+      }
+      if (order.status === OrderStatus.READY) {
+        if (order.items.every((item) => item.status === 'READY')) continue;
+        throw new Error('READY order cannot be changed');
+      }
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, status: 'PREPARING' },
+        data: { status: 'READY' },
+      });
+      await reconcileReadyOrder(tx, order.id);
+    }
+    return orders.length;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  return { updatedCount };
 }
 
 export async function getVendorServingOrder(vendorId: string) {
@@ -433,4 +508,21 @@ export async function getVendorServingOrder(vendorId: string) {
     orderBy: { createdAt: 'asc' },
     select: { id: true, displayNumber: true, eventOrderNumber: true, vendorId: true },
   });
+}
+
+// Explicit customer response allowlist: keep routing/display data, omit owner IDs and PII.
+export function customerOrderView(order: any) {
+  return {
+    id: order.id, eventOrderNumber: order.eventOrderNumber, displayNumber: order.displayNumber,
+    status: order.status, paymentMode: order.paymentMode, paymentStatus: order.paymentStatus,
+    totalAmount: order.totalAmount, createdAt: order.createdAt, readyAt: order.readyAt,
+    vendor: order.vendor ? { businessName: order.vendor.businessName, slug: order.vendor.slug } : undefined,
+    items: (order.items || []).map((item: any) => ({
+      quantity: item.quantity, price: item.price, remark: item.remark, status: item.status,
+      selectedOptions: Array.isArray(item.selectedOptions) ? item.selectedOptions.map((group: any) => ({
+        title: group.title, choices: (group.choices || []).map((choice: any) => ({ label: choice.label, priceDelta: choice.priceDelta })),
+      })) : [],
+      menuItem: item.menuItem ? { name: item.menuItem.name, imageUrl: item.menuItem.imageUrl } : undefined,
+    })),
+  };
 }

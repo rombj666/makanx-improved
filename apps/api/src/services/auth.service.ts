@@ -33,25 +33,14 @@ export const login = async (input: unknown) => {
     include: { vendorProfile: true }
   });
 
-  console.log('[Auth Debug] Login attempt:', {
-    email,
-    userFound: !!user,
-    role: user?.role,
-    isActive: user?.isActive,
-  });
-
   if (!user) {
-    throw new Error('Invalid credentials');
+    throw new Error('Invalid email or password');
   }
 
   const isPasswordValid = await comparePassword(password, user.password);
   
-  console.log('[Auth Debug] Password check:', {
-    isPasswordValid,
-  });
-
   if (!isPasswordValid) {
-    throw new Error('Invalid credentials');
+    throw new Error('Invalid email or password');
   }
 
   // Check if account is active (for vendors)
@@ -60,7 +49,7 @@ export const login = async (input: unknown) => {
   }
 
   const token = generateToken({ userId: user.id, role: user.role as Role });
-  return { 
+  return {
     user: { 
       id: user.id, 
       email: user.email, 
@@ -71,7 +60,7 @@ export const login = async (input: unknown) => {
         slug: user.vendorProfile.slug,
         businessName: user.vendorProfile.businessName || undefined 
       } : undefined
-    }, 
+    },
     token 
   };
 };
@@ -101,12 +90,6 @@ export const requestPasswordReset = async (input: unknown) => {
   const parsed = requestResetSchema.parse(input);
   const email = normalizeEmail(parsed.email);
 
-  console.log("[reset] Request received for:", email);
-  console.log("[reset] Resend ENV check:", {
-    RESEND_API_KEY_EXISTS: !!process.env.RESEND_API_KEY,
-    EMAIL_FROM: process.env.EMAIL_FROM,
-  });
-
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     // Return success to avoid email enumeration
@@ -128,11 +111,9 @@ export const requestPasswordReset = async (input: unknown) => {
 
   // Send email
   try {
-    console.log("[reset] Attempting to send OTP via Resend to:", email);
-    const result = await sendPasswordResetEmail(email, otp);
-    console.log("[reset] email send result:", result);
+    await sendPasswordResetEmail(email, otp);
   } catch (err) {
-    console.error("[reset] Email send failed:", err);
+    console.error('Password reset email delivery failed');
   }
 
   return { message: 'If an account exists, a reset code has been sent.' };

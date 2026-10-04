@@ -4,19 +4,19 @@ import { ZodError } from 'zod';
 import { OrderStatus } from '@prisma/client';
 import prisma from '../utils/prisma';
 
-const isValidOrderStatus = (value: any): value is OrderStatus => {
-  return Object.values(OrderStatus).includes(value);
+const isReadyStatus = (value: any): value is OrderStatus => {
+  return value === OrderStatus.READY;
 };
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
     // Check for user or guest identity
-    if (!req.user && !req.body.guestId) {
+    if (!req.guest) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const result = await orderService.createOrder(req.user?.userId, req.body, req.deviceId);
-    return res.status(201).json({ success: true, data: result });
+    const result = await orderService.createOrder(req.guest!.guestId, { ...req.body, guestId: req.guest!.guestId }, req.deviceId);
+    return res.status(201).json({ success: true, data: { ...result, order: orderService.customerOrderView(result.order) } });
   } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ 
@@ -98,42 +98,39 @@ export const getVendorProductionBatch = async (req: Request, res: Response) => {
 
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
-    // customerId is userId (JWT) or guestId (query param)
-    const customerId = req.user?.userId || (req.query.guestId as string);
+    const customerId = req.guest?.guestId;
     
     if (!customerId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const result = await orderService.getCustomerOrders(customerId);
+    const result = (await orderService.getCustomerOrders(customerId)).map(orderService.customerOrderView);
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+    return res.status(500).json({ success: false, error: 'Unable to retrieve orders' });
   }
 };
 
 export const getOrderById = async (req: Request, res: Response) => {
+  if (!req.user && !req.guest) return res.status(401).json({ success: false, error: 'Unauthorized' });
   try {
-    const { id } = req.params;
-    console.log('[order] getOrderById request', { id, guestId: req.query.guestId, userId: req.user?.userId });
-    
-    if (!id || id === 'undefined' || id === 'null') {
-      console.warn('[order] getOrderById: invalid ID received', { id });
-      return res.status(400).json({ success: false, error: 'Invalid order ID' });
-    }
-
-    const result = await orderService.getOrderById(id);
-    
-    if (!result) {
-      console.warn('[order] getOrderById: order not found in DB', { id });
-      return res.status(404).json({ success: false, error: 'Order not found' });
-    }
-
-    console.log('[order] getOrderById: order found', { id, status: result.status });
-    return res.status(200).json({ success: true, data: result });
-  } catch (error: any) {
-    console.error('[order] getOrderById error', { id: req.params.id, error: error.message });
-    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+    const owner = await prisma.order.findUnique({
+      where: { id: req.params.id }, select: { vendorId: true, customerId: true },
+    });
+    // Same response body for missing and forbidden orders; no owner information.
+    if (!owner) return res.status(404).json({ success: false, error: 'Order unavailable' });
+    const vendor = req.user ? await prisma.vendorProfile.findUnique({
+      where: { userId: req.user.userId }, select: { id: true },
+    }) : null;
+    const allowed = req.user ? vendor?.id === owner.vendorId : req.guest?.guestId === owner.customerId;
+    if (!allowed) return res.status(403).json({ success: false, error: 'Order unavailable' });
+    const result = await orderService.getOrderById(req.params.id);
+    if (!result) return res.status(404).json({ success: false, error: 'Order unavailable' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, data: req.user ? result : orderService.customerOrderView(result) });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Unable to retrieve order' });
   }
 };
 
@@ -143,8 +140,8 @@ export const updateStatus = async (req: Request, res: Response) => {
 
     const { status } = req.body;
 
-    if (!isValidOrderStatus(status)) {
-      return res.status(400).json({ success: false, error: 'Invalid status' });
+    if (!isReadyStatus(status)) {
+      return res.status(400).json({ success: false, error: 'Only PREPARING to READY is allowed' });
     }
 
     const result = await orderService.updateOrderStatus(req.params.id, req.user.userId, status);
@@ -164,8 +161,8 @@ export const bulkStatusUpdate = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Invalid orderIds' });
     }
 
-    if (!isValidOrderStatus(status)) {
-      return res.status(400).json({ success: false, error: 'Invalid status' });
+    if (!isReadyStatus(status)) {
+      return res.status(400).json({ success: false, error: 'Only PREPARING to READY is allowed' });
     }
 
     const result = await orderService.bulkStatusUpdate(req.user.userId, orderIds, status);

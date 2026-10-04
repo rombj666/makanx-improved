@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom';
+import { expireVendorSession, getVendorSessionVersion } from '../lib/vendorSession';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
@@ -10,51 +12,59 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 import { API_ORIGIN } from '../lib/api';
-import { getOrCreateGuestId } from '../lib/guest';
+import { ensureGuestToken } from '../lib/guest';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_ORIGIN || 'http://localhost:3001';
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+  const { pathname } = useLocation();
+  const vendorPage = /^\/(vendor|admin)(\/|$)/.test(pathname);
+  const customerPage = /^\/(v|order|track)\//.test(pathname);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const guestId = getOrCreateGuestId();
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
-    if ((!user && !guestId) || (user && !token)) {
-      if (socket) {
-        socket.disconnect();
-        setSocket(null);
-        setIsConnected(false);
-      }
-      return;
-    }
-
+    setSocket(null);
+    setIsConnected(false);
+    if (isLoading || (!vendorPage && !customerPage) || (vendorPage && !user)) return;
+    let cancelled = false;
+    let vendorSessionVersion = getVendorSessionVersion();
     const newSocket = io(SOCKET_URL, {
+      autoConnect: false,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 500,
       reconnectionDelayMax: 5000,
       timeout: 10000,
-      auth: user && token ? { token } : { guestId },
+      withCredentials: true,
+      auth: (callback) => {
+        // Called on every connection/reconnection: never reuse an old captured token.
+        if (vendorPage) {
+          vendorSessionVersion = getVendorSessionVersion();
+          callback({});
+        } else {
+          ensureGuestToken().then((token) => {
+            if (!cancelled) callback({ token });
+          }).catch(() => {
+            if (!cancelled) { setIsConnected(false); newSocket.disconnect(); }
+          });
+        }
+      },
     });
-
-    newSocket.on('connect', async () => {
-      setIsConnected(true);
-
-      if (user && token) {
-        newSocket.emit('join', token);
-      } else {
-        newSocket.emit('join', `user:${guestId}`);
-      }
-    });
-
-    newSocket.on('disconnect', () => {
+    const authenticationFailed = () => {
       setIsConnected(false);
+      newSocket.disconnect();
+      if (vendorPage) expireVendorSession(vendorSessionVersion);
+    };
+    newSocket.on('connect', () => setIsConnected(true));
+    newSocket.on('disconnect', () => setIsConnected(false));
+    newSocket.on('connect_error', (error) => {
+      setIsConnected(false);
+      if ((error as Error & { data?: { code?: string } }).data?.code === 'SOCKET_AUTH_ERROR') authenticationFailed();
     });
+    newSocket.on('auth_error', authenticationFailed);
     let lastPlayed = 0;
 
     newSocket.on("order_created", () => {
@@ -68,11 +78,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     setSocket(newSocket);
+    newSocket.connect();
 
     return () => {
+      cancelled = true;
       newSocket.disconnect();
     };
-  }, [user]);
+  }, [user, isLoading, vendorPage, customerPage]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>

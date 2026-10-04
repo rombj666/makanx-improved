@@ -27,8 +27,8 @@ export const getVendorMenu = async (req: Request, res: Response) => {
 
 export const createVendorOrder = async (req: Request, res: Response) => {
   try {
-    const result = await orderService.createOrderForVendorSlug(String(req.params.slug || ''), req.body, req.deviceId);
-    res.status(201).json({ success: true, data: result });
+    const result = await orderService.createOrderForVendorSlug(String(req.params.slug || ''), { ...req.body, guestId: req.guest!.guestId }, req.deviceId);
+    res.status(201).json({ success: true, data: { ...result, order: orderService.customerOrderView(result.order) } });
   } catch (error: any) {
     if (error.code === 'DEVICE_ORDER_EXISTS') {
       return res.status(409).json({

@@ -1,3 +1,4 @@
+import { expireVendorSession, getVendorSessionVersion, isVendorApi } from './vendorSession';
 import axios from 'axios';
 
 const rawBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -19,9 +20,8 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (isVendorApi(config.url || '')) {
+    (config as typeof config & { vendorSessionVersion?: number }).vendorSessionVersion = getVendorSessionVersion();
   }
   
   // Only set application/json if data is NOT FormData and not already set
@@ -40,32 +40,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      // Optional: Redirect to login or dispatch auth event
-      // window.location.href = '/login'; 
+    if (error.response?.status === 401 && isVendorApi(error.config?.url || '')) {
+      expireVendorSession(error.config?.vendorSessionVersion ?? getVendorSessionVersion());
     }
     return Promise.reject(error);
   }
 );
-
-export const toAbsoluteUrl = (path: string | undefined | null) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  
-  // Backend uploads from /uploads - PREFIX WITH API ORIGIN
-  if (path.startsWith('/uploads/')) {
-    const baseUrl = API_ORIGIN;
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `${baseUrl}${cleanPath}`;
-  }
-  
-  // Default: assume it's backend URL if not caught above, OR handle other cases.
-  // The user requirement said: "If startsWith("/uploads/"), prefix API_ORIGIN."
-  // "If it startsWith("http"), use directly."
-  
-  // What about other paths? Assuming backend for safety if it looks like an API asset.
-  const baseUrl = API_ORIGIN;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${baseUrl}${cleanPath}`;
-};

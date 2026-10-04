@@ -1,3 +1,4 @@
+import { resetVendorSession, VENDOR_SESSION_EXPIRED } from '../lib/vendorSession';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Role } from '@smart-qr/shared';
@@ -18,8 +19,8 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  login: (user: User) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,45 +31,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    const onSessionExpired = () => { setUser(null); setIsLoading(false); };
+    window.addEventListener(VENDOR_SESSION_EXPIRED, onSessionExpired);
     const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const { data } = await api.get('/auth/me');
-          if (isMounted && data.success) {
-            console.log('Logged in user (/auth/me):', data.data);
-            setUser(data.data);
-          }
-        } catch (error: any) {
-          if (!isMounted) return;
-          const status = error.response?.status;
-          // Only remove token on 401/403.
-          // Do NOT remove on 429 (Too Many Requests) or network errors.
-          if (status === 401 || status === 403) {
-            console.warn('Auth failed, removing token:', status);
-            localStorage.removeItem('token');
-            setUser(null);
-          } else if (status === 429) {
-            console.error('Rate limited on auth check. Keeping token but limiting further checks.');
-          } else {
-            console.error('Auth check error (kept token):', status || error.message);
-          }
-        }
+      try {
+        const { data } = await api.get('/auth/me');
+        if (isMounted && data.success) setUser(data.data);
+      } catch (error: any) {
+        if (!isMounted) return;
+        const status = error.response?.status;
+        if (status !== 401 && status !== 429) console.error('Authentication check failed');
       }
       if (isMounted) setIsLoading(false);
     };
     checkAuth();
-    return () => { isMounted = false; };
+    return () => { isMounted = false; window.removeEventListener(VENDOR_SESSION_EXPIRED, onSessionExpired); };
   }, []);
 
-  const login = (token: string, user: User) => {
-    localStorage.setItem('token', token);
-    console.log('Logged in user (login):', user);
+  const login = (user: User) => {
+    resetVendorSession();
     setUser(user);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = async () => {
+    try { await api.post('/auth/logout'); } catch { /* Local state still ends. */ }
     setUser(null);
     window.location.href = '/login';
   };

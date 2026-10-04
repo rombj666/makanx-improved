@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.service';
@@ -201,123 +202,44 @@ export const getVendorMenu = async (userId: string) => {
   }
 };
 
-export const getPublicMenu = async (vendorId: string) => {
-  const vendor = await prisma.vendorProfile.findUnique({
-    where: { id: vendorId },
+const publicMenuSelect = {
+  id: true,
+  slug: true,
+  businessName: true,
+  description: true,
+  settings: {
+    select: {
+      showPrices: true,
+      deviceOrderLimitEnabled: true,
+      maxDrinksPerOrder: true,
+      dailyLimitEnabled: true,
+      dailyLimitQuantity: true,
+    },
+  },
+  events: {
+    where: { status: 'ACTIVE' as const },
+    take: 1,
+    select: { id: true, eventName: true, eventDate: true, orderingStatus: true },
+  },
+  menuItems: {
+    where: { isAvailable: true },
+    orderBy: [{ displayOrder: 'asc' as const }, { createdAt: 'asc' as const }],
     select: {
       id: true,
-      slug: true,
-      businessName: true,
+      name: true,
       description: true,
-      category: true,
-      settings: {
-        select: {
-          orderingOpen: true,
-          showPrices: true,
-          deviceOrderLimitEnabled: true,
-          maxDrinksPerOrder: true,
-          dailyLimitEnabled: true,
-          dailyLimitQuantity: true,
-        },
-      },
-      events: {
-        where: { status: 'ACTIVE' },
-        take: 1,
-        select: { id: true, eventName: true, eventDate: true, orderingStatus: true },
-      },
-      menuItems: {
-        where: { isAvailable: true },
-        orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          imageUrl: true,
-          optionGroups: true,
-          remarksEnabled: true,
-        },
-      },
+      price: true,
+      imageUrl: true,
+      optionGroups: true,
+      remarksEnabled: true,
     },
-  });
-  if (!vendor) throw new Error('Store not found');
-  const { events, settings, ...profile } = vendor;
-  const activeEvent = events[0] || null;
-  const usedCups = activeEvent
-    ? Number((await prisma.orderItem.aggregate({
-        where: dailyCupUsageWhere(activeEvent.id),
-        _sum: { quantity: true },
-      }))._sum.quantity || 0)
-    : 0;
-  const orderingStatus = !activeEvent
-    ? 'MANUALLY_CLOSED'
-    : effectiveOrderingStatus({
-        storedStatus: activeEvent.orderingStatus,
-        limitEnabled: settings?.dailyLimitEnabled === true,
-        limitQuantity: Number(settings?.dailyLimitQuantity || 0),
-        usedQuantity: usedCups,
-      });
-  if (activeEvent && activeEvent.orderingStatus !== orderingStatus) {
-    await prisma.event.updateMany({
-      where: { id: activeEvent.id, orderingStatus: activeEvent.orderingStatus },
-      data: { orderingStatus },
-    });
-  }
-  return {
-    ...profile,
-    activeEvent,
-    settings: {
-      ...(settings || {}),
-      orderingOpen: orderingStatus === 'OPEN',
-      orderingStatus,
-      orderingClosedReason: orderingStatus === 'LIMIT_REACHED'
-        ? ORDER_LIMIT_REACHED_MESSAGE
-        : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
-    },
-    menuItems: orderingStatus === 'OPEN'
-      ? vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) }))
-      : [],
-  };
-};
+  },
+} satisfies Prisma.VendorProfileSelect;
 
-export const getPublicMenuBySlug = async (slug: string) => {
+async function buildPublicMenu(where: Prisma.VendorProfileWhereUniqueInput) {
   const vendor = await prisma.vendorProfile.findUnique({
-    where: { slug },
-    select: {
-      id: true,
-      slug: true,
-      businessName: true,
-      description: true,
-      category: true,
-      settings: {
-        select: {
-          orderingOpen: true,
-          showPrices: true,
-          deviceOrderLimitEnabled: true,
-          maxDrinksPerOrder: true,
-          dailyLimitEnabled: true,
-          dailyLimitQuantity: true,
-        },
-      },
-      events: {
-        where: { status: 'ACTIVE' },
-        take: 1,
-        select: { id: true, eventName: true, eventDate: true, orderingStatus: true },
-      },
-      menuItems: {
-        where: { isAvailable: true },
-        orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          imageUrl: true,
-          optionGroups: true,
-          remarksEnabled: true,
-        },
-      },
-    },
+    where,
+    select: publicMenuSelect,
   });
   if (!vendor) throw new Error('Store not found');
   const { events, settings, ...profile } = vendor;
@@ -344,20 +266,53 @@ export const getPublicMenuBySlug = async (slug: string) => {
   }
   return {
     ...profile,
-    activeEvent,
+    activeEvent: activeEvent ? {
+      eventName: activeEvent.eventName,
+      eventDate: activeEvent.eventDate,
+    } : null,
     settings: {
-      ...(settings || {}),
+      showPrices: settings?.showPrices !== false,
       orderingOpen: orderingStatus === 'OPEN',
       orderingStatus,
       orderingClosedReason: orderingStatus === 'LIMIT_REACHED'
         ? ORDER_LIMIT_REACHED_MESSAGE
         : orderingStatus === 'OPEN' ? null : ORDERING_CLOSED_MESSAGE,
+      maxDrinksPerOrder: settings?.deviceOrderLimitEnabled
+        ? settings.maxDrinksPerOrder
+        : null,
     },
     menuItems: orderingStatus === 'OPEN'
-      ? vendor.menuItems.map((item) => ({ ...item, price: Number(item.price) }))
+      ? vendor.menuItems.map((item) => {
+          const optionGroups = Array.isArray(item.optionGroups)
+            ? item.optionGroups.map((group: any) => ({
+                id: group.id,
+                title: group.title,
+                type: group.type,
+                required: group.required,
+                choices: (group.choices || []).map((choice: any) => ({
+                  id: choice.id,
+                  label: choice.label,
+                  ...(settings?.showPrices !== false ? { priceDelta: choice.priceDelta } : {}),
+                })),
+              }))
+            : [];
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            imageUrl: item.imageUrl,
+            optionGroups,
+            remarksEnabled: item.remarksEnabled,
+            ...(settings?.showPrices !== false ? { price: item.price.toNumber() } : {}),
+          };
+        })
       : [],
   };
-};
+}
+
+export const getPublicMenu = (vendorId: string) => buildPublicMenu({ id: vendorId });
+
+export const getPublicMenuBySlug = (slug: string) => buildPublicMenu({ slug });
 
 export const updateMenuItem = async (
   userId: string,

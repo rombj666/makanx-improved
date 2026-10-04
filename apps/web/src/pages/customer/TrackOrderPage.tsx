@@ -1,19 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { guestApi } from '../../lib/guest';
 
 export function TrackOrderPage() {
   const { orderId = '' } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState<any>(null);
 
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    const load = () => api.get(`/orders/${orderId}`).then(({ data }) => setOrder(data.data)).catch(() => undefined);
+    setOrder(null);
+    setError('');
+    let active = true;
+    const load = () => guestApi.get(`/orders/${orderId}`).then(({ data }) => {
+      if (active) { setOrder(data.data); setError(''); }
+    }).catch(() => {
+      if (active) setError('This order cannot be accessed with this browser credential. For orders placed before the security update, please contact the store to verify ownership.');
+    });
     load();
     const timer = window.setInterval(load, 5000);
-    return () => window.clearInterval(timer);
+    return () => { active = false; window.clearInterval(timer); };
   }, [orderId]);
 
+  if (error) return <div className="p-10 text-center" role="alert">{error}</div>;
   if (!order) return <div className="p-10 text-center">Loading order...</div>;
   return (
     <main className="min-h-screen bg-neutral-50 px-4 py-10">
@@ -24,7 +34,7 @@ export function TrackOrderPage() {
           {order.status === 'READY' ? 'Ready for collection' : 'Preparing your order'}
         </div>
         <button
-          onClick={() => navigate(order.vendor?.slug ? `/v/${order.vendor.slug}` : `/order/${order.vendorId}`)}
+          onClick={() => navigate(order.vendor?.slug ? `/v/${order.vendor.slug}` : '/')}
           className="mt-6 h-11 w-full rounded-xl border font-semibold"
         >
           Back to menu

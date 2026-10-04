@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { initSocket } from './socket';
 import authRoutes from './routes/auth.routes';
@@ -14,7 +14,6 @@ import publicRoutes from './routes/public.routes';
 import { configureSecurity } from './middleware/security';
 import { deviceMiddleware } from './middleware/device';
 
-dotenv.config();
 
 export const app = express();
 const httpServer = createServer(app);
@@ -45,15 +44,16 @@ const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production'
 const defaultDevOrigins = isProd ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 const allowedOrigins = Array.from(new Set([...originsFromEnv, ...defaultDevOrigins].map(normalizeOrigin)));
-const allowAllOrigins = allowedOrigins.includes('*');
+if (allowedOrigins.includes('*')) {
+  throw new Error('CORS_ORIGIN and CLIENT_URL must list explicit origins when credentials are enabled');
+}
 
-console.log('[cors] allowed origins', { allowAll: allowAllOrigins, origins: allowedOrigins.filter((o) => o !== '*') });
+console.log('[cors] allowed origins', { origins: allowedOrigins });
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     const cleaned = normalizeOrigin(origin);
-    if (allowAllOrigins) return cb(null, true);
     if (allowedOrigins.includes(cleaned)) return cb(null, cleaned);
     return cb(null, false);
   },
@@ -74,10 +74,6 @@ app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl} - IP: ${req.ip} - Forwarded: ${req.headers['x-forwarded-for']}`);
   next();
 });
-
-import path from 'path';
-
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 const apiRouter = express.Router();
