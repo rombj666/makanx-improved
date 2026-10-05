@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { formatMalaysiaDateTime, getMalaysiaDayRange } from '../utils/date';
 import { moneyNumber, sumMoney } from '../utils/money';
 
-const VALID_SALES_STATUSES: OrderStatus[] = [OrderStatus.READY];
+const VALID_SALES_STATUSES: OrderStatus[] = [OrderStatus.PREPARING, OrderStatus.READY];
 
 type SalesOrder = {
   id: string;
@@ -42,7 +42,6 @@ async function ordersFor(req: Request) {
   const ctx = await context(req);
   const where: Prisma.OrderWhereInput = {
     vendorId: ctx.vendor.id,
-    paymentStatus: PaymentStatus.PAID,
     status: { in: VALID_SALES_STATUSES },
     createdAt: { gte: ctx.start, lt: ctx.end },
   };
@@ -86,7 +85,6 @@ async function ordersFor(req: Request) {
     },
     vendorId: ctx.vendor.id,
     orderFilter: {
-      paymentStatus: PaymentStatus.PAID,
       statuses: VALID_SALES_STATUSES,
     },
     matchingOrders: orders.length,

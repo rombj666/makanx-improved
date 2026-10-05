@@ -113,7 +113,12 @@ export function VendorSales() {
     setDate(selectedDate);
   };
 
-  const fetchAll = async (targetDate = date) => {
+  const requestVersion = useRef(0);
+  const selectedDate = useRef(date);
+  selectedDate.current = date;
+
+  const fetchAll = async (targetDate = date, includeSettings = true) => {
+    const version = ++requestVersion.current;
     setLoading(true);
     try {
       const params = { date: targetDate };
@@ -132,21 +137,22 @@ export function VendorSales() {
         api.get(analyticsRequests[1][0], analyticsRequests[1][1]),
         api.get(analyticsRequests[2][0], analyticsRequests[2][1]),
         api.get(analyticsRequests[3][0], analyticsRequests[3][1]),
-        api.get('/vendor/settings'),
-        api.get('/vendor/order-limit-settings'),
+        includeSettings ? api.get('/vendor/settings') : Promise.resolve(null),
+        includeSettings ? api.get('/vendor/order-limit-settings') : Promise.resolve(null),
         api.get('/vendor/daily-usage'),
       ]);
+      if (version !== requestVersion.current || targetDate !== selectedDate.current) return;
       setSummary(s.data.data);
       setProductTrend(pt.data.data || []);
       setProducts(p.data.data);
       setOrders(o.data.data);
-      setSettings(sett.data.data);
-      setOrderLimitSettings(orderLimit.data.data);
+      if (sett) setSettings(sett.data.data);
+      if (orderLimit) setOrderLimitSettings(orderLimit.data.data);
       setUsage(usg.data.data);
     } catch (e) {
       // silent
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   };
 
@@ -214,7 +220,6 @@ export function VendorSales() {
   };
 
   useEffect(() => {
-    fetchAll();
     let midnightTimer: ReturnType<typeof setTimeout>;
     const scheduleDailyUsageReset = () => {
       midnightTimer = setTimeout(async () => {
@@ -234,20 +239,40 @@ export function VendorSales() {
   }, []);
 
   useEffect(() => {
+    void fetchAll(date);
+    return () => { requestVersion.current++; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  useEffect(() => {
     if (!socket) return;
-    const refreshDailyUsage = async () => {
-      try {
-        const { data } = await api.get('/vendor/daily-usage');
-        setUsage(data.data);
-      } catch (error) {
-        console.error('[vendor-sales] Failed to refresh daily usage after an order', error);
-      }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let running = false;
+    let pending = false;
+    let disposed = false;
+    const refresh = async () => {
+      timer = undefined;
+      if (running || disposed) return;
+      running = true;
+      pending = false;
+      await fetchAll(date, false);
+      running = false;
+      if (pending && !disposed) timer = setTimeout(refresh, 250);
     };
-    socket.on('order_created', refreshDailyUsage);
+    const scheduleRefresh = () => {
+      pending = true;
+      if (!running && timer === undefined) timer = setTimeout(refresh, 250);
+    };
+    socket.on('order_created', scheduleRefresh);
+    socket.on('order_updated', scheduleRefresh);
     return () => {
-      socket.off('order_created', refreshDailyUsage);
+      disposed = true;
+      clearTimeout(timer);
+      socket.off('order_created', scheduleRefresh);
+      socket.off('order_updated', scheduleRefresh);
     };
-  }, [socket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, date]);
 
   const productTrendDataset = useMemo(() => {
     const buckets = new Set<string>();
@@ -259,8 +284,7 @@ export function VendorSales() {
       const label = format(new Date(t), 'HH:mm');
       const row: Record<string, any> = { time: label };
       for (const series of productTrend) {
-        const found = series.points.find((pt) => pt.time === t);
-        row[series.productName] = found ? found.qty : 0;
+        row[series.productName] = series.points.reduce((qty, point) => qty + (point.time === t ? point.qty : 0), 0);
       }
       return row;
     });
@@ -446,7 +470,7 @@ export function VendorSales() {
           </CardHeader>
           <CardContent className="h-80 w-full" ref={trendChartRef}>
             {productTrend.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-gray-500">No completed orders for selected date.</div>
+              <div className="h-full flex items-center justify-center text-sm text-gray-500">No orders for selected date.</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={productTrendDataset}>
@@ -781,7 +805,7 @@ export function VendorSales() {
           <div className="text-sm font-semibold text-black">Product Trend</div>
           <div className="mt-3 h-64 w-full min-w-0 [@media(orientation:landscape)]:h-52">
             {productTrend.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-neutral-600">No completed orders for selected date.</div>
+              <div className="h-full flex items-center justify-center text-sm text-neutral-600">No orders for selected date.</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={productTrendDataset}>
@@ -868,10 +892,10 @@ export function VendorSales() {
         </div>
 
         <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-          <div className="text-sm font-semibold text-black">Completed Orders</div>
+          <div className="text-sm font-semibold text-black">Detailed Orders</div>
           <div className="mt-3 space-y-3">
             {orders.length === 0 ? (
-              <div className="text-sm text-neutral-600">No completed orders.</div>
+              <div className="text-sm text-neutral-600">No orders for this date.</div>
             ) : (
               orders.map((o, idx) => (
                 <div key={idx} className="min-w-0 rounded-3xl border border-neutral-100 p-4">

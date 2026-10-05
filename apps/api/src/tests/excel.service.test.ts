@@ -14,6 +14,7 @@ describe('event Excel report', () => {
         eventOrderNumber: 1,
         createdAt: new Date('2026-07-23T01:00:00.000Z'),
         status: 'READY',
+        paymentStatus: 'PENDING',
         totalAmount: 99,
         items: [
           {
