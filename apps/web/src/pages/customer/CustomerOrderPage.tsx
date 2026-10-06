@@ -4,7 +4,6 @@ import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { ensureGuestToken, guestApi } from '../../lib/guest';
-import { hasOrderLock, saveOrderLock, DEVICE_ORDER_LOCK_MESSAGE } from '../../lib/deviceOrderLock';
 import { useCustomerCart } from '../../hooks/useCustomerCart';
 import { millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
 
@@ -188,10 +187,6 @@ export function CustomerOrderPage() {
 
   const checkout = async () => {
     if (!store?.settings?.orderingOpen || cart.lines.length === 0) return;
-    if (hasOrderLock(vendorKey)) {
-      toast.error(DEVICE_ORDER_LOCK_MESSAGE);
-      return;
-    }
     setPlacing(true);
     try {
       const orderPayload = {
@@ -210,7 +205,6 @@ export function CustomerOrderPage() {
       const { data } = store.slug
         ? await guestApi.post(`/public/vendors/${encodeURIComponent(store.slug)}/orders`, orderPayload)
         : await guestApi.post('/orders', orderPayload);
-      saveOrderLock(vendorKey, data.data.order.id);
       cart.clear();
       toast.success(`Order #${data.data.order.eventOrderNumber} placed`);
       navigate(`/track/${data.data.order.id}`);

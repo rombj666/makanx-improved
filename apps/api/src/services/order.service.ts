@@ -6,6 +6,8 @@ import { ORDERING_CLOSED_MESSAGE, ORDER_LIMIT_REACHED_MESSAGE } from './event.se
 import { currentMalaysiaDayRange, dailyCupUsageWhere, evaluateCupLimit, sumDrinkQuantities } from './cup-limit';
 import { calculateLineTotal, money, sumMoney } from '../utils/money';
 
+const DEVICE_ORDER_EXISTS_MESSAGE = 'This device has already placed an order for this event today.';
+
 const createOrderSchema = z.object({
   vendorId: z.string().min(1),
   items: z.array(z.object({
@@ -149,14 +151,14 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       // (eventId, deviceId, deviceOrderDate) is the final backstop that makes
       // a second order from the same device on the same day impossible even
       // under concurrent racing requests.
-      if (settings?.deviceOrderLimitEnabled && deviceId) {
+      if (settings?.deviceOrderLimitEnabled === true && deviceId) {
         const deviceDate = currentMalaysiaDayRange(orderCreatedAt).date;
         const existing = await tx.order.findFirst({
           where: { eventId: lockedEvent.id, deviceId, deviceOrderDate: deviceDate },
           select: { id: true },
         });
         if (existing) {
-          const error = new Error('This device has already placed an order today.');
+          const error = new Error(DEVICE_ORDER_EXISTS_MESSAGE);
           (error as any).code = 'DEVICE_ORDER_EXISTS';
           (error as any).existingOrderId = existing.id;
           throw error;
@@ -211,7 +213,9 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           customerPhone: parsed.customerPhone?.trim() || null,
           customerEmail: parsed.customerEmail?.trim() || null,
           deviceId: deviceId || null,
-          deviceOrderDate: currentMalaysiaDayRange(orderCreatedAt).date,
+          deviceOrderDate: settings?.deviceOrderLimitEnabled === true
+            ? currentMalaysiaDayRange(orderCreatedAt).date
+            : null,
           vendorId: vendor.id,
           eventId: lockedEvent.id,
           eventOrderNumber,
@@ -228,7 +232,19 @@ export async function createOrder(_customerId: string | undefined, input: unknow
           vendor: { select: { businessName: true, slug: true } },
         },
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }).catch((error: unknown) => {
+      if (settings?.deviceOrderLimitEnabled === true
+        && error instanceof Prisma.PrismaClientKnownRequestError
+        && error.code === 'P2002') {
+        const target = error.meta?.target;
+        const fields = ['eventId', 'deviceId', 'deviceOrderDate'];
+        if (Array.isArray(target) && target.length === fields.length
+          && fields.every((field) => target.includes(field))) {
+          throw Object.assign(new Error(DEVICE_ORDER_EXISTS_MESSAGE), { code: 'DEVICE_ORDER_EXISTS' });
+        }
+      }
+      throw error;
+    });
 
   getIO().to(`vendor:${vendor.id}`).emit('order_created', order);
   return { order, estimatedMinutes: Math.max(...menuItems.map((item) => item.basePrepMin), 5) };
