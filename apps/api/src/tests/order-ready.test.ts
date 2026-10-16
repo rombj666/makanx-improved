@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../utils/prisma', () => ({ default: mocks.prisma }));
 vi.mock('../socket', () => ({ getIO: () => ({ to: () => ({ emit: mocks.emit }) }) }));
 import {
-  bulkStatusUpdate, createOrder, getVendorLiveOrders, markBatchItemsReady,
+  bulkStatusUpdate, createOrder, getVendorLiveOrders, getVendorProductionBatch, getVendorOrders, markBatchItemsReady,
   markOrderItemReady, markOrderItemsReady, updateOrderStatus,
 } from '../services/order.service';
 
@@ -180,5 +180,38 @@ describe('new order preparation defaults', () => {
     });
     expect(created[0].status).toBe('PREPARING');
     expect(created[0].items.create).toEqual([expect.objectContaining({ status: 'PREPARING' })]);
+  });
+});
+
+
+describe('active-event dashboard queries', () => {
+  it('selects every active PREPARING/READY order without a history query or result limit', async () => {
+    mocks.prisma.order.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([order]);
+    expect(await getVendorLiveOrders('staff')).toEqual([order]);
+    expect(mocks.prisma.vendorProfile.findUnique).toHaveBeenCalledTimes(1);
+    const query = mocks.prisma.order.findMany.mock.calls[1][0];
+    expect(query.where).toEqual({ vendorId: 'vendor', event: { status: 'ACTIVE' },
+      status: { in: ['PREPARING', 'READY'] } });
+    expect(query).not.toHaveProperty('take');
+    expect(query).not.toHaveProperty('skip');
+    expect(query.select.items.select.menuItem.select).toEqual({ id: true, name: true });
+    expect(query.select).not.toHaveProperty('customerId');
+    expect(query.select).not.toHaveProperty('deviceId');
+    expect(mocks.prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it('restricts the production batch to active-event preparation', async () => {
+    mocks.prisma.order.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    await getVendorProductionBatch('vendor', false);
+    expect(mocks.prisma.order.findMany.mock.calls[1][0].where).toEqual({
+      vendorId: 'vendor', status: 'PREPARING', event: { status: 'ACTIVE' },
+    });
+  });
+
+  it('preserves the separate historical vendor query', async () => {
+    await getVendorOrders('staff');
+    expect(mocks.prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { vendorId: 'vendor' }, include: expect.objectContaining({ items: expect.anything(), event: expect.anything() }),
+    }));
   });
 });

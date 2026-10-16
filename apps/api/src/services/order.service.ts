@@ -271,17 +271,37 @@ export async function getVendorOrders(userId: string) {
   });
 }
 
+// Dashboard projection: avoid menu configuration, images, customer/device data,
+// and prices that neither Kitchen nor Ready History renders.
+const liveOrderSelect = {
+  id: true, vendorId: true, eventOrderNumber: true, displayNumber: true,
+  status: true, createdAt: true, readyAt: true,
+  items: { select: {
+    id: true, quantity: true, status: true, remark: true, selectedOptions: true,
+    menuItem: { select: { id: true, name: true } },
+  } },
+  event: { select: { id: true, eventName: true, eventDate: true, location: true, status: true } },
+} satisfies Prisma.OrderSelect;
+
 export async function getVendorLiveOrders(userId: string) {
   const vendor = await getVendorForUser(userId);
   await normalizeLiveOrders(vendor.id);
-  return getVendorOrders(userId);
+  return prisma.order.findMany({
+    where: {
+      vendorId: vendor.id,
+      event: { status: EventStatus.ACTIVE },
+      status: { in: [OrderStatus.PREPARING, OrderStatus.READY] },
+    },
+    select: liveOrderSelect,
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 export async function getVendorProductionBatch(vendorId: string, _groupByWindow: boolean) {
   await normalizeLiveOrders(vendorId);
   return prisma.order.findMany({
-    where: { vendorId, status: OrderStatus.PREPARING },
-    include: { items: { include: { menuItem: true } } },
+    where: { vendorId, status: OrderStatus.PREPARING, event: { status: EventStatus.ACTIVE } },
+    select: liveOrderSelect,
     orderBy: { createdAt: 'asc' },
   });
 }

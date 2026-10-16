@@ -31,14 +31,14 @@ function orderSalesAmount(order: Pick<SalesOrder, 'items' | 'totalAmount'>) {
 }
 
 async function context(req: Request) {
-  const vendor = await prisma.vendorProfile.findUnique({ where: { userId: req.user!.userId } });
+  const vendor = await prisma.vendorProfile.findUnique({ where: { userId: req.user!.userId }, select: { id: true } });
   if (!vendor) throw new Error('Vendor profile not found');
   const date = String(req.query.date || new Date().toISOString().slice(0, 10));
   const range = getMalaysiaDayRange(date);
   return { vendor, date, ...range };
 }
 
-async function ordersFor(req: Request) {
+async function ordersFor(req: Request, view: 'summary' | 'products' | 'trend' | 'orders') {
   const ctx = await context(req);
   const where: Prisma.OrderWhereInput = {
     vendorId: ctx.vendor.id,
@@ -48,19 +48,17 @@ async function ordersFor(req: Request) {
   const orders = await prisma.order.findMany({
     where,
     select: {
-      id: true,
-      eventOrderNumber: true,
-      displayNumber: true,
+      eventOrderNumber: view === 'orders',
       totalAmount: true,
       createdAt: true,
-      completedAt: true,
+      completedAt: view === 'orders',
       items: {
         select: {
           menuItemId: true,
           quantity: true,
           price: true,
-          remark: true,
-          selectedOptions: true,
+          remark: view === 'products' || view === 'orders',
+          selectedOptions: view === 'orders',
           menuItem: {
             select: {
               name: true,
@@ -96,7 +94,7 @@ async function ordersFor(req: Request) {
 
 export const vendorSalesSummary = async (req: Request, res: Response) => {
   try {
-    const { orders } = await ordersFor(req);
+    const { orders } = await ordersFor(req, 'summary');
     const revenue = sumMoney(orders.map(orderSalesAmount));
     res.json({ success: true, data: {
       orders: orders.length,
@@ -110,7 +108,7 @@ export const vendorSalesSummary = async (req: Request, res: Response) => {
 
 export const vendorProductPerformance = async (req: Request, res: Response) => {
   try {
-    const { orders } = await ordersFor(req);
+    const { orders } = await ordersFor(req, 'products');
     const products = new Map<string, any>();
     for (const order of orders) {
       for (const item of order.items) {
@@ -140,7 +138,7 @@ export const productPerformance = vendorProductPerformance;
 
 export const vendorRevenueTrend = async (req: Request, res: Response) => {
   try {
-    const { orders } = await ordersFor(req);
+    const { orders } = await ordersFor(req, 'summary');
     const buckets = Array.from({ length: 24 }, (_, hour) => ({ hour, revenue: new Prisma.Decimal(0) }));
     for (const order of orders) {
       const hour = new Date(order.createdAt.getTime() + 8 * 60 * 60 * 1000).getUTCHours();
@@ -154,7 +152,7 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
 
 export const vendorProductTrend = async (req: Request, res: Response) => {
   try {
-    const { orders } = await ordersFor(req);
+    const { orders } = await ordersFor(req, 'trend');
     const series = new Map<string, any>();
     for (const order of orders) {
       for (const item of order.items) {
@@ -171,7 +169,7 @@ export const vendorProductTrend = async (req: Request, res: Response) => {
 
 export const vendorCompletedOrders = async (req: Request, res: Response) => {
   try {
-    const { orders } = await ordersFor(req);
+    const { orders } = await ordersFor(req, 'orders');
     res.json({ success: true, data: orders.map((order) => ({
       orderNumber: `#${order.eventOrderNumber}`,
       totalAmount: moneyNumber(orderSalesAmount(order)),

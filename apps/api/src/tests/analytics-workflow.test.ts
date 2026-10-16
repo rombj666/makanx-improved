@@ -62,3 +62,19 @@ describe('accepted order sales', () => {
     expect(mocks.orders.mock.calls.at(-1)![0].where).toEqual({ eventId: 'event' });
   });
 });
+
+
+it('omits detail snapshots from summary and trend queries while preserving order details', async () => {
+  await invoke(vendorSalesSummary);
+  let select = mocks.orders.mock.calls.at(-1)![0].select;
+  expect(select.items.select.selectedOptions).toBe(false);
+  expect(select.items.select.remark).toBe(false);
+  await invoke(vendorProductTrend);
+  expect(mocks.orders.mock.calls.at(-1)![0].select.items.select.selectedOptions).toBe(false);
+  await invoke(vendorProductPerformance);
+  expect(mocks.orders.mock.calls.at(-1)![0].select.items.select.remark).toBe(true);
+  await invoke(vendorCompletedOrders);
+  select = mocks.orders.mock.calls.at(-1)![0].select;
+  expect(select.items.select.selectedOptions).toBe(true);
+  expect(select.eventOrderNumber).toBe(true);
+});

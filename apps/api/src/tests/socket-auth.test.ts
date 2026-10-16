@@ -101,6 +101,25 @@ describe('authenticated socket subscriptions', () => {
     await Promise.all(markers);
     expect(received).toEqual({ vendorA: ['vendor-A-order'], vendorB: ['vendor-B-order'], guestA: ['guest-A-order'], guestB: ['guest-B-order'] });
   });
+  it('delivers created and READY updates once to each device of the same vendor', async () => {
+    const token = generateToken({ userId: 'A', role: 'VENDOR' });
+    const first = await connectWithVendorCookie(token);
+    const second = await connectWithVendorCookie(token);
+    const received: any[][] = [[], []];
+    for (const [index, client] of [first, second].entries()) {
+      client.on('order_created', payload => received[index].push(payload));
+      client.on('order_updated', payload => received[index].push(payload));
+      await flush(client);
+    }
+    const created = { id: 'new', status: 'PREPARING' };
+    const ready = { id: 'new', status: 'READY' };
+    io.to('vendor:A').emit('order_created', created);
+    io.to('vendor:A').emit('order_updated', ready);
+    const markers = [first, second].map(client => once(client, 'test_marker'));
+    io.to('vendor:A').emit('test_marker');
+    await Promise.all(markers);
+    expect(received).toEqual([[created, ready], [created, ready]]);
+  });
   it.each(['vendor', 'guest'])('disconnects an already-connected %s at expiry and rejects reconnection', async (type) => {
     const payload = type === 'vendor' ? { userId: 'A', role: 'VENDOR' } : { tokenType: 'guest', guestId: 'guest:A' };
     const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: 2, ...(type === 'guest' ? { audience: 'guest-orders' } : {}) });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
-import { applyLiveOrder, belongsInKitchen } from '../../lib/liveOrders';
+import { applyLiveOrder, belongsInKitchen, mergeLiveOrder } from '../../lib/liveOrders';
 import { useSocket } from '../../context/SocketContext';
 import { Button } from '../../components/ui/Button';
 import { toast } from 'react-hot-toast';
@@ -25,7 +25,6 @@ interface Order {
   eventOrderNumber?: string | number | null;
   displayNumber?: string | number | null;
   status: string;
-  totalAmount: string;
   customer?: {
     name?: string;
   } | null;
@@ -43,103 +42,85 @@ interface Order {
 }
 
 export function VendorDashboard() {
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
   const [groupByWindow, setGroupByWindow] = useState(false);
   const [groupMinutes, setGroupMinutes] = useState(2);
   const [productionOrders, setProductionOrders] = useState<Order[]>([]);
 
-  // Request deduplication and backoff
   const isFetchingRef = useRef(false);
-  const orderRevision = useRef(0);
   const lastFetchRef = useRef(0);
-  const [isThrottled, setIsThrottled] = useState(false);
+  const retryAfterRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const mountedRef = useRef(false);
+  const requestAbortRef = useRef<AbortController>();
+  const requestGenerationRef = useRef(0);
+  const latestOrders = useRef(new Map<string, Order>());
+  const updatesDuringFetch = useRef(new Map<string, Order>());
 
   const [activeTab, setActiveTab] = useState<'kitchen' | 'history'>('kitchen');
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [expandedHistoryEvents, setExpandedHistoryEvents] = useState<Set<string>>(new Set());
 
-  // Apply committed API results immediately, even when refreshes are throttled.
+  // Record committed changes so an older HTTP snapshot cannot overwrite them.
   const applyOrder = useCallback((order: Order) => {
-    orderRevision.current += 1;
-    setProductionOrders((previous) => applyLiveOrder(previous, order, 'kitchen'));
+    order = mergeLiveOrder(latestOrders.current.get(order.id), order);
+    latestOrders.current.set(order.id, order);
+    if (isFetchingRef.current) updatesDuringFetch.current.set(order.id, order);
+    setProductionOrders((previous) => applyLiveOrder(previous, order, 'kitchen')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
     setHistoryOrders((previous) => applyLiveOrder(previous, order, 'ready'));
   }, []);
 
-  const fetchHistoryOrders = useCallback(async () => {
-    const revision = orderRevision.current;
+  const refetchAll = useCallback(async (required = false) => {
+    if (!mountedRef.current) return;
+    if (isFetchingRef.current) {
+      if (required || Date.now() - lastFetchRef.current >= 2000) pendingRefreshRef.current = true;
+      return;
+    }
+    const now = Date.now();
+    if (now < retryAfterRef.current) return;
+    if (!required && now - lastFetchRef.current < 2000) return;
+    isFetchingRef.current = true;
+    lastFetchRef.current = now;
+    clearTimeout(refreshTimerRef.current);
+    updatesDuringFetch.current.clear();
+    const generation = requestGenerationRef.current;
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
     try {
-      const { data } = await api.get('/orders/vendor-live');
-      if (revision !== orderRevision.current) return;
+      const { data } = await api.get('/orders/vendor-live', { timeout: 20000, signal: controller.signal });
+      if (!mountedRef.current || generation !== requestGenerationRef.current) return;
       if (data.success) {
-        // In the new flow, orders marked READY are the "finished" ones for the history tab
-        const ready = (data.data || []).filter((o: Order) => o.status === 'READY');
-        setHistoryOrders(ready);
-      }
-    } catch (error) {
-      console.error('Failed to fetch history orders:', error);
-    }
-  }, []);
-
-  const fetchProductionBatch = useCallback(async () => {
-    if (isFetchingRef.current || isThrottled) return;
-    const now = Date.now();
-    if (now - lastFetchRef.current < 2000) return;
-
-    isFetchingRef.current = true;
-    lastFetchRef.current = now;
-    const revision = orderRevision.current;
-    try {
-      const res = await api.get(`/orders/vendor/production-batch?groupByWindow=false`);
-      if (revision !== orderRevision.current) return;
-      if (res.data.success) {
-        // Only PREPARING orders for the kitchen view
-        const preparing = (res.data.data || []).filter(belongsInKitchen);
-        setProductionOrders(preparing);
-      }
-    } catch (err: any) {
-      if (err.response?.status === 429) {
-        setIsThrottled(true);
-        setTimeout(() => setIsThrottled(false), 30000);
-      }
-      console.error("Production fetch error:", err);
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, [isThrottled]);
-
-  const refetchAll = useCallback(async () => {
-    if (isFetchingRef.current || isThrottled) return;
-    const now = Date.now();
-    if (now - lastFetchRef.current < 2000) return;
-
-    isFetchingRef.current = true;
-    lastFetchRef.current = now;
-    const revision = orderRevision.current;
-    try {
-      const [prodRes, liveRes] = await Promise.all([
-        api.get(`/orders/vendor/production-batch?groupByWindow=false`),
-        api.get('/orders/vendor-live')
-      ]);
-      if (revision !== orderRevision.current) return;
-      if (prodRes.data.success) {
-        const preparing = (prodRes.data.data || []).filter(belongsInKitchen);
-        setProductionOrders(preparing);
-      }
-      if (liveRes.data.success) {
-        const ready = (liveRes.data.data || []).filter((o: Order) => o.status === 'READY');
+        let kitchen: Order[] = (data.data || []).filter(belongsInKitchen);
+        let ready: Order[] = (data.data || []).filter((order: Order) => order.status === 'READY');
+        for (const order of updatesDuringFetch.current.values()) {
+          kitchen = applyLiveOrder(kitchen, order, 'kitchen');
+          ready = applyLiveOrder(ready, order, 'ready');
+        }
+        latestOrders.current = new Map([...kitchen, ...ready].map((order) => [order.id, order]));
+        setProductionOrders(kitchen.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         setHistoryOrders(ready);
       }
     } catch (error: any) {
+      if (!mountedRef.current || generation !== requestGenerationRef.current) return;
       if (error.response?.status === 429) {
-        setIsThrottled(true);
-        setTimeout(() => setIsThrottled(false), 30000);
+        retryAfterRef.current = Date.now() + 30000;
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = setTimeout(() => { void refetchAll(true); }, 30000);
         toast.error('Rate limited. Waiting 30s...');
       }
       console.error('Refetch error:', error);
     } finally {
-      isFetchingRef.current = false;
+      if (generation === requestGenerationRef.current) {
+        isFetchingRef.current = false;
+        if (pendingRefreshRef.current && mountedRef.current) {
+          pendingRefreshRef.current = false;
+          void refetchAll(true);
+        }
+      }
     }
-  }, [isThrottled]);
+  }, []);
 
   const groupedProduction = useMemo(() => {
     const windowMs = groupMinutes * 60 * 1000;
@@ -167,57 +148,41 @@ export function VendorDashboard() {
   }, [productionOrders, groupMinutes]);
 
   useEffect(() => {
-    refetchAll();
-
-    if (socket) {
-      let t: any;
-      const scheduleRefetch = () => {
-        clearTimeout(t);
-        t = setTimeout(() => {
-          void refetchAll();
-        }, 1000); // Increased debounce to 1s
-      };
-
-      socket.on('connect', scheduleRefetch);
-
-      socket.on('order_created', (newOrder: Order) => {
-        if (newOrder.status === 'PREPARING') {
-          setProductionOrders((prev) => {
-            if (prev.find(o => o.id === newOrder.id)) return prev;
-            return [newOrder, ...prev];
-          });
-        } else if (newOrder.status === 'READY') {
-          setHistoryOrders((prev) => {
-            if (prev.find(o => o.id === newOrder.id)) return prev;
-            return [newOrder, ...prev];
-          });
-        }
-        toast.success('New Order Received!');
-        scheduleRefetch();
-      });
-
-      socket.on('order_updated', (updatedOrder: Order) => {
-        applyOrder(updatedOrder);
-        scheduleRefetch();
-      });
-
-      socket.on('vendor_orders_changed', scheduleRefetch);
-    }
-
+    mountedRef.current = true;
+    void refetchAll(true);
     return () => {
-      if (socket) {
-        socket.off('connect');
-        socket.off('order_created');
-        socket.off('order_updated');
-        socket.off('vendor_orders_changed');
-      }
+      mountedRef.current = false;
+      requestGenerationRef.current++;
+      requestAbortRef.current?.abort();
+      isFetchingRef.current = false;
+      pendingRefreshRef.current = false;
+      clearTimeout(refreshTimerRef.current);
+    };
+  }, [refetchAll]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onConnect = () => { void refetchAll(true); };
+    const onCreated = (order: Order) => {
+      applyOrder(order);
+      toast.success('New Order Received!');
+    };
+    const onUpdated = (order: Order) => applyOrder(order);
+    const onChanged = () => { void refetchAll(true); };
+    socket.on('connect', onConnect);
+    socket.on('order_created', onCreated);
+    socket.on('order_updated', onUpdated);
+    socket.on('vendor_orders_changed', onChanged);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('order_created', onCreated);
+      socket.off('order_updated', onUpdated);
+      socket.off('vendor_orders_changed', onChanged);
     };
   }, [socket, refetchAll, applyOrder]);
 
   useEffect(() => {
-    const onFocus = () => {
-      void refetchAll();
-    };
+    const onFocus = () => { void refetchAll(); };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void refetchAll();
     };
@@ -230,18 +195,16 @@ export function VendorDashboard() {
   }, [refetchAll]);
 
   useEffect(() => {
+    // Background tabs retain their data; visibility/focus reconciles on return.
     const poll = setInterval(() => {
-      if (document.visibilityState !== 'visible' || isThrottled) return;
-      void fetchProductionBatch();
-      void fetchHistoryOrders();
-    }, 30000); // Slowed to 30s
+      if (document.visibilityState === 'visible') void refetchAll();
+    }, isConnected ? 300000 : 30000);
     return () => clearInterval(poll);
-  }, [fetchProductionBatch, fetchHistoryOrders, isThrottled]);
+  }, [refetchAll, isConnected]);
 
   const markOrderReady = async (id: string) => {
     const res = await api.post(`/orders/${id}/items/mark-ready`);
     if (res.data.success) applyOrder(res.data.data);
-    await refetchAll();
   };
 
   const formatItemDetails = (it: OrderItem, simplified = false) => {
@@ -378,9 +341,8 @@ export function VendorDashboard() {
                             selectedOptions: it.selectedOptions,
                             remark: it.remark,
                           });
-                          if (res.data.success) res.data.data.orders.forEach(applyOrder);
+                          if (res.data.success) res.data.orders.forEach(applyOrder);
                           toast.success(`${it.name} marked ready`);
-                          await refetchAll();
                         } catch (e: any) {
                           toast.error(e?.response?.data?.error || 'Failed to mark ready');
                         }
@@ -397,10 +359,6 @@ export function VendorDashboard() {
       </>
     );
   };
-
-  useEffect(() => {
-    fetchProductionBatch();
-  }, [groupByWindow, fetchProductionBatch]);
 
   const SingleOrderList = ({ data }: { data: Order[] }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -449,7 +407,6 @@ export function VendorDashboard() {
                               } else {
                                 toast.success(`${item.menuItem.name} marked ready`);
                               }
-                              await refetchAll();
                             } catch (e: any) {
                               toast.error(e?.response?.data?.error || 'Failed to mark ready');
                             }
@@ -755,7 +712,6 @@ export function VendorDashboard() {
                                   const res = await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
                                   if (res.data.success) applyOrder(res.data.data);
                                   toast.success(`${item.menuItem.name} marked ready`);
-                                  await refetchAll();
                                 } catch (e: any) {
                                   toast.error(e?.response?.data?.error || 'Failed to mark ready');
                                 }
