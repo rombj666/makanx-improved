@@ -44,7 +44,7 @@ const dashboardSocket = {
 };
 function emit(event: string, order?: any) { dashboardMocks.handlers.get(event)?.forEach(handler => handler(order)); }
 function liveOrder(id: string, status = 'PREPARING') {
-  return { id, vendorId: 'vendor', eventOrderNumber: id, status,
+  return { id, vendorId: 'vendor', eventOrderNumber: id, status, customerName: id === '1' ? 'Alex' : '小明',
     createdAt: '2026-10-16T01:00:00Z', event: { id: 'active', status: 'ACTIVE', eventName: 'Coffee', eventDate: '2026-10-16' },
     items: [{ id: `item-${id}`, quantity: 1, status, menuItem: { id: 'coffee', name: 'Coffee' } }] };
 }
@@ -95,6 +95,31 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     });
     expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === '1 ready orders').length).toBeGreaterThan(0);
     expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows socket names in both Kitchen layouts and Ready History, with a legacy fallback', async () => {
+    await act(async () => {
+      emit('order_created', liveOrder('1'));
+      emit('order_created', { ...liveOrder('2'), customerName: null });
+    });
+    const names = (value: string) => tree.root.findAll(node => node.type === 'p' && node.children.join('') === value);
+    expect(names('Alex')).toHaveLength(2);
+    expect(names('—')).toHaveLength(2);
+    await act(async () => { emit('order_updated', { ...liveOrder('1', 'READY'), customerName: undefined }); });
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Ready Orders'))!.props.onClick(); });
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Expand'))!.props.onClick(); });
+    expect(names('Alex')).toHaveLength(2);
+    expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores names from the lightweight API on reconnect', async () => {
+    dashboardMocks.get.mockResolvedValueOnce({ data: { success: true, data: [liveOrder('1'), liveOrder('2', 'READY')] } });
+    await act(async () => { emit('connect'); });
+    expect(textOf(tree)).toContain('Alex');
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Ready Orders'))!.props.onClick(); });
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Expand'))!.props.onClick(); });
+    expect(textOf(tree)).toContain('小明');
+    expect(dashboardMocks.get).toHaveBeenCalledTimes(2);
   });
 
   it('preserves the oldest-first production order across socket inserts', async () => {

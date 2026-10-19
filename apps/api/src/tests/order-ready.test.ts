@@ -21,7 +21,7 @@ import {
 let order: any;
 beforeEach(() => {
   vi.resetAllMocks();
-  order = { id: 'order', vendorId: 'vendor', customerId: 'guest', status: 'PREPARING', readyAt: null,
+  order = { id: 'order', vendorId: 'vendor', customerId: 'guest', customerName: '小明', status: 'PREPARING', readyAt: null,
     paymentStatus: 'PENDING', completedAt: null, event: { status: 'ACTIVE' },
     items: [{ id: 'latte', orderId: 'order', status: 'PREPARING' }] };
   mocks.prisma.vendorProfile.findUnique.mockResolvedValue({ id: 'vendor', settings: null });
@@ -47,10 +47,12 @@ describe('item ready workflow', () => {
     expect(result.status).toBe('READY');
     expect(result.items[0].status).toBe('READY');
     expect(result.readyAt).toBeInstanceOf(Date);
+    expect(result.customerName).toBe('小明');
     expect(mocks.prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.prisma.orderItem.updateMany.mock.invocationCallOrder[0]);
     expect(mocks.emit).toHaveBeenCalledWith('order_updated', result);
     const customerPayload = mocks.emit.mock.calls[0][1];
     expect(customerPayload).not.toHaveProperty('customerId');
+    expect(customerPayload).not.toHaveProperty('customerName');
     expect(customerPayload).not.toHaveProperty('vendorId');
     expect(customerPayload.items[0]).not.toHaveProperty('orderId');
   });
@@ -175,10 +177,12 @@ describe('new order preparation defaults', () => {
     mocks.prisma.order.create.mockImplementation(async ({ data }) => { created.push(data); return { id: 'new', ...data, items: data.items.create }; });
 
     await createOrder('guest:A', {
-      vendorId: 'vendor', guestId: 'guest:A', status: 'READY',
+      vendorId: 'vendor', guestId: 'guest:A', customerName: '  Alex  ', status: 'READY',
       items: [{ menuItemId: 'coffee', quantity: 2, status: 'READY' }],
     });
     expect(created[0].status).toBe('PREPARING');
+    expect(created[0].customerName).toBe('Alex');
+    expect(mocks.emit).toHaveBeenCalledWith('order_created', expect.objectContaining({ customerName: 'Alex' }));
     expect(created[0].items.create).toEqual([expect.objectContaining({ status: 'PREPARING' })]);
   });
 });
@@ -195,6 +199,8 @@ describe('active-event dashboard queries', () => {
     expect(query).not.toHaveProperty('take');
     expect(query).not.toHaveProperty('skip');
     expect(query.select.items.select.menuItem.select).toEqual({ id: true, name: true });
+    expect(query.select.customerName).toBe(true);
+    expect(query).not.toHaveProperty('include');
     expect(query.select).not.toHaveProperty('customerId');
     expect(query.select).not.toHaveProperty('deviceId');
     expect(mocks.prisma.order.update).not.toHaveBeenCalled();

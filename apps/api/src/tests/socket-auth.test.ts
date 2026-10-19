@@ -111,8 +111,8 @@ describe('authenticated socket subscriptions', () => {
       client.on('order_updated', payload => received[index].push(payload));
       await flush(client);
     }
-    const created = { id: 'new', status: 'PREPARING' };
-    const ready = { id: 'new', status: 'READY' };
+    const created = { id: 'new', status: 'PREPARING', customerName: '小明' };
+    const ready = { ...created, status: 'READY' };
     io.to('vendor:A').emit('order_created', created);
     io.to('vendor:A').emit('order_updated', ready);
     const markers = [first, second].map(client => once(client, 'test_marker'));

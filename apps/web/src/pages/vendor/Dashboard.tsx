@@ -25,6 +25,7 @@ interface Order {
   eventOrderNumber?: string | number | null;
   displayNumber?: string | number | null;
   status: string;
+  customerName?: string | null;
   customer?: {
     name?: string;
   } | null;
@@ -368,12 +369,13 @@ export function VendorDashboard() {
 
         return (
           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
-            <div className="flex justify-between items-start mb-4">
-              <div>
+            <div className="flex justify-between items-start gap-3 mb-4">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-xl font-bold text-black">Order #{computeDisplayNumber(order)}</h3>
+                <p className="break-words text-sm font-semibold text-neutral-800">{order.customerName?.trim() || '—'}</p>
                 <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
               </div>
-              <div className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
+              <div className="shrink-0 px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
                 {order.status}
               </div>
             </div>
@@ -504,8 +506,9 @@ export function VendorDashboard() {
           {expanded && <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {sortedOrders.map((order) => <article key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="font-bold text-black">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
+                  <p className="break-words text-sm font-semibold text-neutral-800">{order.customerName?.trim() || '—'}</p>
                   <div className="text-xs text-neutral-500">
                     Ready {new Date(order.readyAt || order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}
                   </div>
@@ -677,8 +680,9 @@ export function VendorDashboard() {
                 {productionOrders.map((order) => (
                   <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
+                        <p className="break-words text-sm font-semibold text-neutral-800">{order.customerName?.trim() || '—'}</p>
                         <div className="text-xs text-neutral-500">
                           {new Date(order.createdAt).toLocaleTimeString()}
                         </div>

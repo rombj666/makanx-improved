@@ -21,7 +21,8 @@ const createOrderSchema = z.object({
   })).min(1),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_COUNTER),
   guestId: z.string().min(1),
-  customerName: z.string().max(100).optional(),
+  customerName: z.string({ error: 'Please enter your name.' }).trim()
+    .min(1, 'Please enter your name.').max(50, 'Name must be 50 characters or fewer.'),
   customerPhone: z.string().max(30).optional(),
   customerEmail: z.union([z.string().email(), z.literal('')]).optional(),
 });
@@ -209,7 +210,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
       return tx.order.create({
         data: {
           customerId: parsed.guestId,
-          customerName: parsed.customerName?.trim() || null,
+          customerName: parsed.customerName,
           customerPhone: parsed.customerPhone?.trim() || null,
           customerEmail: parsed.customerEmail?.trim() || null,
           deviceId: deviceId || null,
@@ -271,11 +272,11 @@ export async function getVendorOrders(userId: string) {
   });
 }
 
-// Dashboard projection: avoid menu configuration, images, customer/device data,
+// Dashboard projection: include the call-out name, avoid menu configuration, images, other customer/device data,
 // and prices that neither Kitchen nor Ready History renders.
 const liveOrderSelect = {
   id: true, vendorId: true, eventOrderNumber: true, displayNumber: true,
-  status: true, createdAt: true, readyAt: true,
+  status: true, createdAt: true, readyAt: true, customerName: true,
   items: { select: {
     id: true, quantity: true, status: true, remark: true, selectedOptions: true,
     menuItem: { select: { id: true, name: true } },

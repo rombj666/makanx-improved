@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
+import { ZodError } from 'zod';
 import * as menuService from '../services/menu.service';
 import * as orderService from '../services/order.service';
 
 function errorToMessage(err: any) {
+  if (err instanceof ZodError) return err.issues.map((issue) => issue.message).join(', ');
   return err?.message || String(err || 'Unknown error');
 }
 

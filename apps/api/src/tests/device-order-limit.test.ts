@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../utils/prisma', () => ({ default: mocks }));
 vi.mock('../socket', () => ({ getIO: () => ({ to: () => ({ emit: vi.fn() }) }) }));
 import { createOrder } from '../services/order.service';
-const input = { vendorId: 'vendor', guestId: 'guest', items: [{ menuItemId: 'coffee', quantity: 1 }] };
+const input = { vendorId: 'vendor', guestId: 'guest', customerName: 'Alex', items: [{ menuItemId: 'coffee', quantity: 1 }] };
 let settings: any;
 let eventId: string;
 let rows: any[];
@@ -93,5 +93,19 @@ describe('device order eligibility', () => {
     mocks.orderItem.aggregate.mockResolvedValue({ _sum: { quantity: 10 } });
     await expect(createOrder(undefined, input, 'device')).rejects.toThrow('Ordering is closed because the cup limit has been reached.');
     expect(mocks.order.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('customer name validation', () => {
+  it.each([undefined, null, 123, '', '   ', 'a'.repeat(51)])('rejects invalid name %s before database work', async (customerName) => {
+    await expect(createOrder(undefined, { ...input, customerName }, 'device')).rejects.toThrow();
+    expect(mocks.vendorProfile.findUnique).not.toHaveBeenCalled();
+    expect(mocks.order.create).not.toHaveBeenCalled();
+  });
+  it.each(['Alex', 'John Tan', '小明', 'Wei Ming', 'a'.repeat(50)])('stores the trimmed name %s', async (customerName) => {
+    const { order } = await createOrder(undefined, { ...input, customerName: `  ${customerName}  ` }, 'device');
+    expect(order.customerName).toBe(customerName);
+    expect(order.customerId).toBe('guest');
+    expect(order.totalAmount.toString()).toBe('5');
   });
 });
