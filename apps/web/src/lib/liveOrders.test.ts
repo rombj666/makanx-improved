@@ -112,6 +112,17 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
   });
 
+  it('shows customer names under order numbers in grouped Kitchen mode and wraps long names', async () => {
+    await act(async () => {
+      emit('order_created', { ...liveOrder('1'), customerName: 'Alex with a very long customer name without spaces 12345678901234567890' });
+    });
+    const groupToggles = tree.root.findAllByType('input').filter(input => input.props.type === 'checkbox');
+    await act(async () => { groupToggles[0].props.onChange({ target: { checked: true } }); });
+    expect(textOf(tree)).toContain('Alex with a very long customer name without spaces 12345678901234567890');
+    expect(tree.root.findAll(node => node.children.join('') === 'Order #1').length).toBeGreaterThan(0);
+    expect(tree.root.findAll(node => node.type === 'p' && node.children.join('') === 'Alex with a very long customer name without spaces 12345678901234567890').length).toBe(2);
+  });
+
   it('restores names from the lightweight API on reconnect', async () => {
     dashboardMocks.get.mockResolvedValueOnce({ data: { success: true, data: [liveOrder('1'), liveOrder('2', 'READY')] } });
     await act(async () => { emit('connect'); });
