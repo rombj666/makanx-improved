@@ -61,7 +61,7 @@ function sanitizeOptionGroups(input: any): any[] | undefined {
 const optionChoiceSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
-  priceDelta: z.number().optional(),
+  priceDelta: z.number().nonnegative().optional(),
 });
 
 const optionGroupSchema = z.object({

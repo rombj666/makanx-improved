@@ -333,6 +333,7 @@ export function CustomerOrderPage() {
                     ))}
                     {line.remark && <div className="truncate text-xs text-neutral-500">Note: {line.remark}</div>}
                   </div>
+                  {showPrices && <span className="shrink-0 pt-1 font-semibold">RM{(line.price * line.quantity).toFixed(2)}</span>}
                   <div className="flex shrink-0 items-center gap-2">
                     <button onClick={() => cart.updateQuantity(line.id, line.quantity - 1)} className="h-8 w-8 rounded-lg border">{line.quantity === 1 ? <Trash2 className="m-auto" size={14} /> : <Minus className="m-auto" size={14} />}</button>
                     <span className="w-5 text-center">{line.quantity}</span>

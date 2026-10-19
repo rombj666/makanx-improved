@@ -658,6 +658,19 @@ export function VendorMenu() {
                       {g.choices.map((c, ci) => (
                         <div key={c.id} className="flex items-center gap-2">
                           <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={c.priceDelta ?? 0}
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
+                              setOptionGroups((prev) => prev.map((x, i) => i === gi
+                                ? { ...x, choices: x.choices.map((y, j) => j === ci ? { ...y, priceDelta: Number.isFinite(value) ? value : 0 } : y) }
+                                : x));
+                            }}
+                            placeholder="0.00"
+                          />
+                          <Input
                             value={c.label}
                             onChange={(e) => {
                               const v = e.target.value;
