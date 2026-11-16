@@ -97,14 +97,14 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
   });
 
-  it('shows socket names in both Kitchen layouts and Ready History, with a legacy fallback', async () => {
+  it('shows existing names in both Kitchen layouts and Ready History, with Guest for missing names', async () => {
     await act(async () => {
       emit('order_created', liveOrder('1'));
       emit('order_created', { ...liveOrder('2'), customerName: null });
     });
     const names = (value: string) => tree.root.findAll(node => node.type === 'p' && node.children.join('') === value);
     expect(names('Alex')).toHaveLength(2);
-    expect(names('—')).toHaveLength(2);
+    expect(names('Guest')).toHaveLength(2);
     await act(async () => { emit('order_updated', { ...liveOrder('1', 'READY'), customerName: undefined }); });
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Ready Orders'))!.props.onClick(); });
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Expand'))!.props.onClick(); });

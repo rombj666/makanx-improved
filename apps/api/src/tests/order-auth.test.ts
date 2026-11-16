@@ -138,18 +138,14 @@ describe('guest authentication and transition', () => {
   });
 });
 
-describe('customer name validation on both creation routes', () => {
-  it.each(['/api/orders', '/api/public/vendors/cafe/orders'])('rejects invalid names with a readable 400 on %s', async (path) => {
-    const actual = await vi.importActual<any>('../services/order.service');
-    mocks.createOrder.mockImplementation(actual.createOrder);
-    mocks.createOrderForVendorSlug.mockImplementation(actual.createOrderForVendorSlug);
-    for (const customerName of [undefined, null, 123, '', '   ', 'a'.repeat(51)]) {
-      const response = await request(app).post(path).auth(guestA, { type: 'bearer' }).send({
-        vendorId: 'vendor-A', customerName, items: [{ menuItemId: 'coffee', quantity: 1 }],
-      });
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe(typeof customerName === 'string' && customerName.length > 50
-        ? 'Name must be 50 characters or fewer.' : 'Please enter your name.');
-    }
+describe('optional customer name on both creation routes', () => {
+  it.each(['/api/orders', '/api/public/vendors/cafe/orders'])('accepts an order without a name on %s', async (path) => {
+    const response = await request(app).post(path).auth(guestA, { type: 'bearer' }).send({
+      vendorId: 'vendor-A', items: [{ menuItemId: 'coffee', quantity: 1 }],
+    });
+    expect(response.status).toBe(201);
+    const mock = path === '/api/orders' ? mocks.createOrder : mocks.createOrderForVendorSlug;
+    expect(mock.mock.calls[0][1]).not.toHaveProperty('customerName');
   });
+
 });

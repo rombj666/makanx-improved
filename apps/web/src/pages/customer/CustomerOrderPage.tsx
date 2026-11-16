@@ -55,16 +55,12 @@ export function CustomerOrderPage() {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [customerName, setCustomerName] = useState('');
   const [checkoutError, setCheckoutError] = useState('');
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [selectedChoices, setSelectedChoices] = useState<Record<string, string[]>>({});
   const [remark, setRemark] = useState('');
   const submittingRef = useRef(false);
   const checkoutDialogRef = useRef<HTMLDialogElement>(null);
-  const trimmedCustomerName = customerName.trim();
-  const nameError = !trimmedCustomerName ? 'Please enter your name.'
-    : trimmedCustomerName.length > 50 ? 'Name must be 50 characters or fewer.' : '';
 
   useEffect(() => {
     if (!checkoutOpen) return;
@@ -212,7 +208,7 @@ export function CustomerOrderPage() {
   };
 
   const checkout = async () => {
-    if (submittingRef.current || !checkoutOpen || nameError
+    if (submittingRef.current || !checkoutOpen
       || !store?.settings?.orderingOpen || cart.lines.length === 0) return;
     submittingRef.current = true;
     setPlacing(true);
@@ -220,7 +216,6 @@ export function CustomerOrderPage() {
     try {
       const orderPayload = {
         vendorId: store.id,
-        customerName: trimmedCustomerName,
         paymentMode: 'PAY_AT_COUNTER',
         items: cart.lines.map((line) => ({
           menuItemId: line.menuItemId,
@@ -354,7 +349,6 @@ export function CustomerOrderPage() {
         <dialog
           ref={checkoutDialogRef}
           aria-labelledby="checkout-title"
-          aria-describedby="checkout-description"
           aria-busy={placing}
           onCancel={(event) => { event.preventDefault(); closeCheckout(); }}
           onClick={(event) => { if (event.target === event.currentTarget) closeCheckout(); }}
@@ -367,23 +361,6 @@ export function CustomerOrderPage() {
                 <X size={18} />
               </button>
             </div>
-            <p id="checkout-description" className="mt-2 text-sm text-neutral-600">Enter your name so our barista knows who to call when your drinks are ready.</p>
-            <label htmlFor="checkout-name" className="mt-5 block text-sm font-semibold">Your Name *</label>
-            <input
-              id="checkout-name"
-              autoFocus
-              autoComplete="given-name"
-              placeholder="e.g. Alex"
-              required
-              value={customerName}
-              disabled={placing}
-              onChange={(event) => setCustomerName(event.target.value)}
-              aria-invalid={Boolean(nameError)}
-              aria-describedby="checkout-name-helper checkout-name-error"
-              className="mt-2 h-12 w-full rounded-xl border border-neutral-300 px-3 focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p id="checkout-name-helper" className="mt-2 text-xs text-neutral-500">First name or nickname is enough.</p>
-            <p id="checkout-name-error" aria-live="polite" className="mt-1 text-sm text-red-700">{nameError}</p>
             <h3 className="mt-5 font-bold">Order Summary</h3>
             <ul className="mt-3 divide-y divide-neutral-100">
               {cart.lines.map((line) => (
@@ -403,7 +380,7 @@ export function CustomerOrderPage() {
             {checkoutError && <p role="alert" className="mt-4 text-sm text-red-700">{checkoutError}</p>}
             <div className="mt-5 flex gap-3">
               <button type="button" onClick={closeCheckout} disabled={placing} className="h-12 flex-1 rounded-2xl border font-semibold disabled:opacity-50">Back</button>
-              <button type="button" onClick={checkout} disabled={placing || Boolean(nameError) || !store.settings?.orderingOpen || cart.lines.length === 0} className="h-12 flex-1 rounded-2xl bg-black font-bold text-white disabled:opacity-50">
+              <button type="button" onClick={checkout} disabled={placing || !store.settings?.orderingOpen || cart.lines.length === 0} className="h-12 flex-1 rounded-2xl bg-black font-bold text-white disabled:opacity-50">
                 {placing ? 'Placing order...' : 'Place Order'}
               </button>
             </div>

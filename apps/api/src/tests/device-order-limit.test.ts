@@ -96,11 +96,16 @@ describe('device order eligibility', () => {
   });
 });
 
-describe('customer name validation', () => {
-  it.each([undefined, null, 123, '', '   ', 'a'.repeat(51)])('rejects invalid name %s before database work', async (customerName) => {
+describe('optional customer name', () => {
+  it.each([123, 'a'.repeat(51)])('rejects invalid name %s before database work', async (customerName) => {
     await expect(createOrder(undefined, { ...input, customerName }, 'device')).rejects.toThrow();
     expect(mocks.vendorProfile.findUnique).not.toHaveBeenCalled();
     expect(mocks.order.create).not.toHaveBeenCalled();
+  });
+  it.each([undefined, null, '', '   '])('accepts an absent name %s', async (customerName) => {
+    const { order } = await createOrder(undefined, { ...input, customerName }, 'device');
+    expect(order.customerName ?? null).toBeNull();
+    expect(order.customerId).toBe('guest');
   });
   it.each(['Alex', 'John Tan', '小明', 'Wei Ming', 'a'.repeat(50)])('stores the trimmed name %s', async (customerName) => {
     const { order } = await createOrder(undefined, { ...input, customerName: `  ${customerName}  ` }, 'device');

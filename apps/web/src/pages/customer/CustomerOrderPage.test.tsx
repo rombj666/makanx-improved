@@ -25,7 +25,6 @@ async function mount() {
   await act(async () => { tree = create(<CustomerOrderPage />, { createNodeMock: element => element.type === 'dialog' ? { showModal, close } : null }); });
 }
 async function openCheckout() { await act(async () => { button('Checkout').props.onClick(); }); }
-function name(value: string) { act(() => tree.root.findByType('input').props.onChange({ target: { value } })); }
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('React', React);
@@ -54,33 +53,27 @@ it('opens a review modal without placing an order and preserves the cart on Back
     expect(focus).toHaveBeenCalled();
   }
 });
-it.each(['', '   ', 'a'.repeat(51)])('blocks invalid name %s even if the handler is invoked', async value => {
-  await mount(); await openCheckout(); name(value);
-  expect(button('Place Order').props.disabled).toBe(true);
-  await act(async () => { await button('Place Order').props.onClick(); });
-  expect(mocks.post).not.toHaveBeenCalled();
-  expect(tree.root.findByProps({ id: 'checkout-name-error' }).children.length).toBeGreaterThan(0);
-});
-it.each(['Alex', 'John Tan', '小明', 'Wei Ming', 'a'.repeat(50)])('submits a trimmed valid name %s and navigates to tracking', async value => {
+it('places an order without a customer name and navigates to tracking', async () => {
   mocks.post.mockResolvedValueOnce({ data: { data: { order: { id: 'new-order', eventOrderNumber: 2 } } } });
-  await mount(); await openCheckout(); name(`  ${value}  `);
+  await mount(); await openCheckout();
   expect(button('Place Order').props.disabled).toBe(false);
   await act(async () => { await button('Place Order').props.onClick(); });
-  expect(mocks.post).toHaveBeenCalledWith('/public/vendors/hour-coffee/orders', expect.objectContaining({ vendorId: 'vendor', customerName: value,
+  expect(mocks.post).toHaveBeenCalledWith('/public/vendors/hour-coffee/orders', expect.objectContaining({ vendorId: 'vendor',
     items: [expect.objectContaining({ quantity: 2, remark: 'Less ice', selectedOptions: [{ groupId: 'milk', choiceIds: ['oat'] }] })] }));
+  expect(mocks.post.mock.calls[0][1]).not.toHaveProperty('customerName');
   expect(mocks.navigate).toHaveBeenCalledWith('/track/new-order');
   expect(mocks.clear).toHaveBeenCalledTimes(1);
 });
-it('keeps the modal, name and cart on failure and permits retry despite a legacy vendor lock', async () => {
+it('keeps the modal and cart on failure and permits retry despite a legacy vendor lock', async () => {
   vi.stubGlobal('localStorage', { getItem: () => JSON.stringify({ orderId: 'old-order' }) });
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   const message = 'This device has already placed an order for this event today.';
   mocks.post.mockRejectedValueOnce({ response: { data: { message } } });
-  await mount(); await openCheckout(); name('Alex');
+  await mount(); await openCheckout();
   await act(async () => { await button('Place Order').props.onClick(); });
   expect(mocks.error).toHaveBeenCalledWith(message);
   expect(tree.root.findByProps({ role: 'alert' }).children).toContain(message);
-  expect(tree.root.findByType('input').props.value).toBe('Alex');
+  expect(tree.root.findAllByType('input')).toHaveLength(0);
   expect(mocks.clear).not.toHaveBeenCalled();
   expect(mocks.navigate).not.toHaveBeenCalled();
   mocks.post.mockResolvedValueOnce({ data: { data: { order: { id: 'retry', eventOrderNumber: 3 } } } });
@@ -92,7 +85,7 @@ it('keeps the modal, name and cart on failure and permits retry despite a legacy
 it('blocks rapid concurrent submissions and dismissal while pending', async () => {
   let resolve!: (value: any) => void;
   mocks.post.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-  await mount(); await openCheckout(); name('Alex');
+  await mount(); await openCheckout();
   const submit = button('Place Order').props.onClick;
   let pending!: Promise<void>;
   act(() => { pending = submit(); void submit(); });

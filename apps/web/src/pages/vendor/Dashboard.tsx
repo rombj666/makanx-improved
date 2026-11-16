@@ -316,7 +316,7 @@ export function VendorDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || '—'}</p>
+                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
                         <div className="text-xs text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</div>
                       </div>
                       <span className="shrink-0 text-xs font-semibold text-neutral-700">{order.status}</span>
@@ -383,7 +383,7 @@ export function VendorDashboard() {
             <div className="flex justify-between items-start gap-3 mb-4">
               <div className="min-w-0 flex-1">
                 <h3 className="text-xl font-bold text-black">Order #{computeDisplayNumber(order)}</h3>
-                <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || '—'}</p>
+                <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
                 <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
               </div>
               <div className="shrink-0 px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
@@ -519,7 +519,7 @@ export function VendorDashboard() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-black">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
-                  <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || '—'}</p>
+                  <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
                   <div className="text-xs text-neutral-500">
                     Ready {new Date(order.readyAt || order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}
                   </div>
@@ -693,7 +693,7 @@ export function VendorDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || '—'}</p>
+                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
                         <div className="text-xs text-neutral-500">
                           {new Date(order.createdAt).toLocaleTimeString()}
                         </div>

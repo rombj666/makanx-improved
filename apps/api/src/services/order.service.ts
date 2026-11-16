@@ -21,8 +21,10 @@ const createOrderSchema = z.object({
   })).min(1),
   paymentMode: z.nativeEnum(PaymentMode).default(PaymentMode.PAY_AT_COUNTER),
   guestId: z.string().min(1),
-  customerName: z.string({ error: 'Please enter your name.' }).trim()
-    .min(1, 'Please enter your name.').max(50, 'Name must be 50 characters or fewer.'),
+  customerName: z.preprocess(
+    (value) => typeof value === 'string' && !value.trim() ? undefined : value,
+    z.string().trim().max(50, 'Name must be 50 characters or fewer.').nullable().optional(),
+  ),
   customerPhone: z.string().max(30).optional(),
   customerEmail: z.union([z.string().email(), z.literal('')]).optional(),
 });
