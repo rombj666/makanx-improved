@@ -51,7 +51,7 @@ function sanitizeOptionGroups(input: any): any[] | undefined {
         })
         .filter(Boolean);
       if (choices.length === 0) return null;
-      return { id: String(g?.id || newId()), title, type, required, choices };
+      return { id: String(g?.id || newId()), title, type, required, enabled: g?.enabled !== false, choices };
     })
     .filter(Boolean);
 
@@ -69,6 +69,7 @@ const optionGroupSchema = z.object({
   title: z.string().min(1),
   type: z.enum(['single', 'multi']),
   required: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   choices: z.array(optionChoiceSchema).default([]),
 });
 
@@ -284,7 +285,7 @@ async function buildPublicMenu(where: Prisma.VendorProfileWhereUniqueInput) {
     menuItems: orderingStatus === 'OPEN'
       ? vendor.menuItems.map((item) => {
           const optionGroups = Array.isArray(item.optionGroups)
-            ? item.optionGroups.map((group: any) => ({
+            ? item.optionGroups.filter((group: any) => group?.enabled !== false).map((group: any) => ({
                 id: group.id,
                 title: group.title,
                 type: group.type,

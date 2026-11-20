@@ -38,6 +38,26 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('device order eligibility', () => {
+  it('rejects a selection from a disabled option group', async () => {
+    mocks.menuItem.findMany.mockResolvedValueOnce([{ id: 'coffee', price: 5, basePrepMin: 5, optionGroups: [
+      { id: 'sugar', title: 'Sugar', type: 'single', required: true, enabled: false,
+        choices: [{ id: 'less', label: 'Less sugar', priceDelta: 1 }] },
+    ] }]);
+    await expect(createOrder(undefined, {
+      ...input, items: [{ menuItemId: 'coffee', quantity: 1, selectedOptions: [{ groupId: 'sugar', choiceIds: ['less'] }] }],
+    }, 'device')).rejects.toThrow('Sugar is currently unavailable.');
+    expect(mocks.order.create).not.toHaveBeenCalled();
+  });
+  it('ignores disabled required groups without applying their surcharge', async () => {
+    mocks.menuItem.findMany.mockResolvedValueOnce([{ id: 'coffee', price: 5, basePrepMin: 5, optionGroups: [
+      { id: 'sugar', title: 'Sugar', type: 'single', required: true, enabled: false,
+        choices: [{ id: 'less', label: 'Less sugar', priceDelta: 1 }] },
+    ] }]);
+    await createOrder(undefined, input, 'device');
+    const created = mocks.order.create.mock.calls[0][0].data;
+    expect(created.items.create[0].selectedOptions).toEqual([]);
+    expect(created.totalAmount.toString()).toBe('5');
+  });
   it('allows repeat orders with a NULL date and no lookup when disabled', async () => {
     settings.deviceOrderLimitEnabled = false;
     await createOrder(undefined, input, 'device');

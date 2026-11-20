@@ -18,6 +18,7 @@ interface OptionGroup {
   title: string;
   type: 'single' | 'multi';
   required: boolean;
+  enabled?: boolean;
   choices: OptionChoice[];
 }
 
@@ -125,7 +126,7 @@ export function CustomerOrderPage() {
   const menu = useMemo(() => store?.menuItems || [], [store]);
   const showPrices = store?.settings?.showPrices !== false;
   const activeGroups = useMemo(
-    () => (Array.isArray(customizingItem?.optionGroups) ? customizingItem.optionGroups : []),
+    () => (Array.isArray(customizingItem?.optionGroups) ? customizingItem.optionGroups.filter((group) => group.enabled !== false) : []),
     [customizingItem],
   );
   const requiredSelectionsComplete = activeGroups.every(

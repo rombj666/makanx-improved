@@ -31,7 +31,9 @@ beforeEach(() => {
       id: 'item', name: 'Coffee', description: 'Fresh', price: new Prisma.Decimal('0.30'),
       imageUrl: 'https://example.test/coffee.webp', remarksEnabled: true,
       optionGroups: [{ id: 'size', title: 'Size', type: 'single', required: true,
-        choices: [{ id: 'large', label: 'Large', priceDelta: 0.2 }] }],
+        choices: [{ id: 'large', label: 'Large', priceDelta: 0.2 }] },
+      { id: 'sugar', title: 'Sugar', type: 'single', required: true, enabled: false,
+        choices: [{ id: 'less', label: 'Less sugar', priceDelta: 1 }] }],
     }],
   });
   mocks.aggregate.mockResolvedValue({ _sum: { quantity: 2 } });
@@ -55,6 +57,7 @@ describe('public menu DTO', () => {
     }
     expect(result.menuItems[0]).not.toHaveProperty('price');
     expect(result.menuItems[0].optionGroups[0].choices[0]).not.toHaveProperty('priceDelta');
+    expect(result.menuItems[0].optionGroups.map((group: any) => group.id)).toEqual(['size']);
   });
 
   it('returns public prices only when display is enabled', async () => {

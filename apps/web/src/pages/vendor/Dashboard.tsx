@@ -215,7 +215,7 @@ export function VendorDashboard() {
       if (!title || labels.length === 0) continue;
       if (simplified) {
         // In simplified mode (Kitchen View), we only show the selected values
-        parts.push(labels.join(', '));
+        parts.push(...labels);
       } else {
         parts.push(`${title}: ${labels.join(', ')}`);
       }
@@ -226,6 +226,14 @@ export function VendorDashboard() {
       parts.push(simplified ? remark : `Note: ${remark}`);
     }
     return parts;
+  };
+
+  const optionTone = (detail: string) => {
+    if (/^note:/i.test(detail.trim())) return 'bg-neutral-200 text-black';
+    const label = detail.includes(':') ? detail.slice(detail.lastIndexOf(':') + 1).trim() : detail.trim();
+    if (label.toLowerCase() === 'hot') return 'bg-red-100 text-red-800';
+    if (label.toLowerCase() === 'cold') return 'bg-blue-100 text-blue-800';
+    return 'bg-neutral-200 text-black';
   };
 
   const preparationKey = (it: OrderItem) => {
@@ -315,8 +323,7 @@ export function VendorDashboard() {
                   <div key={order.id} className="min-w-0 rounded-xl border border-neutral-100 bg-white px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
+                        <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
                         <div className="text-xs text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</div>
                       </div>
                       <span className="shrink-0 text-xs font-semibold text-neutral-700">{order.status}</span>
@@ -382,8 +389,7 @@ export function VendorDashboard() {
           <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
             <div className="flex justify-between items-start gap-3 mb-4">
               <div className="min-w-0 flex-1">
-                <h3 className="text-xl font-bold text-black">Order #{computeDisplayNumber(order)}</h3>
-                <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
+                <h3 className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</h3>
                 <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
               </div>
               <div className="shrink-0 px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
@@ -401,7 +407,7 @@ export function VendorDashboard() {
                       {formatItemDetails(item, true).length > 0 && (
                         <div className="mt-2 space-y-1">
                           {formatItemDetails(item, true).map((d, i) => (
-                            <div key={i} className="text-sm bg-neutral-100 px-2 py-1 rounded text-neutral-700">
+                            <div key={i} className={`text-sm px-2 py-1 rounded ${optionTone(d)}`}>
                               {d}
                             </div>
                           ))}
@@ -518,8 +524,7 @@ export function VendorDashboard() {
             {sortedOrders.map((order) => <article key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-black">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
-                  <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
+                  <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
                   <div className="text-xs text-neutral-500">
                     Ready {new Date(order.readyAt || order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}
                   </div>
@@ -529,7 +534,7 @@ export function VendorDashboard() {
               <div className="mt-3 space-y-3">
                 {order.items.map((item, index) => <div key={item.id || index} className="text-sm">
                   <div className="flex justify-between gap-3 font-semibold"><span>{item.quantity}x {item.menuItem.name}</span><span className="text-green-700">{item.status || 'READY'}</span></div>
-                  {formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className="mt-1 text-xs text-neutral-500">{detail}</div>)}
+                  {formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className={`mt-1 text-xs rounded px-2 py-1 inline-block ${optionTone(detail)}`}>{detail}</div>)}
                 </div>)}
               </div>
             </article>)}
@@ -692,8 +697,7 @@ export function VendorDashboard() {
                   <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-black">Order #{computeDisplayNumber(order)}</div>
-                        <p className="mt-1 text-2xl font-bold text-black break-words [overflow-wrap:anywhere]">{order.customerName?.trim() || 'Guest'}</p>
+                        <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
                         <div className="text-xs text-neutral-500">
                           {new Date(order.createdAt).toLocaleTimeString()}
                         </div>
@@ -716,7 +720,7 @@ export function VendorDashboard() {
                           {formatItemDetails(item, true).length > 0 ? (
                             <div className="mt-2 text-lg text-black font-bold space-y-2">
                               {formatItemDetails(item, true).map((d, j) => (
-                                <div key={j} className="bg-neutral-200 px-3 py-2 rounded-lg whitespace-normal break-words leading-tight">{d}</div>
+                                <div key={j} className={`px-3 py-2 rounded-lg whitespace-normal break-words leading-tight ${optionTone(d)}`}>{d}</div>
                               ))}
                             </div>
                           ) : null}

@@ -40,6 +40,10 @@ function selectedOptionSnapshot(groups: any[], selected: { groupId: string; choi
   for (const group of groups) {
     const groupId = String(group?.id || '');
     const choiceIds = selections.get(groupId) || [];
+    if (group?.enabled === false && choiceIds.length > 0) {
+      throw new Error(`${String(group?.title || 'Customization')} is currently unavailable.`);
+    }
+    if (group?.enabled === false) continue;
     if (group?.required && choiceIds.length === 0) {
       throw new Error(`Please select an option for ${String(group?.title || 'required customization')}.`);
     }
@@ -60,7 +64,7 @@ function selectedOptionSnapshot(groups: any[], selected: { groupId: string; choi
     }
   }
 
-  return groups.flatMap((group) => {
+  return groups.filter((group) => group?.enabled !== false).flatMap((group) => {
     const groupId = String(group?.id || '');
     const choiceIds = selections.get(groupId) || [];
     if (choiceIds.length === 0) return [];

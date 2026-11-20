@@ -97,39 +97,41 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
   });
 
-  it('shows existing names in both Kitchen layouts and Ready History, with Guest for missing names', async () => {
+  it('keeps customer names out of Kitchen layouts and Ready History', async () => {
     await act(async () => {
       emit('order_created', liveOrder('1'));
       emit('order_created', { ...liveOrder('2'), customerName: null });
     });
     const names = (value: string) => tree.root.findAll(node => node.type === 'p' && node.children.join('') === value);
-    expect(names('Alex')).toHaveLength(2);
-    expect(names('Guest')).toHaveLength(2);
+    expect(names('Alex')).toHaveLength(0);
+    expect(names('Guest')).toHaveLength(0);
+    expect(tree.root.findAll(node => node.children.join('') === 'Order #1').length).toBeGreaterThan(0);
     await act(async () => { emit('order_updated', { ...liveOrder('1', 'READY'), customerName: undefined }); });
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Ready Orders'))!.props.onClick(); });
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Expand'))!.props.onClick(); });
-    expect(names('Alex')).toHaveLength(2);
+    expect(names('Alex')).toHaveLength(0);
     expect(dashboardMocks.get).toHaveBeenCalledTimes(1);
   });
 
-  it('shows customer names under order numbers in grouped Kitchen mode and wraps long names', async () => {
+  it('keeps customer names out of grouped Kitchen mode and enlarges order numbers', async () => {
     await act(async () => {
       emit('order_created', { ...liveOrder('1'), customerName: 'Alex with a very long customer name without spaces 12345678901234567890' });
     });
     const groupToggles = tree.root.findAllByType('input').filter(input => input.props.type === 'checkbox');
     await act(async () => { groupToggles[0].props.onChange({ target: { checked: true } }); });
-    expect(textOf(tree)).toContain('Alex with a very long customer name without spaces 12345678901234567890');
+    expect(textOf(tree)).not.toContain('Alex with a very long customer name without spaces 12345678901234567890');
     expect(tree.root.findAll(node => node.children.join('') === 'Order #1').length).toBeGreaterThan(0);
-    expect(tree.root.findAll(node => node.type === 'p' && node.children.join('') === 'Alex with a very long customer name without spaces 12345678901234567890').length).toBe(2);
+    expect(tree.root.findAll(node => node.children.join('') === 'Order #1').every(node => node.props.className.includes('text-3xl'))).toBe(true);
   });
 
-  it('restores names from the lightweight API on reconnect', async () => {
+  it('restores live orders from the lightweight API on reconnect without showing names', async () => {
     dashboardMocks.get.mockResolvedValueOnce({ data: { success: true, data: [liveOrder('1'), liveOrder('2', 'READY')] } });
     await act(async () => { emit('connect'); });
-    expect(textOf(tree)).toContain('Alex');
+    expect(tree.root.findAll(node => node.children.join('') === 'Order #1').length).toBeGreaterThan(0);
+    expect(textOf(tree)).not.toContain('Alex');
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Ready Orders'))!.props.onClick(); });
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Expand'))!.props.onClick(); });
-    expect(textOf(tree)).toContain('小明');
+    expect(textOf(tree)).not.toContain('小明');
     expect(dashboardMocks.get).toHaveBeenCalledTimes(2);
   });
 

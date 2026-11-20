@@ -24,6 +24,7 @@ type OptionGroup = {
   title: string;
   type: 'single' | 'multi';
   required: boolean;
+  enabled: boolean;
   choices: OptionChoice[];
 };
 
@@ -563,6 +564,7 @@ export function VendorMenu() {
                       title: '',
                       type: 'single',
                       required: true,
+                      enabled: true,
                       choices: [{ id: newId(), label: '' }],
                     })
                   )
@@ -601,6 +603,13 @@ export function VendorMenu() {
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={g.enabled !== false} onChange={(e) => {
+                        const enabled = e.target.checked;
+                        setOptionGroups((prev) => prev.map((x, i) => i === gi ? { ...x, enabled } : x));
+                      }} />
+                      Enabled
+                    </label>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500">Type</label>
                       <select
