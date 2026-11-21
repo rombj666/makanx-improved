@@ -231,16 +231,16 @@ export function VendorDashboard() {
   const optionTone = (detail: string) => {
     if (/^note:/i.test(detail.trim())) return 'border-neutral-200 bg-neutral-50 text-neutral-700';
     const label = detail.includes(':') ? detail.slice(detail.lastIndexOf(':') + 1).trim() : detail.trim();
-    if (label.toLowerCase() === 'hot') return 'border-rose-200 bg-rose-50 text-rose-800';
-    if (label.toLowerCase() === 'cold') return 'border-sky-200 bg-sky-50 text-sky-800';
-    return 'border-neutral-200 bg-neutral-50 text-neutral-700';
+    if (label.toLowerCase() === 'hot') return 'border-red-500 bg-red-500/10 text-red-700 font-bold';
+    if (label.toLowerCase() === 'cold') return 'border-blue-500 bg-blue-500/10 text-blue-700 font-bold';
+    return 'border-neutral-300 bg-neutral-50 text-neutral-800 font-semibold';
   };
 
   const orderStatusTone = (status: string) => status === 'READY'
     ? 'border-green-200 bg-green-50 text-green-700'
     : 'border-neutral-200 bg-neutral-50 text-neutral-600';
 
-  const optionChipClass = (detail: string) => `inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-snug whitespace-normal break-words ${optionTone(detail)}`;
+  const optionChipClass = (detail: string) => `inline-flex max-w-full min-w-0 items-center rounded-xl border-2 px-4 py-2.5 text-xl leading-snug whitespace-normal break-words [overflow-wrap:anywhere] ${optionTone(detail)}`;
 
   const preparationKey = (it: OrderItem) => {
     const remark = String(it.remark || '').trim();
@@ -342,7 +342,7 @@ export function VendorDashboard() {
                   <li key={it.key} className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="min-w-0">
                       <div>
-                        <span className="font-bold text-lg">{it.name}</span>{' '}
+                        <span className="font-bold text-xl">{it.name}</span>{' '}
                         <span className="font-bold text-xl">x{it.quantity}</span>
                       </div>
                       {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
@@ -407,7 +407,7 @@ export function VendorDashboard() {
                 <div key={idx} className="border-b border-neutral-50 pb-4 last:border-0 last:pb-0">
                   <div className="flex justify-between items-start">
                     <div className="min-w-0">
-                      <div className="font-bold text-lg text-black">
+                      <div className="font-bold text-xl text-black">
                         {item.quantity}x {item.menuItem.name}
                       </div>
                       {formatItemDetails(item, true).length > 0 && (
@@ -539,7 +539,7 @@ export function VendorDashboard() {
               </div>
               <div className="mt-3 space-y-3">
                 {order.items.map((item, index) => <div key={item.id || index} className="text-sm">
-                  <div className="flex justify-between gap-3 font-semibold"><span>{item.quantity}x {item.menuItem.name}</span><span className="text-green-700">{item.status || 'READY'}</span></div>
+                  <div className="flex justify-between gap-3 font-bold text-xl"><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.quantity}x {item.menuItem.name}</span><span className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">{item.status || 'READY'}</span></div>
                   <div className="mt-2 flex flex-wrap gap-2">{formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className={optionChipClass(detail)}>{detail}</div>)}</div>
                 </div>)}
               </div>
