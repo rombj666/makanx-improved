@@ -241,7 +241,8 @@ export function VendorDashboard() {
     : 'border-neutral-200 bg-neutral-50 text-neutral-600';
 
   const optionStackClass = 'mt-2.5 flex w-fit max-w-xs flex-col items-start gap-2.5';
-  const optionChipClass = (detail: string) => `inline-flex w-full max-w-full items-center rounded-xl px-5 py-2.5 text-xl font-bold leading-snug whitespace-normal break-words [overflow-wrap:anywhere] ${optionTone(detail)}`;
+  const optionChipClass = (detail: string) => `inline-flex w-full max-w-full items-center rounded-xl px-5 py-2.5 text-2xl font-bold leading-snug whitespace-normal break-words [overflow-wrap:anywhere] ${optionTone(detail)}`;
+  const drinkTitleClass = 'font-bold text-2xl text-black break-words [overflow-wrap:anywhere]';
 
   const preparationKey = (it: OrderItem) => {
     const remark = String(it.remark || '').trim();
@@ -343,7 +344,7 @@ export function VendorDashboard() {
                   <li key={it.key} className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="min-w-0">
                       <div>
-                        <span className="font-bold text-xl">x{it.quantity} {it.name}</span>
+                        <span className={drinkTitleClass}>x{it.quantity} {it.name}</span>
                       </div>
                       {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
                         <div className={optionStackClass}>
@@ -407,7 +408,7 @@ export function VendorDashboard() {
                 <div key={idx} className="border-b border-neutral-50 pb-4 last:border-0 last:pb-0">
                   <div className="flex justify-between items-start">
                     <div className="min-w-0">
-                      <div className="font-bold text-xl text-black">
+                      <div className={drinkTitleClass}>
                         {item.quantity}x {item.menuItem.name}
                       </div>
                       {formatItemDetails(item, true).length > 0 && (
@@ -539,7 +540,7 @@ export function VendorDashboard() {
               </div>
               <div className="mt-3 space-y-3">
                 {order.items.map((item, index) => <div key={item.id || index} className="text-sm">
-                  <div className="flex justify-between gap-3 font-bold text-xl"><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.quantity}x {item.menuItem.name}</span><span className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">{item.status || 'READY'}</span></div>
+                  <div className="flex justify-between gap-3 font-bold text-2xl"><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.quantity}x {item.menuItem.name}</span><span className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">{item.status || 'READY'}</span></div>
                   <div className={optionStackClass}>{formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className={optionChipClass(detail)}>{detail}</div>)}</div>
                 </div>)}
               </div>
@@ -716,7 +717,7 @@ export function VendorDashboard() {
                       {order.items.map((item: any, idx: number) => (
                         <div key={idx} className="rounded-xl border border-neutral-100 p-3">
                           <div className="flex items-center justify-between gap-3">
-                            <div className="text-lg font-bold text-black min-w-0 flex-1">
+                            <div className={`${drinkTitleClass} min-w-0 flex-1`}>
                               {item.quantity}x {item.menuItem.name}
                             </div>
                             {item.status === 'READY' && <div className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">READY</div>}
