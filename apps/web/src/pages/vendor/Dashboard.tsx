@@ -229,12 +229,18 @@ export function VendorDashboard() {
   };
 
   const optionTone = (detail: string) => {
-    if (/^note:/i.test(detail.trim())) return 'bg-neutral-200 text-black';
+    if (/^note:/i.test(detail.trim())) return 'border-neutral-200 bg-neutral-50 text-neutral-700';
     const label = detail.includes(':') ? detail.slice(detail.lastIndexOf(':') + 1).trim() : detail.trim();
-    if (label.toLowerCase() === 'hot') return 'bg-red-100 text-red-800';
-    if (label.toLowerCase() === 'cold') return 'bg-blue-100 text-blue-800';
-    return 'bg-neutral-200 text-black';
+    if (label.toLowerCase() === 'hot') return 'border-rose-200 bg-rose-50 text-rose-800';
+    if (label.toLowerCase() === 'cold') return 'border-sky-200 bg-sky-50 text-sky-800';
+    return 'border-neutral-200 bg-neutral-50 text-neutral-700';
   };
+
+  const orderStatusTone = (status: string) => status === 'READY'
+    ? 'border-green-200 bg-green-50 text-green-700'
+    : 'border-neutral-200 bg-neutral-50 text-neutral-600';
+
+  const optionChipClass = (detail: string) => `inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-snug whitespace-normal break-words ${optionTone(detail)}`;
 
   const preparationKey = (it: OrderItem) => {
     const remark = String(it.remark || '').trim();
@@ -320,29 +326,29 @@ export function VendorDashboard() {
               ) : null}
               <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {block.orders.map((order) => (
-                  <div key={order.id} className="min-w-0 rounded-xl border border-neutral-100 bg-white px-3 py-2">
+                  <div key={order.id} className="min-w-0 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
+                        <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
                         <div className="text-xs text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</div>
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-neutral-700">{order.status}</span>
+                      <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone(order.status)}`}>{order.status}</span>
                     </div>
                   </div>
                 ))}
               </div>
               <ul className="space-y-2">
                 {aggregated.map((it) => (
-                  <li key={it.key} className="flex items-start justify-between rounded border p-3 bg-white gap-4">
+                  <li key={it.key} className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="min-w-0">
                       <div>
                         <span className="font-bold text-lg">{it.name}</span>{' '}
-                        <span className="font-extrabold text-xl">x{it.quantity}</span>
+                        <span className="font-bold text-xl">x{it.quantity}</span>
                       </div>
                       {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
-                        <div className="mt-2 text-lg text-black font-bold space-y-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).map((d, idx) => (
-                            <div key={idx} className="whitespace-normal break-words leading-tight bg-neutral-200 px-3 py-2 rounded-lg">
+                            <div key={idx} className={optionChipClass(d)}>
                               {d}
                             </div>
                           ))}
@@ -350,7 +356,7 @@ export function VendorDashboard() {
                       ) : null}
                     </div>
                     <Button
-                      className="bg-green-600 text-white shrink-0 w-[100px]"
+                      className="h-11 shrink-0 rounded-xl bg-neutral-900 px-5 font-semibold text-white hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
                       onClick={async () => {
                         try {
                           const res = await api.post('/orders/vendor/production/mark-ready', {
@@ -386,13 +392,13 @@ export function VendorDashboard() {
         const isMultiType = itemCount > 1;
 
         return (
-          <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-6 flex flex-col">
+          <div key={order.id} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5">
             <div className="flex justify-between items-start gap-3 mb-4">
               <div className="min-w-0 flex-1">
-                <h3 className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</h3>
+                <h3 className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</h3>
                 <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
               </div>
-              <div className="shrink-0 px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-bold uppercase">
+              <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone(order.status)}`}>
                 {order.status}
               </div>
             </div>
@@ -405,9 +411,9 @@ export function VendorDashboard() {
                         {item.quantity}x {item.menuItem.name}
                       </div>
                       {formatItemDetails(item, true).length > 0 && (
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {formatItemDetails(item, true).map((d, i) => (
-                            <div key={i} className={`text-sm px-2 py-1 rounded ${optionTone(d)}`}>
+                            <div key={i} className={optionChipClass(d)}>
                               {d}
                             </div>
                           ))}
@@ -430,7 +436,7 @@ export function VendorDashboard() {
                               toast.error(e?.response?.data?.error || 'Failed to mark ready');
                             }
                           }}
-                          className="ml-4 px-3 py-1 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-black transition"
+                          className="ml-3 min-h-11 shrink-0 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
                         >
                           Mark Ready
                         </button>
@@ -452,7 +458,7 @@ export function VendorDashboard() {
                     toast.error(e?.response?.data?.error || 'Failed to mark ready');
                   }
                 }}
-                className="mt-4 w-full h-12 rounded-2xl font-semibold bg-black text-white active:scale-[0.99] transition"
+                className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 py-3 font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
               >
                 Ready
               </button>
@@ -499,7 +505,7 @@ export function VendorDashboard() {
         const sortedOrders = [...group.orders].sort((a, b) =>
           new Date(b.readyAt || b.createdAt).getTime() - new Date(a.readyAt || a.createdAt).getTime(),
         );
-        return <section key={group.key} className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+        return <section key={group.key} className="rounded-2xl border border-neutral-200 bg-white p-4">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
               <h3 className="font-bold text-black">Event: {eventName} — {formattedDate}</h3>
@@ -515,26 +521,26 @@ export function VendorDashboard() {
                 else next.add(group.key);
                 return next;
               })}
-              className="h-10 rounded-xl border border-neutral-200 px-4 text-sm font-semibold"
+              className="h-11 rounded-xl border border-neutral-200 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
             >
               {expanded ? 'Collapse' : 'Expand'}
             </button>
           </div>
           {expanded && <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {sortedOrders.map((order) => <article key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
+            {sortedOrders.map((order) => <article key={order.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
+                  <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{order.eventOrderNumber ?? order.displayNumber}</div>
                   <div className="text-xs text-neutral-500">
                     Ready {new Date(order.readyAt || order.createdAt).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' })}
                   </div>
                 </div>
-                <span className="rounded-full border border-green-100 bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-700">READY</span>
+                <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone('READY')}`}>READY</span>
               </div>
               <div className="mt-3 space-y-3">
                 {order.items.map((item, index) => <div key={item.id || index} className="text-sm">
                   <div className="flex justify-between gap-3 font-semibold"><span>{item.quantity}x {item.menuItem.name}</span><span className="text-green-700">{item.status || 'READY'}</span></div>
-                  {formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className={`mt-1 text-xs rounded px-2 py-1 inline-block ${optionTone(detail)}`}>{detail}</div>)}
+                  <div className="mt-2 flex flex-wrap gap-2">{formatItemDetails(item).map((detail, detailIndex) => <div key={detailIndex} className={optionChipClass(detail)}>{detail}</div>)}</div>
                 </div>)}
               </div>
             </article>)}
@@ -620,7 +626,7 @@ export function VendorDashboard() {
             onClick={() => {
               refetchAll();
             }}
-            className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"
+            className="shrink-0 h-11 px-4 rounded-xl bg-white border border-neutral-200 text-black font-semibold text-sm transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
           >
             Refresh
           </button>
@@ -645,7 +651,7 @@ export function VendorDashboard() {
           </button>
         </div>
 
-        <div className="mt-4 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+        <div className="mt-4 bg-white rounded-2xl border border-neutral-200 p-4">
           <div className="flex flex-col gap-3 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-center">
             <label className="flex items-center justify-between gap-3 text-sm font-semibold text-black">
               <span>Group by time window</span>
@@ -694,33 +700,31 @@ export function VendorDashboard() {
             ) : (
               <div className="space-y-4">
                 {productionOrders.map((order) => (
-                  <div key={order.id} className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+                  <div key={order.id} className="bg-white rounded-2xl border border-neutral-200 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="text-3xl font-extrabold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
+                        <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
                         <div className="text-xs text-neutral-500">
                           {new Date(order.createdAt).toLocaleTimeString()}
                         </div>
                       </div>
-                      <div className="text-xs font-semibold px-3 py-1 rounded-full border border-neutral-200 text-black">
+                      <div className={`text-[10px] font-semibold tracking-wide px-2.5 py-1 rounded-full border ${orderStatusTone(order.status)}`}>
                         {order.status}
                       </div>
                     </div>
                     <div className="mt-3 space-y-3">
                       {order.items.map((item: any, idx: number) => (
-                        <div key={idx} className="rounded-2xl border border-neutral-100 p-3">
+                        <div key={idx} className="rounded-xl border border-neutral-100 p-3">
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-lg font-bold text-black min-w-0 flex-1">
                               {item.quantity}x {item.menuItem.name}
                             </div>
-                            <div className={`text-sm font-bold shrink-0 ${item.status === 'READY' ? 'text-green-600' : 'text-amber-600 animate-pulse'}`}>
-                              {item.status === 'READY' ? 'READY' : 'PREPARING'}
-                            </div>
+                            {item.status === 'READY' && <div className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">READY</div>}
                           </div>
                           {formatItemDetails(item, true).length > 0 ? (
-                            <div className="mt-2 text-lg text-black font-bold space-y-2">
+                            <div className="mt-2 flex flex-wrap gap-2">
                               {formatItemDetails(item, true).map((d, j) => (
-                                <div key={j} className={`px-3 py-2 rounded-lg whitespace-normal break-words leading-tight ${optionTone(d)}`}>{d}</div>
+                                <div key={j} className={optionChipClass(d)}>{d}</div>
                               ))}
                             </div>
                           ) : null}
@@ -735,7 +739,7 @@ export function VendorDashboard() {
                                   toast.error(e?.response?.data?.error || 'Failed to mark ready');
                                 }
                               }}
-                              className="mt-3 w-full h-10 rounded-xl bg-neutral-900 text-white text-xs font-bold active:scale-[0.98] transition"
+                              className="mt-3 min-h-11 w-full rounded-xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.98]"
                             >
                               Ready
                             </button>
@@ -753,7 +757,7 @@ export function VendorDashboard() {
                             toast.error(e?.response?.data?.error || 'Failed to mark ready');
                           }
                         }}
-                        className="mt-4 w-full h-12 rounded-2xl bg-black text-white font-semibold active:scale-[0.99] transition"
+                        className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 py-3 font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
                       >
                         Ready
                       </button>
