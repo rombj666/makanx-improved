@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 import { Mail, Plus, X } from 'lucide-react';
@@ -19,16 +19,6 @@ interface ProductPerf {
   qtySold: number;
   optionBreakdown: Record<string, number>;
   remarks: string[];
-}
-
-interface ProductTrendPoint {
-  time: string;
-  qty: number;
-}
-interface ProductTrendSeries {
-  productId: string;
-  productName: string;
-  points: ProductTrendPoint[];
 }
 
 interface CompletedOrderItem {
@@ -92,7 +82,6 @@ export function VendorSales() {
   const [date, setDate] = useState<string>(() => getMalaysiaTodayString());
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [productTrend, setProductTrend] = useState<ProductTrendSeries[]>([]);
   const [products, setProducts] = useState<ProductPerf[]>([]);
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [settings, setSettings] = useState<VendorSettings | null>(null);
@@ -102,7 +91,6 @@ export function VendorSales() {
   const [updatingOrderLimit, setUpdatingOrderLimit] = useState(false);
   const [newEmail, setNewEmail] = useState('');
 
-  const trendChartRef = useRef<HTMLDivElement>(null);
   const topProductsChartRef = useRef<HTMLDivElement>(null);
 
   const COLORS = ['#ff7f50', '#6495ed', '#ffd700', '#32cd32', '#ff69b4', '#20b2aa'];
@@ -124,7 +112,6 @@ export function VendorSales() {
       const params = { date: targetDate };
       const analyticsRequests = [
         ['/analytics/vendor/summary', { params }],
-        ['/analytics/vendor/product-trend', { params: { ...params, window: 5, top: 5 } }],
         ['/analytics/products', { params }],
         ['/analytics/vendor/orders', { params }],
       ] as const;
@@ -132,18 +119,16 @@ export function VendorSales() {
         selectedDate: targetDate,
         requests: analyticsRequests.map(([url, config]) => api.getUri({ url, ...config })),
       });
-      const [s, pt, p, o, sett, orderLimit, usg] = await Promise.all([
+      const [s, p, o, sett, orderLimit, usg] = await Promise.all([
         api.get(analyticsRequests[0][0], analyticsRequests[0][1]),
         api.get(analyticsRequests[1][0], analyticsRequests[1][1]),
         api.get(analyticsRequests[2][0], analyticsRequests[2][1]),
-        api.get(analyticsRequests[3][0], analyticsRequests[3][1]),
         includeSettings ? api.get('/vendor/settings') : Promise.resolve(null),
         includeSettings ? api.get('/vendor/order-limit-settings') : Promise.resolve(null),
         api.get('/vendor/daily-usage'),
       ]);
       if (version !== requestVersion.current || targetDate !== selectedDate.current) return;
       setSummary(s.data.data);
-      setProductTrend(pt.data.data || []);
       setProducts(p.data.data);
       setOrders(o.data.data);
       if (sett) setSettings(sett.data.data);
@@ -273,22 +258,6 @@ export function VendorSales() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, date]);
-
-  const productTrendDataset = useMemo(() => {
-    const buckets = new Set<string>();
-    for (const series of productTrend) {
-      for (const pt of series.points) buckets.add(pt.time);
-    }
-    const times = Array.from(buckets).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-    return times.map((t) => {
-      const label = format(new Date(t), 'HH:mm');
-      const row: Record<string, any> = { time: label };
-      for (const series of productTrend) {
-        row[series.productName] = series.points.reduce((qty, point) => qty + (point.time === t ? point.qty : 0), 0);
-      }
-      return row;
-    });
-  }, [productTrend]);
 
   const productTotals = useMemo(() => {
     return products.reduce((total, product) => total + product.qtySold, 0);
@@ -463,36 +432,6 @@ export function VendorSales() {
             </CardContent>
           </Card>
         </div>
-
-        <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <CardHeader>
-            <CardTitle>Product Trend</CardTitle>
-          </CardHeader>
-          <CardContent className="h-80 w-full" ref={trendChartRef}>
-            {productTrend.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-gray-500">No orders for selected date.</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={productTrendDataset}>
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  {productTrend.map((s, idx) => (
-                    <Line
-                      key={s.productId}
-                      type="monotone"
-                      dataKey={s.productName}
-                      stroke={COLORS[idx % COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
 
         <Card className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <CardHeader>
@@ -798,33 +737,6 @@ export function VendorSales() {
           <div className="min-w-0 bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Orders</div>
             <div className="mt-2 text-2xl font-semibold text-black">{summary?.orders ?? 0}</div>
-          </div>
-        </div>
-
-        <div className="mt-4 w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
-          <div className="text-sm font-semibold text-black">Product Trend</div>
-          <div className="mt-3 h-64 w-full min-w-0 [@media(orientation:landscape)]:h-52">
-            {productTrend.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-sm text-neutral-600">No orders for selected date.</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={productTrendDataset}>
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <Tooltip />
-                  {productTrend.map((s, idx) => (
-                    <Line
-                      key={s.productId}
-                      type="monotone"
-                      dataKey={s.productName}
-                      stroke={MOBILE_COLORS[idx % MOBILE_COLORS.length]}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            )}
           </div>
         </div>
 

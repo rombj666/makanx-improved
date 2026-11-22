@@ -6,7 +6,7 @@ vi.mock('../../lib/api', () => ({ api: { get: mocks.get, getUri: ({ url }: any) 
 vi.mock('../../context/SocketContext', () => ({ useSocket: () => ({ socket }) }));
 vi.mock('recharts', () => {
   const Empty = () => null;
-  return Object.fromEntries(['LineChart', 'Line', 'XAxis', 'YAxis', 'Tooltip', 'ResponsiveContainer', 'PieChart', 'Pie', 'Cell', 'Legend'].map(k => [k, Empty]));
+  return Object.fromEntries(['ResponsiveContainer', 'PieChart', 'Pie', 'Cell', 'Tooltip', 'Legend'].map(k => [k, Empty]));
 });
 import { VendorSales } from './VendorSales';
 const socket = { on: (event: string, fn: () => void) => mocks.handlers.set(event, fn),
@@ -18,7 +18,6 @@ beforeEach(async () => {
   mocks.get.mockReset();
   mocks.get.mockImplementation(async (url: string) => ({ data: { data:
     url.endsWith('/summary') ? { orders: count } :
-    url.endsWith('/product-trend') ? [] :
     url === '/analytics/products' ? [{ productName: 'Coffee', qtySold: 9, optionBreakdown: {}, remarks: [] }] :
     url.endsWith('/orders') ? [{ orderNumber: '#1', createdAt: '2026-10-04T01:00:00Z', items: [
       { productName: 'Coffee', qty: 2, selectedOptions: [{ choices: [{ label: 'Hot' }] }] },
@@ -41,7 +40,7 @@ it('batches new-order refreshes for all analytics and usage, preserving selected
     mocks.handlers.get('order_created')!(); mocks.handlers.get('order_created')!();
     await vi.advanceTimersByTimeAsync(250);
   });
-  expect(mocks.get).toHaveBeenCalledTimes(5);
+  expect(mocks.get).toHaveBeenCalledTimes(4);
   for (const [url, config] of mocks.get.mock.calls) {
     if (url.startsWith('/analytics')) expect(config.params.date).toBe('2026-10-04');
   }
@@ -49,7 +48,7 @@ it('batches new-order refreshes for all analytics and usage, preserving selected
   expect(tree.root.findAll(node => node.children.length === 1 && node.children[0] === '3').length).toBeGreaterThan(0);
   mocks.get.mockClear();
   await act(async () => { mocks.handlers.get('order_updated')!(); await vi.advanceTimersByTimeAsync(250); });
-  expect(mocks.get).toHaveBeenCalledTimes(5);
+  expect(mocks.get).toHaveBeenCalledTimes(4);
   expect(tree.root.findAll(node => node.children.length === 1 && node.children[0] === '3').length).toBeGreaterThan(0);
 });
 it('unsubscribes and cancels scheduled refreshes on unmount', async () => {
@@ -73,8 +72,8 @@ it('queues one follow-up refresh when orders arrive during a request', async () 
     mocks.handlers.get('order_created')!();
     await vi.advanceTimersByTimeAsync(1000);
   });
-  expect(mocks.get).toHaveBeenCalledTimes(5);
+  expect(mocks.get).toHaveBeenCalledTimes(4);
   await act(async () => { release(); await blocked; });
   await act(async () => { await vi.advanceTimersByTimeAsync(250); });
-  expect(mocks.get).toHaveBeenCalledTimes(10);
+  expect(mocks.get).toHaveBeenCalledTimes(8);
 });

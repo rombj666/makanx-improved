@@ -8,7 +8,7 @@ vi.mock('../utils/prisma', () => ({ default: {
   orderItem: { aggregate: vi.fn(async () => ({ _sum: { quantity: 5 } })) },
 } }));
 vi.mock('../services/excel.service', () => ({ generateEventOrdersExcel: mocks.excel }));
-import { vendorSalesSummary, vendorProductPerformance, vendorProductTrend, vendorCompletedOrders } from '../controllers/analytics.controller';
+import { vendorSalesSummary, vendorProductPerformance, vendorCompletedOrders } from '../controllers/analytics.controller';
 import { exportEventExcel } from '../services/event.service';
 let rows: any[];
 function order(id: string, status: string, paymentStatus: string, createdAt: string, quantity = 2) {
@@ -38,7 +38,6 @@ describe('accepted order sales', () => {
   it('includes preparing and ready pending orders in every sales endpoint with item quantities', async () => {
     expect((await invoke(vendorSalesSummary)).orders).toBe(2);
     expect((await invoke(vendorProductPerformance))[0].qtySold).toBe(5);
-    expect((await invoke(vendorProductTrend))[0].points.map((p: any) => p.qty)).toEqual([2, 3]);
     expect((await invoke(vendorCompletedOrders)).map((o: any) => o.orderNumber)).toEqual(['#1', '#2']);
     expect(mocks.orders.mock.calls[0][0].where).not.toHaveProperty('paymentStatus');
   });
@@ -69,14 +68,13 @@ describe('accepted order sales', () => {
 });
 
 
-it('omits detail snapshots from summary and trend queries while preserving order details', async () => {
+it('omits detail snapshots from summary and product queries while preserving order details', async () => {
   await invoke(vendorSalesSummary);
   let select = mocks.orders.mock.calls.at(-1)![0].select;
   expect(select.items.select.selectedOptions).toBe(false);
   expect(select.items.select.remark).toBe(false);
-  await invoke(vendorProductTrend);
-  expect(mocks.orders.mock.calls.at(-1)![0].select.items.select.selectedOptions).toBe(false);
   await invoke(vendorProductPerformance);
+  expect(mocks.orders.mock.calls.at(-1)![0].select.items.select.selectedOptions).toBe(false);
   expect(mocks.orders.mock.calls.at(-1)![0].select.items.select.remark).toBe(true);
   await invoke(vendorCompletedOrders);
   select = mocks.orders.mock.calls.at(-1)![0].select;

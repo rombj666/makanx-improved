@@ -38,7 +38,7 @@ async function context(req: Request) {
   return { vendor, date, ...range };
 }
 
-async function ordersFor(req: Request, view: 'summary' | 'products' | 'trend' | 'orders') {
+async function ordersFor(req: Request, view: 'summary' | 'products' | 'orders') {
   const ctx = await context(req);
   const where: Prisma.OrderWhereInput = {
     vendorId: ctx.vendor.id,
@@ -145,23 +145,6 @@ export const vendorRevenueTrend = async (req: Request, res: Response) => {
       buckets[hour].revenue = buckets[hour].revenue.add(orderSalesAmount(order));
     }
     res.json({ success: true, data: buckets.map((bucket) => ({ ...bucket, revenue: moneyNumber(bucket.revenue) })) });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-};
-
-export const vendorProductTrend = async (req: Request, res: Response) => {
-  try {
-    const { orders } = await ordersFor(req, 'trend');
-    const series = new Map<string, any>();
-    for (const order of orders) {
-      for (const item of order.items) {
-        const current = series.get(item.menuItemId) || { productId: item.menuItemId, productName: item.menuItem.name, points: [] };
-        current.points.push({ time: order.createdAt.toISOString(), qty: item.quantity });
-        series.set(item.menuItemId, current);
-      }
-    }
-    res.json({ success: true, data: Array.from(series.values()) });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }
