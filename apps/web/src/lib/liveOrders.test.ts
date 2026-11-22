@@ -137,11 +137,17 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Batch Queue'))!.props.onClick(); await Promise.resolve(); await Promise.resolve(); });
     expect(textOf(tree)).toContain('Cafe Latte');
     await act(async () => { await tree.root.findAllByType('button').find(button => button.children.includes('Start Batch'))!.props.onClick(); });
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Temperature: Cold').some(node => String(node.props.className).includes('bg-blue-600'))).toBe(true);
     expect(tree.root.findAll(node => node.children.join('').includes('Allocated: '))).toHaveLength(1);
     expect(tree.root.findAll(node => node.children.join('') === '8 cups')).toHaveLength(1);
     expect(tree.root.findAll(node => node.children.join('').includes('Remaining after start: '))).toHaveLength(1);
     expect(tree.root.findAll(node => node.children.join('') === '3 cups')).toHaveLength(1);
-    await act(async () => { tree.root.findAllByType('button').find(button => button.children.join('') === 'Show Orders Included (1)')!.props.onClick(); });
+    const includedOrdersToggle = () => tree.root.findAllByType('button').find(button => button.props['aria-expanded'] !== undefined)!;
+    expect(includedOrdersToggle().props['aria-expanded']).toBe(false);
+    expect(includedOrdersToggle().props.className).toContain('border');
+    expect(includedOrdersToggle().props.className).not.toContain('underline');
+    await act(async () => { includedOrdersToggle().props.onClick(); });
+    expect(includedOrdersToggle().props['aria-expanded']).toBe(true);
     expect(tree.root.findAll(node => node.type === 'li' && node.children.join('').startsWith('Order #101'))).toHaveLength(1);
     const batch = { id: 'batch-a', batchNumber: 1, status: 'PREPARING', capacity: 10, recipeSignature: 'latte-cold', drinkName: 'Cafe Latte', selectedOptions: waitingGroup.selectedOptions, remark: '', createdAt: '2026-10-16T01:00:00Z', totalCups: 8, orders: [{ orderNumber: 101, quantity: 8 }] };
     responseQueue = { ...queue, waitingGroups: [], batches: [batch] };

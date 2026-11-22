@@ -596,7 +596,7 @@ export function VendorDashboard() {
 
   const BatchOptions = ({ options, remark }: { options: any[] | null; remark?: string }) => {
     const details = optionText(options, remark);
-    return details.length ? <div className="mt-1 flex flex-wrap gap-1">{details.map((detail, index) => <span key={index} className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">{detail}</span>)}</div> : null;
+    return details.length ? <div className="mt-1 flex flex-wrap gap-1">{details.map((detail, index) => <span key={index} className={`rounded-md px-2 py-1 text-xs font-semibold ${optionTone(detail)}`}>{detail}</span>)}</div> : null;
   };
 
   const BatchQueueView = () => (
@@ -681,8 +681,12 @@ export function VendorDashboard() {
             <input type="number" min={1} max={10000} value={batchCapacity} onChange={(event) => setBatchCapacity(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-10 w-24 rounded-lg border text-center font-semibold" aria-label="Batch capacity in cups" />
             <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className="h-10 w-10 rounded-lg border text-lg font-bold" aria-label="Increase capacity">+</button>
           </div></div>
-          <div><button onClick={() => setShowIncludedOrders((visible) => !visible)} className="text-sm font-semibold underline">{showIncludedOrders ? 'Hide' : 'Show'} Orders Included ({includedOrders.length})</button>
-            {showIncludedOrders && <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border p-3 text-sm">{includedOrders.map((order) => <li key={order.orderNumber}>Order #{order.orderNumber} — {order.quantity} cup{order.quantity === 1 ? '' : 's'}</li>)}</ul>}
+          <div>
+            <button type="button" aria-expanded={showIncludedOrders} onClick={() => setShowIncludedOrders((visible) => !visible)} className="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-left text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500">
+              <span>{showIncludedOrders ? 'Hide' : 'Show'} Orders Included <span className="text-neutral-500">({includedOrders.length})</span></span>
+              <span aria-hidden="true" className="ml-3 text-lg leading-none">{showIncludedOrders ? '−' : '+'}</span>
+            </button>
+            {showIncludedOrders && <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm">{includedOrders.map((order) => <li key={order.orderNumber} className="rounded-lg border border-neutral-200 bg-white px-4 py-3">Order #{order.orderNumber} — {order.quantity} cup{order.quantity === 1 ? '' : 's'}</li>)}</ul>}
           </div>
           <p className="text-xs text-neutral-500">Allocation uses oldest orders first. Each order item stays whole.</p>
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={startingBatch} onClick={() => setSelectedRecipe(null)}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className="bg-black">Start Batch — {preview.cups} Cups</Button></div>
