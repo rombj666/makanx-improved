@@ -170,7 +170,7 @@ export function VendorDashboard() {
   };
 
   const CancelButton = ({ order }: { order: Order }) => order.status === 'PREPARING' ? (
-    <button onClick={() => setCancelTarget(order)} className={`${primaryActionButtonClass} mt-2 w-full`}>
+    <button onClick={() => setCancelTarget(order)} className={`${dangerActionButtonClass} mt-2 w-full`}>
       Cancel
     </button>
   ) : null;
@@ -359,6 +359,7 @@ export function VendorDashboard() {
   const drinkTitleClass = 'font-bold text-2xl text-black break-words [overflow-wrap:anywhere]';
   const actionButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
   const primaryActionButtonClass = `${actionButtonClass} bg-neutral-900 text-white hover:bg-neutral-800`;
+  const dangerActionButtonClass = `${actionButtonClass} bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500`;
   const secondaryActionButtonClass = `${actionButtonClass} border border-neutral-200 bg-neutral-100 text-neutral-900 hover:bg-neutral-200`;
 
   const SingleOrderList = ({ data, mobile = false }: { data: Order[]; mobile?: boolean }) => (
@@ -653,7 +654,7 @@ export function VendorDashboard() {
     {cancelTarget?.paymentStatus === 'PAID' && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This order is marked paid. Cancellation will not issue a refund; reconcile the payment separately.</p>}
     <div className="mt-6 flex justify-end gap-2">
       <Button disabled={cancelling} onClick={() => setCancelTarget(null)} className={secondaryActionButtonClass}>Keep Order</Button>
-      <Button disabled={cancelling} isLoading={cancelling} className={primaryActionButtonClass} onClick={confirmCancellation}>Confirm Cancel</Button>
+      <Button disabled={cancelling} isLoading={cancelling} className={dangerActionButtonClass} onClick={confirmCancellation}>Confirm Cancel</Button>
     </div>
   </Modal>;
 
