@@ -170,8 +170,8 @@ export function VendorDashboard() {
   };
 
   const CancelButton = ({ order }: { order: Order }) => order.status === 'PREPARING' ? (
-    <button onClick={() => setCancelTarget(order)} className="mt-2 min-h-11 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2">
-      Cancel Order
+    <button onClick={() => setCancelTarget(order)} className={`${dangerActionButtonClass} mt-2 w-full`}>
+      Cancel
     </button>
   ) : null;
 
@@ -357,6 +357,10 @@ export function VendorDashboard() {
   const optionStackClass = 'mt-2.5 flex w-fit max-w-xs flex-col items-start gap-2.5';
   const optionChipClass = (detail: string) => `inline-flex w-full max-w-full items-center rounded-xl px-5 py-2.5 text-2xl font-bold leading-snug whitespace-normal break-words [overflow-wrap:anywhere] ${optionTone(detail)}`;
   const drinkTitleClass = 'font-bold text-2xl text-black break-words [overflow-wrap:anywhere]';
+  const actionButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+  const primaryActionButtonClass = `${actionButtonClass} bg-neutral-900 text-white hover:bg-neutral-800`;
+  const secondaryActionButtonClass = `${actionButtonClass} border border-neutral-200 bg-neutral-100 text-neutral-900 hover:bg-neutral-200`;
+  const dangerActionButtonClass = `${actionButtonClass} border border-red-300 bg-red-100 text-red-800 hover:bg-red-200 focus-visible:ring-red-400`;
 
   const SingleOrderList = ({ data, mobile = false }: { data: Order[]; mobile?: boolean }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -375,6 +379,7 @@ export function VendorDashboard() {
                 {order.status}
               </div>
             </div>
+            {isMultiType && <CancelButton order={order} />}
             <div className="flex-1 space-y-4">
               {order.items.map((item, idx) => (
                 <div key={idx} className="border-b border-neutral-50 pb-4 last:border-0 last:pb-0">
@@ -393,7 +398,7 @@ export function VendorDashboard() {
                         </div>
                       )}
                     </div>
-                    {(isMultiType || itemCount === 1) && (
+                    {isMultiType && (
                       item.status !== 'READY' ? (
                         <button
                           onClick={async () => {
@@ -409,9 +414,9 @@ export function VendorDashboard() {
                               toast.error(e?.response?.data?.error || 'Failed to mark ready');
                             }
                           }}
-                          className="ml-3 min-h-11 shrink-0 rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
+                          className={`${primaryActionButtonClass} ml-3 shrink-0 px-3 text-xs`}
                         >
-                          Mark Ready
+                          Ready
                         </button>
                       ) : (
                         <span className="ml-4 text-green-600 text-xs font-bold uppercase shrink-0">✓ Ready</span>
@@ -421,6 +426,24 @@ export function VendorDashboard() {
                 </div>
               ))}
             </div>
+            {!isMultiType && order.status === 'PREPARING' && (
+              <div className="mt-4 flex flex-col gap-2">
+                <CancelButton order={order} />
+                <button
+                  onClick={async () => {
+                    try {
+                      await markOrderReady(order.id);
+                      toast.success('Order is fully ready!');
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                    }
+                  }}
+                  className={`${primaryActionButtonClass} w-full min-h-12 px-4 py-3`}
+                >
+                  Ready
+                </button>
+              </div>
+            )}
             {isMultiType && order.status !== 'READY' && (
               <button
                 onClick={async () => {
@@ -431,12 +454,11 @@ export function VendorDashboard() {
                     toast.error(e?.response?.data?.error || 'Failed to mark ready');
                   }
                 }}
-                className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 py-3 font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
+                className={`${primaryActionButtonClass} mt-4 min-h-12 w-full px-4 py-3`}
               >
                 Ready
               </button>
             )}
-            <CancelButton order={order} />
           </div>
         );
       })}
@@ -495,7 +517,7 @@ export function VendorDashboard() {
                 else next.add(group.key);
                 return next;
               })}
-              className="h-11 rounded-xl border border-neutral-200 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
+              className={secondaryActionButtonClass}
             >
               {expanded ? 'Collapse' : 'Expand'}
             </button>
@@ -610,7 +632,7 @@ export function VendorDashboard() {
             {batchQueue.batches.map((batch) => <article key={batch.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
               <div className="flex items-start justify-between gap-2"><div><div className="text-sm font-bold">Batch #{batch.batchNumber} · {batch.drinkName}</div><BatchOptions options={batch.selectedOptions} remark={batch.remark} /></div><span className="shrink-0 rounded-full bg-amber-200 px-2 py-1 text-[10px] font-bold text-amber-900">PREPARING</span></div>
               <div className="mt-2 text-xs font-semibold text-neutral-700">{batch.totalCups} cups · {batch.orders.length} orders</div>
-              <button onClick={() => openBatch(batch.id)} className="mt-2 h-10 w-full rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white">Open Batch</button>
+              <button onClick={() => openBatch(batch.id)} className={`${primaryActionButtonClass} mt-2 w-full`}>Open Batch</button>
             </article>)}
           </div>}
       </section>
@@ -620,7 +642,7 @@ export function VendorDashboard() {
           <div className="space-y-2">
             {batchQueue.waitingGroups.map((group) => <article key={group.signature} className="rounded-xl border border-neutral-200 bg-white p-3">
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="font-bold text-neutral-950">{group.drinkName}</div><BatchOptions options={group.selectedOptions} remark={group.remark} /></div><div className="shrink-0 text-right"><div className="text-lg font-bold">{group.totalQuantity}</div><div className="text-[10px] uppercase text-neutral-500">cups waiting</div></div></div>
-              <button onClick={() => { setSelectedRecipe(group.signature); setBatchCapacity(batchQueue.defaultBatchSize); setShowIncludedOrders(false); }} className="mt-2 h-10 w-full rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-900">Start Batch</button>
+              <button onClick={() => { setSelectedRecipe(group.signature); setBatchCapacity(batchQueue.defaultBatchSize); setShowIncludedOrders(false); }} className={`${secondaryActionButtonClass} mt-2 w-full`}>Start Batch</button>
             </article>)}
           </div>}
       </section>
@@ -631,8 +653,8 @@ export function VendorDashboard() {
     <p className="text-sm text-neutral-600">Are you sure you want to cancel this order? The order will be removed from Kitchen View, and its cancellation record will be retained.</p>
     {cancelTarget?.paymentStatus === 'PAID' && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This order is marked paid. Cancellation will not issue a refund; reconcile the payment separately.</p>}
     <div className="mt-6 flex justify-end gap-2">
-      <Button variant="outline" disabled={cancelling} onClick={() => setCancelTarget(null)}>Keep Order</Button>
-      <Button disabled={cancelling} isLoading={cancelling} className="bg-red-700 hover:bg-red-800" onClick={confirmCancellation}>Confirm Cancellation</Button>
+      <Button disabled={cancelling} onClick={() => setCancelTarget(null)} className={secondaryActionButtonClass}>Keep Order</Button>
+      <Button disabled={cancelling} isLoading={cancelling} className={dangerActionButtonClass} onClick={confirmCancellation}>Confirm Cancel</Button>
     </div>
   </Modal>;
 
@@ -640,7 +662,7 @@ export function VendorDashboard() {
     {cancellationModal}
     <main className="fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-white px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-200 pb-2">
-        <button onClick={() => { setFocusedBatchId(null); setConfirmBatchReady(false); }} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">← Queue</button>
+        <button onClick={() => { setFocusedBatchId(null); setConfirmBatchReady(false); }} className={secondaryActionButtonClass}>← Queue</button>
         <div className="text-center"><div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Batch #{focusedBatch.batchNumber}</div><div className="text-sm font-bold">{focusedBatch.totalCups} cups · PREPARING</div></div>
         <div className="w-[74px]" />
       </header>
@@ -656,14 +678,14 @@ export function VendorDashboard() {
       </section>
       <footer className="mt-2 flex shrink-0 items-center gap-2 border-t border-neutral-200 pt-2">
         {focusPages > 1 && <>
-          <button disabled={focusedPage === 0} onClick={() => { const page = focusedPage - 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className="h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-40">Prev</button>
+          <button disabled={focusedPage === 0} onClick={() => { const page = focusedPage - 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className={`${secondaryActionButtonClass} px-3`}>Prev</button>
           <span className="min-w-12 text-center text-xs font-semibold">{focusedPage + 1} of {focusPages}</span>
-          <button disabled={focusedPage + 1 >= focusPages} onClick={() => { const page = focusedPage + 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className="h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-40">Next</button>
+          <button disabled={focusedPage + 1 >= focusPages} onClick={() => { const page = focusedPage + 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className={`${secondaryActionButtonClass} px-3`}>Next</button>
         </>}
-        <button onClick={() => void completeFocusedBatch()} disabled={completingBatch || (focusPages > 1 && !allFocusPagesSeen)} className="ml-auto min-h-12 flex-1 rounded-xl bg-neutral-900 px-3 text-sm font-bold text-white disabled:opacity-40">
-          {completingBatch ? 'Completing…' : focusPages > 1 && !allFocusPagesSeen ? 'Review every page' : confirmBatchReady ? 'Confirm Mark Batch Ready' : 'Mark Batch Ready'}
+        <button onClick={() => void completeFocusedBatch()} disabled={completingBatch || (focusPages > 1 && !allFocusPagesSeen)} className={`${primaryActionButtonClass} ml-auto min-h-12 flex-1 px-3`}>
+          {completingBatch ? 'Completing…' : focusPages > 1 && !allFocusPagesSeen ? 'Review every page' : confirmBatchReady ? 'Confirm Ready' : 'Ready'}
         </button>
-        {confirmBatchReady && <button onClick={() => setConfirmBatchReady(false)} className="h-12 rounded-xl border px-3 text-sm font-semibold">Back</button>}
+        {confirmBatchReady && <button onClick={() => setConfirmBatchReady(false)} className={secondaryActionButtonClass}>Back</button>}
       </footer>
     </main>
   </>;
@@ -677,19 +699,19 @@ export function VendorDashboard() {
           <div className="rounded-xl bg-neutral-50 p-3 text-sm"><div>Total waiting: <strong>{selectedWaitingGroup.totalQuantity} cups</strong></div><div className="mt-1">Batch capacity: <strong>{batchCapacity} cups</strong></div><div className="mt-1">Allocated: <strong>{preview.cups} cups</strong></div><div className="mt-1">Remaining after start: <strong>{previewRemaining} cups</strong></div></div>
           {preview.cups === 0 && selectedWaitingGroup.items[0] && <p className="text-sm text-amber-800">The oldest order item contains {selectedWaitingGroup.items[0].quantity} cups. Increase capacity to at least that amount to prepare it.</p>}
           <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Batch Capacity</span><div className="flex items-center gap-2">
-            <button onClick={() => setBatchCapacity((capacity) => Math.max(1, capacity - 1))} className="h-10 w-10 rounded-lg border text-lg font-bold" aria-label="Decrease capacity">−</button>
+            <button onClick={() => setBatchCapacity((capacity) => Math.max(1, capacity - 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 px-0 text-lg`} aria-label="Decrease capacity">−</button>
             <input type="number" min={1} max={10000} value={batchCapacity} onChange={(event) => setBatchCapacity(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-10 w-24 rounded-lg border text-center font-semibold" aria-label="Batch capacity in cups" />
-            <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className="h-10 w-10 rounded-lg border text-lg font-bold" aria-label="Increase capacity">+</button>
+            <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 px-0 text-lg`} aria-label="Increase capacity">+</button>
           </div></div>
           <div>
-            <button type="button" aria-expanded={showIncludedOrders} onClick={() => setShowIncludedOrders((visible) => !visible)} className="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-left text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500">
+            <button type="button" aria-expanded={showIncludedOrders} onClick={() => setShowIncludedOrders((visible) => !visible)} className={`${secondaryActionButtonClass} w-full justify-between text-left`}>
               <span>{showIncludedOrders ? 'Hide' : 'Show'} Orders Included <span className="text-neutral-500">({includedOrders.length})</span></span>
               <span aria-hidden="true" className="ml-3 text-lg leading-none">{showIncludedOrders ? '−' : '+'}</span>
             </button>
             {showIncludedOrders && <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm">{includedOrders.map((order) => <li key={order.orderNumber} className="rounded-lg border border-neutral-200 bg-white px-4 py-3">Order #{order.orderNumber} — {order.quantity} cup{order.quantity === 1 ? '' : 's'}</li>)}</ul>}
           </div>
           <p className="text-xs text-neutral-500">Allocation uses oldest orders first. Each order item stays whole.</p>
-          <div className="flex justify-end gap-2"><Button variant="outline" disabled={startingBatch} onClick={() => setSelectedRecipe(null)}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className="bg-black">Start Batch — {preview.cups} Cups</Button></div>
+          <div className="flex justify-end gap-2"><Button disabled={startingBatch} onClick={() => setSelectedRecipe(null)} className={secondaryActionButtonClass}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className={primaryActionButtonClass}>Start Batch — {preview.cups} Cups</Button></div>
         </div>}
       </Modal>
       <div className="block [@media(pointer:coarse)]:hidden container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
@@ -700,7 +722,7 @@ export function VendorDashboard() {
               <button
                 onClick={() => setActiveTab('kitchen')}
                 className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                  activeTab === 'kitchen' ? 'bg-black text-white' : 'text-neutral-600 hover:bg-neutral-50'
+                  activeTab === 'kitchen' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                 }`}
               >
                 Kitchen View
@@ -708,7 +730,7 @@ export function VendorDashboard() {
               <button
                 onClick={() => setActiveTab('history')}
                 className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                  activeTab === 'history' ? 'bg-black text-white' : 'text-neutral-600 hover:bg-neutral-50'
+                  activeTab === 'history' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                 }`}
               >
                 Ready Orders
@@ -716,6 +738,7 @@ export function VendorDashboard() {
             </div>
             <Button
               variant="outline"
+              className={secondaryActionButtonClass}
               onClick={() => {
                 refetchAll();
                 if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
@@ -726,8 +749,8 @@ export function VendorDashboard() {
           </div>
         </div>
         {activeTab === 'kitchen' && <div className="mb-3 inline-flex w-fit rounded-lg border bg-white p-1">
-          <button onClick={() => setKitchenMode('orders')} className={`rounded-md px-4 py-2 text-sm font-semibold ${kitchenMode === 'orders' ? 'bg-black text-white' : 'text-neutral-600'}`}>Order View</button>
-          <button onClick={() => setKitchenMode('batches')} className={`rounded-md px-4 py-2 text-sm font-semibold ${kitchenMode === 'batches' ? 'bg-black text-white' : 'text-neutral-600'}`}>Batch Queue</button>
+          <button onClick={() => setKitchenMode('orders')} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${kitchenMode === 'orders' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'}`}>Order View</button>
+          <button onClick={() => setKitchenMode('batches')} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${kitchenMode === 'batches' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'}`}>Batch Queue</button>
         </div>}
         <div className="mt-4 flex-1 overflow-y-auto">
           {activeTab === 'kitchen' ? (
@@ -748,7 +771,7 @@ export function VendorDashboard() {
             onClick={() => {
               refetchAll();
             }}
-            className="shrink-0 h-11 px-4 rounded-xl bg-white border border-neutral-200 text-black font-semibold text-sm transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
+            className={`${secondaryActionButtonClass} shrink-0`}
           >
             Refresh
           </button>
@@ -758,7 +781,7 @@ export function VendorDashboard() {
           <button
             onClick={() => setActiveTab('kitchen')}
             className={`flex-1 h-11 px-6 rounded-xl text-sm font-bold transition ${
-              activeTab === 'kitchen' ? 'bg-black text-white shadow-lg' : 'text-neutral-600'
+              activeTab === 'kitchen' ? 'bg-black text-white shadow-lg' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
             }`}
           >
             Kitchen
@@ -766,7 +789,7 @@ export function VendorDashboard() {
           <button
             onClick={() => setActiveTab('history')}
             className={`flex-1 h-11 px-6 rounded-xl text-sm font-bold transition ${
-              activeTab === 'history' ? 'bg-black text-white shadow-lg' : 'text-neutral-600'
+              activeTab === 'history' ? 'bg-black text-white shadow-lg' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
             }`}
           >
             Ready
@@ -774,8 +797,8 @@ export function VendorDashboard() {
         </div>
 
         {activeTab === 'kitchen' && <div className="mt-3 inline-flex w-full rounded-xl border border-neutral-200 bg-white p-1">
-          <button onClick={() => setKitchenMode('orders')} className={`h-10 flex-1 rounded-lg text-sm font-bold ${kitchenMode === 'orders' ? 'bg-black text-white' : 'text-neutral-600'}`}>Order View</button>
-          <button onClick={() => setKitchenMode('batches')} className={`h-10 flex-1 rounded-lg text-sm font-bold ${kitchenMode === 'batches' ? 'bg-black text-white' : 'text-neutral-600'}`}>Batch Queue</button>
+          <button onClick={() => setKitchenMode('orders')} className={`h-10 flex-1 rounded-xl text-sm font-bold transition ${kitchenMode === 'orders' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'}`}>Order View</button>
+          <button onClick={() => setKitchenMode('batches')} className={`h-10 flex-1 rounded-xl text-sm font-bold transition ${kitchenMode === 'batches' ? 'bg-black text-white' : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'}`}>Batch Queue</button>
         </div>}
 
         <div className="mt-4 flex-1 overflow-y-auto">

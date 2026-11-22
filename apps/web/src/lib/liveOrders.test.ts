@@ -95,6 +95,14 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     await act(async () => { emit('order_created', liveOrder('1')); emit('order_created', liveOrder('1')); emit('order_created', liveOrder('2')); });
     expect(kitchenOrderCount(tree, '1')).toBe(1);
     expect(kitchenOrderCount(tree, '2')).toBe(1);
+    const orderCards = tree.root.findAll(node => node.type === 'div' && String(node.props.className).includes('flex flex-col rounded-2xl border'));
+    expect(orderCards).toHaveLength(4);
+    orderCards.forEach(card => {
+      const actions = card.findAllByType('button');
+      expect(actions.map(button => button.children.join(''))).toEqual(['Cancel', 'Ready']);
+      expect(actions[0].props.className).toContain('bg-red-100');
+      expect(actions[1].props.className).toContain('bg-neutral-900');
+    });
     await act(async () => { emit('order_updated', liveOrder('1', 'READY')); emit('order_updated', liveOrder('1', 'READY')); });
     expect(kitchenOrderCount(tree, '1')).toBe(0);
     await act(async () => { emit('order_created', liveOrder('1')); });
@@ -251,7 +259,7 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     expect(ready()!.props.disabled).toBe(true);
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.join('') === 'Next')!.props.onClick(); });
     expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === '#210')).toHaveLength(1);
-    expect(tree.root.findAllByType('button').find(button => button.children.join('') === 'Mark Batch Ready')!.props.disabled).toBe(false);
+    expect(tree.root.findAllByType('button').find(button => button.children.join('') === 'Ready')!.props.disabled).toBe(false);
   });
 
   it('backs off all triggers for thirty seconds after rate limiting, then retries', async () => {
