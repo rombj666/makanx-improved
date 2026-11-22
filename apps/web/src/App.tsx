@@ -25,7 +25,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 function VendorLayout() {
   const { user } = useAuth();
   const location = useLocation();
-  if (user?.permission === 'BARISTA' && location.pathname === '/vendor/settings') return <Navigate to="/vendor" replace />;
+  if (user?.permission === 'BARISTA' && location.pathname.toLowerCase().replace(/\/+$/, '') === '/vendor/settings') return <Navigate to="/vendor" replace />;
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-neutral-50">
