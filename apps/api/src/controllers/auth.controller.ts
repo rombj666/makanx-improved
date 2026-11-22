@@ -14,7 +14,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: error.issues });
     }
     console.warn('Authentication failed');
-    res.status(401).json({ success: false, error: 'Invalid email or password' });
+    res.status(401).json({ success: false, error: 'Invalid username or password' });
   }
 };
 

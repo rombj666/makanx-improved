@@ -31,7 +31,7 @@ function orderSalesAmount(order: Pick<SalesOrder, 'items' | 'totalAmount'>) {
 }
 
 async function context(req: Request) {
-  const vendor = await prisma.vendorProfile.findUnique({ where: { userId: req.user!.userId }, select: { id: true } });
+  const vendor = await prisma.vendorProfile.findUnique({ where: { id: req.vendorAccess!.vendorId }, select: { id: true } });
   if (!vendor) throw new Error('Vendor profile not found');
   const date = String(req.query.date || new Date().toISOString().slice(0, 10));
   const range = getMalaysiaDayRange(date);

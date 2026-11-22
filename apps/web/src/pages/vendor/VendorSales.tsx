@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 import { Mail, Plus, X } from 'lucide-react';
 import { getMalaysiaTodayString, millisecondsUntilNextMalaysiaMidnight } from '../../lib/malaysiaTime';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface Summary {
   orders: number;
@@ -79,6 +80,8 @@ function itemTemperature(item: CompletedOrderItem): 'hot' | 'cold' {
 
 export function VendorSales() {
   const { socket } = useSocket();
+  const { user } = useAuth();
+  const isAdmin = user?.permission === 'ADMIN';
   const [date, setDate] = useState<string>(() => getMalaysiaTodayString());
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -123,15 +126,16 @@ export function VendorSales() {
         api.get(analyticsRequests[0][0], analyticsRequests[0][1]),
         api.get(analyticsRequests[1][0], analyticsRequests[1][1]),
         api.get(analyticsRequests[2][0], analyticsRequests[2][1]),
-        includeSettings ? api.get('/vendor/settings') : Promise.resolve(null),
-        includeSettings ? api.get('/vendor/order-limit-settings') : Promise.resolve(null),
+        includeSettings && isAdmin ? api.get('/vendor/settings') : includeSettings ? api.get('/vendor/sales-config') : Promise.resolve(null),
+        includeSettings && isAdmin ? api.get('/vendor/order-limit-settings') : Promise.resolve(null),
         api.get('/vendor/daily-usage'),
       ]);
       if (version !== requestVersion.current || targetDate !== selectedDate.current) return;
       setSummary(s.data.data);
       setProducts(p.data.data);
       setOrders(o.data.data);
-      if (sett) setSettings(sett.data.data);
+      if (sett) setSettings(isAdmin ? sett.data.data : { ...sett.data.data, reportRecipientEmails: [], reportRecipientEmail: null, autoStopOrderingOnLimit: true });
+      if (sett && !isAdmin) setOrderLimitSettings({ deviceOrderLimitEnabled: sett.data.data.deviceOrderLimitEnabled, maxDrinksPerOrder: sett.data.data.maxDrinksPerOrder });
       if (orderLimit) setOrderLimitSettings(orderLimit.data.data);
       setUsage(usg.data.data);
     } catch (e) {
@@ -279,6 +283,7 @@ export function VendorSales() {
         <h1 className="text-2xl font-bold">Vendor Sales Analytics</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {isAdmin && <>
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
               <CardTitle>Daily Cup Limit</CardTitle>
@@ -385,6 +390,15 @@ export function VendorSales() {
               </div>
             </CardContent>
           </Card>
+          </>}
+          {!isAdmin && <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <CardHeader><CardTitle>Operational Limits</CardTitle></CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between"><span>Daily Cup Limit</span><strong>{settings?.dailyDrinkLimitEnabled ? `${settings.dailyDrinkLimitQuantity} cups/day` : 'Disabled'}</strong></div>
+              <div className="flex justify-between"><span>Device Limit</span><strong>{orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}</strong></div>
+              <div className="flex justify-between"><span>Max Drinks Per Order</span><strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'}</strong></div>
+            </CardContent>
+          </Card>}
 
           <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader>
@@ -589,6 +603,7 @@ export function VendorSales() {
         </div>
 
         <div className="mt-4 space-y-4">
+          {isAdmin && <>
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Daily Cup Limit</div>
             <div className="mt-3 space-y-4">
@@ -693,6 +708,15 @@ export function VendorSales() {
               </div>
             </div>
           </Card>
+          </>}
+          {!isAdmin && <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
+            <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Operational Limits</div>
+            <div className="mt-3 space-y-3 text-sm">
+              <div className="flex justify-between gap-3"><span>Daily Cup Limit</span><strong>{settings?.dailyDrinkLimitEnabled ? `${settings.dailyDrinkLimitQuantity} cups/day` : 'Disabled'}</strong></div>
+              <div className="flex justify-between gap-3"><span>Device Limit</span><strong>{orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}</strong></div>
+              <div className="flex justify-between gap-3"><span>Max Drinks Per Order</span><strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'}</strong></div>
+            </div>
+          </Card>}
 
           <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Today&apos;s Cup Limit Progress</div>

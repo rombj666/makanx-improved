@@ -12,7 +12,8 @@ const links = [
 ];
 
 export function Navbar() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const visibleLinks = user?.permission === 'ADMIN' ? links : links.filter((link) => link.to !== '/vendor/settings');
   const [open, setOpen] = useState(false);
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `rounded-xl px-3 py-2 text-sm font-semibold ${isActive ? 'bg-black text-white' : 'text-neutral-700 hover:bg-neutral-100'}`;
@@ -24,7 +25,7 @@ export function Navbar() {
           Smart QR Ordering System
         </NavLink>
         <div className="hidden items-center gap-1 md:flex">
-          {links.map((link) => <NavLink key={link.to} {...link} className={linkClass}>{link.label}</NavLink>)}
+          {visibleLinks.map((link) => <NavLink key={link.to} {...link} className={linkClass}>{link.label}</NavLink>)}
           <button onClick={logout} className="ml-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Logout</button>
         </div>
         <button onClick={() => setOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-xl border md:hidden" aria-label="Open navigation">
@@ -39,7 +40,7 @@ export function Navbar() {
               <button onClick={() => setOpen(false)} className="h-10 w-10 rounded-full border" aria-label="Close navigation"><X className="m-auto" size={18} /></button>
             </div>
             <div className="space-y-2">
-              {links.map((link) => <NavLink key={link.to} {...link} onClick={() => setOpen(false)} className={({ isActive }) => `${linkClass({ isActive })} block w-full`}>{link.label}</NavLink>)}
+              {visibleLinks.map((link) => <NavLink key={link.to} {...link} onClick={() => setOpen(false)} className={({ isActive }) => `${linkClass({ isActive })} block w-full`}>{link.label}</NavLink>)}
               <button onClick={logout} className="flex w-full items-center justify-between rounded-xl border border-red-200 px-3 py-3 font-semibold text-red-700">
                 Logout <LogOut size={18} />
               </button>

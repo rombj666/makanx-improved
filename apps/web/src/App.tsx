@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { Role } from '@smart-qr/shared';
 import { Toaster } from 'react-hot-toast';
 import { Navbar } from './components/Navbar';
@@ -23,6 +23,9 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function VendorLayout() {
+  const { user } = useAuth();
+  const location = useLocation();
+  if (user?.permission === 'BARISTA' && location.pathname === '/vendor/settings') return <Navigate to="/vendor" replace />;
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-neutral-50">

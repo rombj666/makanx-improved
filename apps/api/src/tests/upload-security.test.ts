@@ -4,6 +4,10 @@ import { Writable } from 'stream';
 import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
 import path from 'path';
 const mocks = vi.hoisted(() => ({ stream: vi.fn(), buffers: [] as Buffer[] }));
+vi.mock('../utils/prisma', () => ({ default: {
+  user: { findUnique: vi.fn(async () => ({ isActive: true, permission: 'ADMIN', vendorId: null, vendorProfile: { id: 'vendor-id', userId: 'vendor' } })) },
+  vendorProfile: { findUnique: vi.fn(async () => ({ userId: 'vendor' })) },
+} }));
 vi.mock('cloudinary', () => ({ v2: { config: vi.fn(), uploader: { upload_stream: mocks.stream } } }));
 import { app } from '../index';
 import { generateGuestToken, generateToken } from '../utils/jwt';

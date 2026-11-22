@@ -8,6 +8,7 @@ interface User {
   email: string;
   name: string;
   role: Role;
+  permission: 'ADMIN' | 'BARISTA';
   vendorProfile?: {
     id: string;
     slug?: string;

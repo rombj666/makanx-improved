@@ -5,6 +5,7 @@ import { Loader2, Plus, Edit2, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
+import { useAuth } from '../../context/AuthContext';
 
 interface MenuItem {
   id: string;
@@ -48,6 +49,8 @@ function newId() {
 }
 
 export function VendorMenu() {
+  const { user } = useAuth();
+  const isAdmin = user?.permission === 'ADMIN';
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,6 +92,7 @@ export function VendorMenu() {
   useEffect(() => {
     fetchMenu();
     const run = async () => {
+      if (!isAdmin) return;
       try {
         const { data } = await api.get('/vendor/settings');
         if (data?.success) {
@@ -99,7 +103,7 @@ export function VendorMenu() {
       }
     };
     run();
-  }, []);
+  }, [isAdmin]);
 
   const toggleShowPrices = async (next: boolean) => {
     try {
@@ -281,7 +285,7 @@ export function VendorMenu() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">My Menu</h1>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            {isAdmin && <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
               <input
                 type="checkbox"
                 checked={showPrices}
@@ -289,7 +293,7 @@ export function VendorMenu() {
                 disabled={isSavingToggle}
               />
               <span>Show Prices</span>
-            </label>
+            </label>}
             <Button onClick={openAddModal} className="bg-orange-600 hover:bg-orange-700">
               <Plus size={18} className="mr-2" /> Add Item
             </Button>
@@ -360,7 +364,7 @@ export function VendorMenu() {
             <div className="text-2xl font-semibold text-black">Menu</div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-neutral-800">
+            {isAdmin && <label className="flex items-center gap-2 text-sm font-semibold text-neutral-800">
               <input
                 type="checkbox"
                 checked={showPrices}
@@ -368,7 +372,7 @@ export function VendorMenu() {
                 disabled={isSavingToggle}
               />
               <span>Show Prices</span>
-            </label>
+            </label>}
             <button
               onClick={openAddModal}
               className="shrink-0 h-11 px-4 rounded-2xl bg-white border border-neutral-200 text-black font-semibold text-sm active:scale-[0.99] transition"

@@ -13,7 +13,7 @@ import { toast } from 'react-hot-toast';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  username: z.string().trim().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -74,13 +74,14 @@ export function Login() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-2">
               <Input
-                placeholder="Email address"
-                type="email"
+                placeholder="Username"
+                type="text"
+                aria-label="Username"
                 autoFocus
                 className="h-12 rounded-lg border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                {...register('email')}
+                {...register('username')}
               />
-              {errors.email && <p className="text-sm text-red-500 ml-1">{errors.email.message}</p>}
+              {errors.username && <p className="text-sm text-red-500 ml-1">{errors.username.message}</p>}
             </div>
             
             <div className="space-y-2">

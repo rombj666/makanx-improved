@@ -13,10 +13,15 @@ model User {
   password      String
   name          String
   role          Role           @default(VENDOR)
+  permission    VendorPermission @default(ADMIN)
+  vendorId      String?
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   vendorProfile VendorProfile?
+  staffVendor   VendorProfile? @relation("VendorStaff", fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
 }
 
 model VendorProfile {
@@ -30,6 +35,7 @@ model VendorProfile {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffUsers   User[]             @relation("VendorStaff")
   settings     VendorSettings?
   menuItems    MenuItem[]
   orders       Order[]
@@ -223,6 +229,11 @@ model PasswordResetToken {
 
 enum Role {
   VENDOR
+}
+
+enum VendorPermission {
+  ADMIN
+  BARISTA
 }
 
 enum OrderStatus {

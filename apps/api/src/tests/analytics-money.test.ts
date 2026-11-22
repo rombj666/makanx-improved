@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 function invoke(handler: any) {
   let body: any;
-  const req = { user: { userId: 'staff' }, query: { date: '2026-10-04' } };
+  const req = { user: { userId: 'staff' }, vendorAccess: { vendorId: 'vendor' }, query: { date: '2026-10-04' } };
   const res = { json: (value: any) => { body = value; }, status: () => res };
   return handler(req, res).then(() => body);
 }

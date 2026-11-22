@@ -3,8 +3,8 @@ import { createServer, Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import { io as clientIO, Socket } from 'socket.io-client';
 import jwt from 'jsonwebtoken';
-const mocks = vi.hoisted(() => ({ findUnique: vi.fn() }));
-vi.mock('../utils/prisma', () => ({ default: { vendorProfile: { findUnique: mocks.findUnique } } }));
+const mocks = vi.hoisted(() => ({ findFirst: vi.fn() }));
+vi.mock('../utils/prisma', () => ({ default: { vendorProfile: { findFirst: mocks.findFirst } } }));
 import { initSocket } from '../socket';
 import { generateGuestToken, generateToken } from '../utils/jwt';
 import { VENDOR_AUTH_COOKIE } from '../utils/vendor-auth-cookie';
@@ -15,7 +15,10 @@ let url: string;
 let clients: Socket[];
 beforeEach(async () => {
   clients = [];
-  mocks.findUnique.mockImplementation(async ({ where }) => where.userId === 'missing' ? null : { id: where.userId });
+  mocks.findFirst.mockImplementation(async ({ where }) => {
+    const userId = where.OR[0].userId;
+    return userId === 'missing' ? null : { id: userId };
+  });
   http = createServer();
   io = initSocket(http);
   await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));

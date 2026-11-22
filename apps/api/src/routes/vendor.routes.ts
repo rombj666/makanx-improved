@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as vendorController from '../controllers/vendor.controller';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import * as eventController from '../controllers/event.controller';
 
 const router = Router();
@@ -9,20 +9,21 @@ router.use(requireAuth);
 
 router.get('/events/current', eventController.getCurrent);
 router.get('/events', eventController.listHistory);
-router.post('/events', eventController.create);
-router.patch('/events/:id', eventController.update);
-router.post('/events/:id/complete', eventController.complete);
-router.patch('/events/:id/ordering', eventController.updateOrdering);
-router.post('/events/:id/archive', eventController.archive);
+router.post('/events', requireAdmin, eventController.create);
+router.patch('/events/:id', requireAdmin, eventController.update);
+router.post('/events/:id/complete', requireAdmin, eventController.complete);
+router.patch('/events/:id/ordering', requireAdmin, eventController.updateOrdering);
+router.post('/events/:id/archive', requireAdmin, eventController.archive);
 router.get('/events/:id/orders', eventController.orders);
 router.get('/events/:id/export.xlsx', eventController.exportExcel);
 
-router.get('/settings', vendorController.getSettings);
-router.patch('/settings', vendorController.updateSettings);
-router.get('/order-limit-settings', vendorController.getOrderLimitSettings);
-router.patch('/order-limit-settings', vendorController.updateOrderLimitSettings);
-router.get('/batch-settings', vendorController.getBatchSettings);
-router.patch('/batch-settings', vendorController.updateBatchSettings);
+router.get('/settings', requireAdmin, vendorController.getSettings);
+router.patch('/settings', requireAdmin, vendorController.updateSettings);
+router.get('/order-limit-settings', requireAdmin, vendorController.getOrderLimitSettings);
+router.patch('/order-limit-settings', requireAdmin, vendorController.updateOrderLimitSettings);
+router.get('/batch-settings', requireAdmin, vendorController.getBatchSettings);
+router.patch('/batch-settings', requireAdmin, vendorController.updateBatchSettings);
 router.get('/daily-usage', vendorController.getDailyUsage);
-router.post('/recalculate-usage', vendorController.recalculateUsage);
+router.get('/sales-config', vendorController.getSalesReadOnlyConfig);
+router.post('/recalculate-usage', requireAdmin, vendorController.recalculateUsage);
 export default router;

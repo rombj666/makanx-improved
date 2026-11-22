@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 const mocks = vi.hoisted(() => ({ orders: vi.fn(), excel: vi.fn() }));
 vi.mock('../utils/prisma', () => ({ default: {
-  vendorProfile: { findUnique: vi.fn(async () => ({ id: 'vendor' })) },
+  vendorProfile: { findUnique: vi.fn(async () => ({ id: 'vendor' })), findFirst: vi.fn(async () => ({ id: 'vendor', userId: 'staff' })) },
   event: { findFirst: vi.fn(async () => ({ id: 'event' })) },
   order: { findMany: mocks.orders, count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _count: { _all: 2 } })) },
   orderItem: { aggregate: vi.fn(async () => ({ _sum: { quantity: 5 } })) },
@@ -30,7 +30,7 @@ beforeEach(() => {
 async function invoke(handler: any) {
   let body: any;
   const res = { json: (value: any) => { body = value; }, status: () => res };
-  await handler({ user: { userId: 'staff' }, query: { date: '2026-10-04' } }, res);
+  await handler({ user: { userId: 'staff' }, vendorAccess: { vendorId: 'vendor' }, query: { date: '2026-10-04' } }, res);
   expect(body.success).toBe(true);
   return body.data;
 }

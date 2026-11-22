@@ -2,8 +2,8 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { verifyToken, verifyGuestToken } from './utils/jwt';
 import { decode, JwtPayload } from 'jsonwebtoken';
-import prisma from './utils/prisma';
 import { vendorTokenFromCookieHeader } from './utils/vendor-auth-cookie';
+import { vendorForUser } from './utils/vendor-access';
 
 let io: Server;
 
@@ -65,9 +65,7 @@ export const initSocket = (httpServer: HttpServer) => {
         vendorUserId = verifyToken(token).userId;
       }
       if (vendorUserId) {
-        const vendor = await prisma.vendorProfile.findUnique({
-          where: { userId: vendorUserId }, select: { id: true },
-        });
+        const vendor = await vendorForUser(vendorUserId);
         if (!vendor) return reject();
         socket.data.room = `vendor:${vendor.id}`;
       } else {

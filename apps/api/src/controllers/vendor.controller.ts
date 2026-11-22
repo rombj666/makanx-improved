@@ -20,7 +20,7 @@ const orderLimitSchema = z.object({
 const batchSettingsSchema = z.object({ defaultBatchSize: z.number().int().min(1).max(10000) });
 
 async function vendorFor(userId: string) {
-  const vendor = await prisma.vendorProfile.findUnique({ where: { userId }, include: { settings: true } });
+  const vendor = await prisma.vendorProfile.findUnique({ where: { id: userId }, include: { settings: true } });
   if (!vendor) throw new Error('Vendor profile not found');
   if (!vendor.settings) {
     vendor.settings = await prisma.vendorSettings.create({ data: { vendorId: vendor.id } });
@@ -81,7 +81,7 @@ function responseSettings(settings: any) {
 
 export const getSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     res.json({ success: true, data: responseSettings(vendor.settings) });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
@@ -90,7 +90,7 @@ export const getSettings = async (req: Request, res: Response) => {
 
 export const updateSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     const input = settingsSchema.parse(req.body);
     const emails = input.reportRecipientEmails
       ?? (input.reportRecipientEmail ? [input.reportRecipientEmail] : undefined);
@@ -125,7 +125,7 @@ export const updateSettings = async (req: Request, res: Response) => {
 
 export const getOrderLimitSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     res.json({
       success: true,
       data: {
@@ -138,9 +138,24 @@ export const getOrderLimitSettings = async (req: Request, res: Response) => {
   }
 };
 
+export const getSalesReadOnlyConfig = async (req: Request, res: Response) => {
+  try {
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
+    const { settings } = vendor;
+    res.json({ success: true, data: {
+      dailyDrinkLimitEnabled: settings!.dailyLimitEnabled,
+      dailyDrinkLimitQuantity: settings!.dailyLimitQuantity,
+      deviceOrderLimitEnabled: settings!.deviceOrderLimitEnabled,
+      maxDrinksPerOrder: settings!.maxDrinksPerOrder,
+    } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
 export const updateOrderLimitSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     const input = orderLimitSchema.parse(req.body);
     const settings = await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: input });
     res.json({ success: true, data: {
@@ -154,7 +169,7 @@ export const updateOrderLimitSettings = async (req: Request, res: Response) => {
 
 export const getBatchSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     res.json({ success: true, data: { defaultBatchSize: vendor.settings!.defaultBatchSize || 10 } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
@@ -163,7 +178,7 @@ export const getBatchSettings = async (req: Request, res: Response) => {
 
 export const updateBatchSettings = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     const input = batchSettingsSchema.parse(req.body);
     const settings = await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: input });
     res.json({ success: true, data: { defaultBatchSize: settings.defaultBatchSize } });
@@ -174,7 +189,7 @@ export const updateBatchSettings = async (req: Request, res: Response) => {
 
 export const getDailyUsage = async (req: Request, res: Response) => {
   try {
-    const vendor = await vendorFor(req.user!.userId);
+    const vendor = await vendorFor(req.vendorAccess!.vendorId);
     const date = getMalaysiaTodayString();
     const { event, usedQuantity: used } = await activeEventUsage(vendor.id);
     const orderingStatus = event

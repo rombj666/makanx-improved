@@ -6,10 +6,10 @@ import { z } from 'zod';
 import { randomInt } from 'crypto';
 import { sendPasswordResetEmail } from './email/email.service';
 
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const normalizeUsername = (username: string) => username.trim().toLowerCase();
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  username: z.string().trim().min(1).max(254),
   password: z.string(),
 });
 
@@ -25,7 +25,7 @@ const confirmResetSchema = z.object({
 
 export const login = async (input: unknown) => {
   const parsed = loginSchema.parse(input);
-  const email = normalizeEmail(parsed.email);
+  const email = normalizeUsername(parsed.username);
   const { password } = parsed;
 
   const user = await prisma.user.findUnique({ 
@@ -34,13 +34,13 @@ export const login = async (input: unknown) => {
   });
 
   if (!user) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid username or password');
   }
 
   const isPasswordValid = await comparePassword(password, user.password);
   
   if (!isPasswordValid) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid username or password');
   }
 
   // Check if account is active (for vendors)
@@ -49,16 +49,20 @@ export const login = async (input: unknown) => {
   }
 
   const token = generateToken({ userId: user.id, role: user.role as Role });
+  const staffVendor = user.vendorId ? await prisma.vendorProfile.findUnique({ where: { id: user.vendorId } }) : null;
+  const vendorProfile = user.vendorProfile || staffVendor;
   return {
     user: { 
       id: user.id, 
       email: user.email, 
+      username: user.email,
       name: user.name, 
       role: user.role,
-      vendorProfile: user.vendorProfile ? { 
-        id: user.vendorProfile.id, 
-        slug: user.vendorProfile.slug,
-        businessName: user.vendorProfile.businessName || undefined 
+      permission: user.permission,
+      vendorProfile: vendorProfile ? {
+        id: vendorProfile.id,
+        slug: vendorProfile.slug,
+        businessName: vendorProfile.businessName || undefined
       } : undefined
     },
     token 
@@ -73,22 +77,26 @@ export const getMe = async (userId: string) => {
   if (!user) {
     throw new Error('User not found');
   }
+  const staffVendor = user.vendorId ? await prisma.vendorProfile.findUnique({ where: { id: user.vendorId } }) : null;
+  const vendorProfile = user.vendorProfile || staffVendor;
   return { 
     id: user.id, 
     email: user.email, 
+    username: user.email,
     name: user.name, 
     role: user.role,
-    vendorProfile: user.vendorProfile ? { 
-      id: user.vendorProfile.id, 
-      slug: user.vendorProfile.slug,
-      businessName: user.vendorProfile.businessName || undefined 
+    permission: user.permission,
+    vendorProfile: vendorProfile ? {
+      id: vendorProfile.id,
+      slug: vendorProfile.slug,
+      businessName: vendorProfile.businessName || undefined
     } : undefined
   };
 };
 
 export const requestPasswordReset = async (input: unknown) => {
   const parsed = requestResetSchema.parse(input);
-  const email = normalizeEmail(parsed.email);
+  const email = parsed.email.trim().toLowerCase();
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
@@ -121,7 +129,7 @@ export const requestPasswordReset = async (input: unknown) => {
 
 export const confirmPasswordReset = async (input: unknown) => {
   const parsed = confirmResetSchema.parse(input);
-  const email = normalizeEmail(parsed.email);
+  const email = parsed.email.trim().toLowerCase();
   const { otp, newPassword } = parsed;
 
   // Find latest valid token

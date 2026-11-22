@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), handlers: new Map<string, () => void>() }));
 vi.mock('../../lib/api', () => ({ api: { get: mocks.get, getUri: ({ url }: any) => url } }));
 vi.mock('../../context/SocketContext', () => ({ useSocket: () => ({ socket }) }));
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: { permission: 'ADMIN' } }) }));
 vi.mock('recharts', () => {
   const Empty = () => null;
   return Object.fromEntries(['ResponsiveContainer', 'PieChart', 'Pie', 'Cell', 'Tooltip', 'Legend'].map(k => [k, Empty]));

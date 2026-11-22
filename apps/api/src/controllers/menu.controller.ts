@@ -10,7 +10,7 @@ function errorToMessage(err: any) {
 
 export const createMenuItem = async (req: any, res: any) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.vendorAccess!.ownerUserId;
     const item = await menuService.createMenuItem(userId, req.body);
 
     res.json({
@@ -29,7 +29,7 @@ export const createMenuItem = async (req: any, res: any) => {
 
 export const getVendorMenu = async (req: any, res: any) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.vendorAccess!.ownerUserId;
     const items = await menuService.getVendorMenu(userId);
 
     const normalized = items.map((item: any) => ({
@@ -57,7 +57,7 @@ export const getPublicMenu = async (req: any, res: any) => {
 
 export const updateMenuItem = async (req: any, res: any) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.vendorAccess!.ownerUserId;
     const itemId = req.params.id;
 
     const updated = await menuService.updateMenuItem(userId, itemId, req.body);
@@ -78,7 +78,7 @@ export const updateMenuItem = async (req: any, res: any) => {
 
 export const deleteMenuItem = async (req: any, res: any) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.vendorAccess!.ownerUserId;
     const itemId = req.params.id;
 
     const deletedOrArchived = await menuService.deleteMenuItem(userId, itemId);

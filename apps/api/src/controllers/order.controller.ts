@@ -3,6 +3,7 @@ import * as orderService from '../services/order.service';
 import { ZodError } from 'zod';
 import { OrderStatus } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { vendorForUser } from '../utils/vendor-access';
 
 const isReadyStatus = (value: any): value is OrderStatus => {
   return value === OrderStatus.READY;
@@ -41,11 +42,11 @@ export const getVendorOrders = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    console.log('[order] getVendorOrders: user', req.user.userId);
-    const result = await orderService.getVendorOrders(req.user.userId);
+    console.log('[order] getVendorOrders: user', req.vendorAccess!.ownerUserId);
+    const result = await orderService.getVendorOrders(req.vendorAccess!.ownerUserId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    console.error('[order] getVendorOrders error', { userId: req.user?.userId, error: error.message });
+    console.error('[order] getVendorOrders error', { userId: req.vendorAccess?.ownerUserId, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
@@ -54,11 +55,11 @@ export const getVendorLiveOrders = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    console.log('[order] getVendorLiveOrders: user', req.user.userId);
-    const result = await orderService.getVendorLiveOrders(req.user.userId);
+    console.log('[order] getVendorLiveOrders: user', req.vendorAccess!.ownerUserId);
+    const result = await orderService.getVendorLiveOrders(req.vendorAccess!.ownerUserId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    console.error('[order] getVendorLiveOrders error', { userId: req.user?.userId, error: error.message });
+    console.error('[order] getVendorLiveOrders error', { userId: req.vendorAccess?.ownerUserId, error: error.message });
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
   }
 };
@@ -66,7 +67,7 @@ export const getVendorLiveOrders = async (req: Request, res: Response) => {
 export const getProductionQueue = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    return res.status(200).json({ success: true, data: await orderService.getProductionQueue(req.user.userId) });
+    return res.status(200).json({ success: true, data: await orderService.getProductionQueue(req.vendorAccess!.ownerUserId) });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unable to load production queue' });
   }
@@ -75,7 +76,7 @@ export const getProductionQueue = async (req: Request, res: Response) => {
 export const startProductionBatch = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const result = await orderService.startProductionBatch(req.user.userId, req.body);
+    const result = await orderService.startProductionBatch(req.vendorAccess!.ownerUserId, req.body);
     return res.status(201).json({ success: true, data: result });
   } catch (error: any) {
     const status = error.code === 'BATCH_QUEUE_CHANGED' ? 409 : 400;
@@ -86,7 +87,7 @@ export const startProductionBatch = async (req: Request, res: Response) => {
 export const markProductionBatchReady = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    return res.status(200).json({ success: true, data: await orderService.markProductionBatchReady(req.user.userId, req.params.id) });
+    return res.status(200).json({ success: true, data: await orderService.markProductionBatchReady(req.vendorAccess!.ownerUserId, req.params.id) });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unable to complete batch' });
   }
@@ -116,9 +117,7 @@ export const getOrderById = async (req: Request, res: Response) => {
     });
     // Same response body for missing and forbidden orders; no owner information.
     if (!owner) return res.status(404).json({ success: false, error: 'Order unavailable' });
-    const vendor = req.user ? await prisma.vendorProfile.findUnique({
-      where: { userId: req.user.userId }, select: { id: true },
-    }) : null;
+    const vendor = req.user ? await vendorForUser(req.user.userId) : null;
     const allowed = req.user ? vendor?.id === owner.vendorId : req.guest?.guestId === owner.customerId;
     if (!allowed) return res.status(403).json({ success: false, error: 'Order unavailable' });
     const result = await orderService.getOrderById(req.params.id);
@@ -140,7 +139,7 @@ export const updateStatus = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Only PREPARING to READY is allowed' });
     }
 
-    const result = await orderService.updateOrderStatus(req.params.id, req.user.userId, status);
+    const result = await orderService.updateOrderStatus(req.params.id, req.vendorAccess!.ownerUserId, status);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
@@ -150,7 +149,7 @@ export const updateStatus = async (req: Request, res: Response) => {
 export const cancelOrder = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const result = await orderService.cancelOrder(req.params.id, req.user.userId);
+    const result = await orderService.cancelOrder(req.params.id, req.vendorAccess!.ownerUserId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unable to cancel order' });
@@ -171,7 +170,7 @@ export const bulkStatusUpdate = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Only PREPARING to READY is allowed' });
     }
 
-    const result = await orderService.bulkStatusUpdate(req.user.userId, orderIds, status);
+    const result = await orderService.bulkStatusUpdate(req.vendorAccess!.ownerUserId, orderIds, status);
     return res.status(200).json({ success: true, ...result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
@@ -193,7 +192,7 @@ export const markOrderItemReady = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const { orderId, itemId } = req.params;
-    const result = await orderService.markOrderItemReady(req.user.userId, orderId, itemId);
+    const result = await orderService.markOrderItemReady(req.vendorAccess!.ownerUserId, orderId, itemId);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
@@ -203,7 +202,7 @@ export const markOrderItemReady = async (req: Request, res: Response) => {
 export const markOrderItemsReady = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const result = await orderService.markOrderItemsReady(req.user.userId, req.params.id);
+    const result = await orderService.markOrderItemsReady(req.vendorAccess!.ownerUserId, req.params.id);
     return res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });

@@ -84,7 +84,7 @@ function selectedOptionSnapshot(groups: any[], selected: { groupId: string; choi
 }
 
 async function getVendorForUser(userId: string) {
-  const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+  const vendor = await prisma.vendorProfile.findFirst({ where: { OR: [{ userId }, { staffUsers: { some: { id: userId } } }] } });
   if (!vendor) throw new Error('Vendor profile not found');
   return vendor;
 }

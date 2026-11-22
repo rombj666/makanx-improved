@@ -85,9 +85,7 @@ const menuItemInputSchema = z.object({
 });
 
 export const createMenuItem = async (userId: string, data: any) => {
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { userId }
-  });
+  const vendorProfile = await prisma.vendorProfile.findFirst({ where: { OR: [{ userId }, { staffUsers: { some: { id: userId } } }] } });
 
   if (!vendorProfile) {
     throw new Error("Vendor profile not found");
@@ -142,9 +140,7 @@ export const createMenuItem = async (userId: string, data: any) => {
 };
 
 export const getVendorMenu = async (userId: string) => {
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { userId }
-  });
+  const vendorProfile = await prisma.vendorProfile.findFirst({ where: { OR: [{ userId }, { staffUsers: { some: { id: userId } } }] } });
 
   if (!vendorProfile) {
     throw new Error("Vendor profile not found");
@@ -320,9 +316,7 @@ export const updateMenuItem = async (
   itemId: string,
   data: any
 ) => {
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { userId },
-  });
+  const vendorProfile = await prisma.vendorProfile.findFirst({ where: { OR: [{ userId }, { staffUsers: { some: { id: userId } } }] } });
 
   if (!vendorProfile) throw new Error('Vendor profile not found');
 
@@ -367,9 +361,7 @@ export const deleteMenuItem = async (
   userId: string,
   itemId: string
 ) => {
-  const vendorProfile = await prisma.vendorProfile.findUnique({
-    where: { userId },
-  });
+  const vendorProfile = await prisma.vendorProfile.findFirst({ where: { OR: [{ userId }, { staffUsers: { some: { id: userId } } }] } });
 
   if (!vendorProfile) throw new Error('Vendor profile not found');
 

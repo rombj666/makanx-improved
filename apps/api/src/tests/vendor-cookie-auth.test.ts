@@ -4,7 +4,8 @@ import request from 'supertest';
 import { generateGuestToken, generateToken } from '../utils/jwt';
 import { VENDOR_AUTH_COOKIE } from '../utils/vendor-auth-cookie';
 
-const mocks = vi.hoisted(() => ({ login: vi.fn(), getMe: vi.fn() }));
+const mocks = vi.hoisted(() => ({ login: vi.fn(), getMe: vi.fn(), findUser: vi.fn(), findVendor: vi.fn() }));
+vi.mock('../utils/prisma', () => ({ default: { user: { findUnique: mocks.findUser }, vendorProfile: { findUnique: mocks.findVendor } } }));
 vi.mock('../services/auth.service', () => ({
   login: mocks.login,
   getMe: mocks.getMe,
@@ -22,6 +23,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.login.mockResolvedValue({ user, token: generateToken({ userId: user.id, role: 'VENDOR' }) });
   mocks.getMe.mockResolvedValue(user);
+  mocks.findUser.mockResolvedValue({ isActive: true, permission: 'ADMIN', vendorId: null, vendorProfile: { id: 'vendor-id', userId: user.id } });
+  mocks.findVendor.mockResolvedValue({ userId: user.id });
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -31,7 +34,7 @@ describe('vendor HttpOnly cookie authentication', () => {
     ['production', true],
   ])('sets an HttpOnly SameSite cookie after %s login', async (environment, secure) => {
     vi.stubEnv('NODE_ENV', environment);
-    const response = await request(app).post('/api/auth/login').send({ email: user.email, password: 'password' });
+    const response = await request(app).post('/api/auth/login').send({ username: user.email, password: 'password' });
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({ user });
     expect(response.body.data).not.toHaveProperty('token');
@@ -44,7 +47,7 @@ describe('vendor HttpOnly cookie authentication', () => {
 
   it('authenticates a vendor API through the cookie and rejects missing or guest credentials', async () => {
     const agent = request.agent(app);
-    await agent.post('/api/auth/login').send({ email: user.email, password: 'password' }).expect(200);
+    await agent.post('/api/auth/login').send({ username: user.email, password: 'password' }).expect(200);
     expect((await agent.get('/api/auth/me')).status).toBe(200);
     expect((await request(app).get('/api/auth/me')).status).toBe(401);
     expect((await request(app).get('/api/auth/me').auth(generateToken({ userId: user.id, role: 'VENDOR' }), { type: 'bearer' })).status).toBe(401);
@@ -65,9 +68,9 @@ describe('vendor HttpOnly cookie authentication', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     for (const error of [new Error('User not found'), new Error('Password incorrect')]) {
       mocks.login.mockRejectedValueOnce(error);
-      const response = await request(app).post('/api/auth/login').send({ email: user.email, password: 'secret-input' });
+      const response = await request(app).post('/api/auth/login').send({ username: user.email, password: 'secret-input' });
       expect(response.status).toBe(401);
-      expect(response.body).toEqual({ success: false, error: 'Invalid email or password' });
+      expect(response.body).toEqual({ success: false, error: 'Invalid username or password' });
     }
     const output = JSON.stringify([...log.mock.calls, ...warn.mock.calls]);
     expect(output).not.toContain('secret-input');

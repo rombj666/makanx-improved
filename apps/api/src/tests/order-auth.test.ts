@@ -4,7 +4,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
 const mocks = vi.hoisted(() => ({
-  prisma: { order: { findUnique: vi.fn(), findMany: vi.fn() }, vendorProfile: { findUnique: vi.fn() } },
+  prisma: { order: { findUnique: vi.fn(), findMany: vi.fn() }, vendorProfile: { findUnique: vi.fn(), findFirst: vi.fn() }, user: { findUnique: vi.fn() } },
   createOrder: vi.fn(), createOrderForVendorSlug: vi.fn(),
 }));
 vi.mock('../utils/prisma', () => ({ default: mocks.prisma }));
@@ -39,6 +39,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.prisma.order.findUnique.mockImplementation(async ({ where }) => where.id === order.id ? order : null);
   mocks.prisma.vendorProfile.findUnique.mockImplementation(async ({ where }) => ({ id: where.userId === 'staff-A' ? 'vendor-A' : 'vendor-B' }));
+  mocks.prisma.vendorProfile.findFirst.mockImplementation(async ({ where }) => {
+    const vendorA = where.OR[0].userId === 'staff-A';
+    return { id: vendorA ? 'vendor-A' : 'vendor-B', userId: vendorA ? 'owner-A' : 'owner-B' };
+  });
+  mocks.prisma.user.findUnique.mockResolvedValue({ isActive: true, permission: 'ADMIN' });
   mocks.prisma.order.findMany.mockImplementation(async ({ where }) => where.customerId === 'guest:A' ? [order] : []);
   mocks.createOrder.mockResolvedValue({ order, estimatedMinutes: 5 });
   mocks.createOrderForVendorSlug.mockResolvedValue({ order, estimatedMinutes: 5 });
