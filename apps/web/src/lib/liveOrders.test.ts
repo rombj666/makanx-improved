@@ -99,8 +99,8 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     expect(orderCards).toHaveLength(4);
     orderCards.forEach(card => {
       const actions = card.findAllByType('button');
-      expect(actions.map(button => button.children.join(''))).toEqual(['Cancel', 'Ready']);
-      expect(actions[0].props.className).toContain('bg-red-100');
+      expect(actions.map(button => button.children.join(''))).toEqual(['Ready', 'Cancel']);
+      expect(actions[0].props.className).toContain('bg-neutral-900');
       expect(actions[1].props.className).toContain('bg-neutral-900');
     });
     await act(async () => { emit('order_updated', liveOrder('1', 'READY')); emit('order_updated', liveOrder('1', 'READY')); });
