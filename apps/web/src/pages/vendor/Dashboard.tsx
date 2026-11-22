@@ -91,13 +91,17 @@ function allocatePreview(items: ProductionQueueItem[], capacity: number) {
 
 function optionText(options: any[] | null, remark = '') {
   const values = (Array.isArray(options) ? options : []).flatMap((group) => {
-    const title = String(group?.title || '').trim();
-    const choices = Array.isArray(group?.choices) ? group.choices.map((choice: any) => String(choice?.label || '').trim()).filter(Boolean) : [];
-    return choices.length ? [`${title ? `${title}: ` : ''}${choices.join(', ')}`] : [];
+    return Array.isArray(group?.choices)
+      ? group.choices.map((choice: any) => String(choice?.label || '').trim()).filter(Boolean)
+      : [];
   });
   const cleanRemark = String(remark || '').trim();
   if (cleanRemark) values.push(`Note: ${cleanRemark}`);
   return values;
+}
+
+function cupLabel(quantity: number) {
+  return `${quantity} cup${quantity === 1 ? '' : 's'}`;
 }
 
 export function VendorDashboard() {
@@ -618,7 +622,7 @@ export function VendorDashboard() {
 
   const BatchOptions = ({ options, remark }: { options: any[] | null; remark?: string }) => {
     const details = optionText(options, remark);
-    return details.length ? <div className="mt-1 flex flex-wrap gap-1">{details.map((detail, index) => <span key={index} className={`rounded-md px-2 py-1 text-xs font-semibold ${optionTone(detail)}`}>{detail}</span>)}</div> : null;
+    return details.length ? <div className="mt-1 flex min-w-0 max-w-full flex-wrap gap-1">{details.map((detail, index) => <span key={index} className={`inline-flex max-w-full break-words rounded-md px-2 py-1 text-xs font-semibold [overflow-wrap:anywhere] ${optionTone(detail)}`}>{detail}</span>)}</div> : null;
   };
 
   const BatchQueueView = () => (
@@ -631,7 +635,7 @@ export function VendorDashboard() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {batchQueue.batches.map((batch) => <article key={batch.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
               <div className="flex items-start justify-between gap-2"><div><div className="text-sm font-bold">Batch #{batch.batchNumber} · {batch.drinkName}</div><BatchOptions options={batch.selectedOptions} remark={batch.remark} /></div><span className="shrink-0 rounded-full bg-amber-200 px-2 py-1 text-[10px] font-bold text-amber-900">PREPARING</span></div>
-              <div className="mt-2 text-xs font-semibold text-neutral-700">{batch.totalCups} cups · {batch.orders.length} orders</div>
+              <div className="mt-2 text-xs font-semibold text-neutral-700">{cupLabel(batch.totalCups)} · {batch.orders.length} {batch.orders.length === 1 ? 'order' : 'orders'}</div>
               <button onClick={() => openBatch(batch.id)} className={`${primaryActionButtonClass} mt-2 w-full`}>Open Batch</button>
             </article>)}
           </div>}
@@ -641,7 +645,7 @@ export function VendorDashboard() {
         {batchQueue.waitingGroups.length === 0 ? <p className="rounded-xl bg-white p-4 text-sm text-neutral-500">No drinks waiting for preparation.</p> :
           <div className="space-y-2">
             {batchQueue.waitingGroups.map((group) => <article key={group.signature} className="rounded-xl border border-neutral-200 bg-white p-3">
-              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="font-bold text-neutral-950">{group.drinkName}</div><BatchOptions options={group.selectedOptions} remark={group.remark} /></div><div className="shrink-0 text-right"><div className="text-lg font-bold">{group.totalQuantity}</div><div className="text-[10px] uppercase text-neutral-500">cups waiting</div></div></div>
+              <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="break-words font-bold text-neutral-950 [overflow-wrap:anywhere]">{group.drinkName}</div><BatchOptions options={group.selectedOptions} remark={group.remark} /></div><div className="shrink-0 whitespace-nowrap text-right text-lg font-bold">{cupLabel(group.totalQuantity)}</div></div>
               <button onClick={() => { setSelectedRecipe(group.signature); setBatchCapacity(batchQueue.defaultBatchSize); setShowIncludedOrders(false); }} className={`${secondaryActionButtonClass} mt-2 w-full`}>Start Batch</button>
             </article>)}
           </div>}
@@ -663,7 +667,7 @@ export function VendorDashboard() {
     <main className="fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-white px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-200 pb-2">
         <button onClick={() => { setFocusedBatchId(null); setConfirmBatchReady(false); }} className={secondaryActionButtonClass}>← Queue</button>
-        <div className="text-center"><div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Batch #{focusedBatch.batchNumber}</div><div className="text-sm font-bold">{focusedBatch.totalCups} cups · PREPARING</div></div>
+        <div className="text-center"><div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Batch #{focusedBatch.batchNumber}</div><div className="text-sm font-bold">{cupLabel(focusedBatch.totalCups)} · PREPARING</div></div>
         <div className="w-[74px]" />
       </header>
       <section className="shrink-0 py-2">
@@ -693,25 +697,35 @@ export function VendorDashboard() {
   return (
     <>
       {cancellationModal}
-      <Modal isOpen={!!selectedRecipe} onClose={() => { if (!startingBatch) setSelectedRecipe(null); }} title={`Start ${selectedWaitingGroup?.drinkName || 'Batch'}`} mobileFullScreen>
-        {selectedWaitingGroup && <div className="space-y-4">
+      <Modal isOpen={!!selectedRecipe} onClose={() => { if (!startingBatch) setSelectedRecipe(null); }} title={selectedWaitingGroup?.drinkName || 'Batch'} mobileFullScreen>
+        {selectedWaitingGroup && <div className="min-w-0 space-y-5">
           <BatchOptions options={selectedWaitingGroup.selectedOptions} remark={selectedWaitingGroup.remark} />
-          <div className="rounded-xl bg-neutral-50 p-3 text-sm"><div>Total waiting: <strong>{selectedWaitingGroup.totalQuantity} cups</strong></div><div className="mt-1">Batch capacity: <strong>{batchCapacity} cups</strong></div><div className="mt-1">Allocated: <strong>{preview.cups} cups</strong></div><div className="mt-1">Remaining after start: <strong>{previewRemaining} cups</strong></div></div>
-          {preview.cups === 0 && selectedWaitingGroup.items[0] && <p className="text-sm text-amber-800">The oldest order item contains {selectedWaitingGroup.items[0].quantity} cups. Increase capacity to at least that amount to prepare it.</p>}
-          <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Batch Capacity</span><div className="flex items-center gap-2">
-            <button onClick={() => setBatchCapacity((capacity) => Math.max(1, capacity - 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 px-0 text-lg`} aria-label="Decrease capacity">−</button>
-            <input type="number" min={1} max={10000} value={batchCapacity} onChange={(event) => setBatchCapacity(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-10 w-24 rounded-lg border text-center font-semibold" aria-label="Batch capacity in cups" />
-            <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 px-0 text-lg`} aria-label="Increase capacity">+</button>
-          </div></div>
-          <div>
+          <section className="flex items-center justify-between border-b border-neutral-100 pb-4">
+            <span className="text-sm font-medium text-neutral-700">Waiting</span>
+            <span className="text-xl font-bold text-neutral-950">{cupLabel(selectedWaitingGroup.totalQuantity)}</span>
+          </section>
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0"><h3 className="text-sm font-semibold text-neutral-900">Batch Capacity</h3><p className="text-xs text-neutral-500">Maximum cups</p></div>
+              <div className="flex min-w-0 items-center gap-2">
+                <button onClick={() => setBatchCapacity((capacity) => Math.max(1, capacity - 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 shrink-0 px-0 text-lg`} aria-label="Decrease capacity">−</button>
+                <input type="number" min={1} max={10000} value={batchCapacity} onChange={(event) => setBatchCapacity(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-10 min-w-0 w-16 rounded-xl border border-neutral-200 text-center font-semibold sm:w-20" aria-label="Batch capacity in cups" />
+                <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className={`${secondaryActionButtonClass} h-10 min-h-10 w-10 shrink-0 px-0 text-lg`} aria-label="Increase capacity">+</button>
+              </div>
+            </div>
+          </section>
+          <section className="grid grid-cols-2 gap-2">
+            <div className="min-w-0 rounded-xl bg-neutral-100 p-3"><div className="text-xs text-neutral-500">To Prepare</div><div className="mt-1 break-words text-xl font-bold text-neutral-950">{cupLabel(preview.cups)}</div></div>
+            <div className="min-w-0 rounded-xl bg-neutral-100 p-3"><div className="text-xs text-neutral-500">Remaining</div><div className="mt-1 break-words text-xl font-bold text-neutral-950">{cupLabel(previewRemaining)}</div></div>
+          </section>
+          {preview.cups === 0 && selectedWaitingGroup.items[0] && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">Increase capacity to at least {cupLabel(selectedWaitingGroup.items[0].quantity)} to include the oldest order.</p>}
+          <section>
             <button type="button" aria-expanded={showIncludedOrders} onClick={() => setShowIncludedOrders((visible) => !visible)} className={`${secondaryActionButtonClass} w-full justify-between text-left`}>
-              <span>{showIncludedOrders ? 'Hide' : 'Show'} Orders Included <span className="text-neutral-500">({includedOrders.length})</span></span>
-              <span aria-hidden="true" className="ml-3 text-lg leading-none">{showIncludedOrders ? '−' : '+'}</span>
+              <span>Orders ({includedOrders.length})</span>
             </button>
-            {showIncludedOrders && <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm">{includedOrders.map((order) => <li key={order.orderNumber} className="rounded-lg border border-neutral-200 bg-white px-4 py-3">Order #{order.orderNumber} — {order.quantity} cup{order.quantity === 1 ? '' : 's'}</li>)}</ul>}
-          </div>
-          <p className="text-xs text-neutral-500">Allocation uses oldest orders first. Each order item stays whole.</p>
-          <div className="flex justify-end gap-2"><Button disabled={startingBatch} onClick={() => setSelectedRecipe(null)} className={secondaryActionButtonClass}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className={primaryActionButtonClass}>Start Batch — {preview.cups} Cups</Button></div>
+            {showIncludedOrders && <div className="mt-2 max-h-40 overflow-y-auto"><div className="mb-1 text-xs font-semibold text-neutral-500">Order Numbers</div><ul className="space-y-1 text-sm">{includedOrders.map((order) => <li key={order.orderNumber} className="rounded-lg bg-neutral-50 px-3 py-2">Order #{order.orderNumber} — {cupLabel(order.quantity)}</li>)}</ul></div>}
+          </section>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-2"><Button disabled={startingBatch} onClick={() => setSelectedRecipe(null)} className={`${secondaryActionButtonClass} min-w-0 px-2`}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className={`${primaryActionButtonClass} min-w-0 px-2`}>Start {preview.cups} {preview.cups === 1 ? 'Cup' : 'Cups'}</Button></div>
         </div>}
       </Modal>
       <div className="block [@media(pointer:coarse)]:hidden container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">

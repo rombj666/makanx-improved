@@ -133,25 +133,42 @@ describe('dashboard reconciliation and socket lifecycle', () => {
   it('shows indivisible oldest-first capacity preview and opens the focused batch view', async () => {
     const waitingGroup = {
       signature: 'latte-cold', menuItemId: 'latte', drinkName: 'Cafe Latte',
-      selectedOptions: [{ groupId: 'temp', title: 'Temperature', choices: [{ id: 'cold', label: 'Cold' }] }],
+      selectedOptions: [
+        { groupId: 'temp', title: 'Temperature', choices: [{ id: 'cold', label: 'Cold' }] },
+        { groupId: 'sugar', title: 'Sugar', choices: [{ id: 'none', label: 'No Sugar' }] },
+      ],
       remark: '', totalQuantity: 11, items: [
         { id: 'item-8', orderId: 'order-101', orderNumber: 101, quantity: 8, createdAt: '2026-10-16T01:00:00Z' },
         { id: 'item-3', orderId: 'order-102', orderNumber: 102, quantity: 3, createdAt: '2026-10-16T01:01:00Z' },
       ],
     };
-    const queue = { eventId: 'active', defaultBatchSize: 10, batches: [], waitingGroups: [waitingGroup] };
+    const hotGroup = { ...waitingGroup, signature: 'latte-hot', menuItemId: 'latte', drinkName: 'Americano', selectedOptions: [{ groupId: 'temp', title: 'Option', choices: [{ id: 'hot', label: 'Hot' }] }], totalQuantity: 1, items: [{ id: 'item-hot', orderId: 'order-103', orderNumber: 103, quantity: 1, createdAt: '2026-10-16T01:02:00Z' }] };
+    const queue = { eventId: 'active', defaultBatchSize: 10, batches: [], waitingGroups: [waitingGroup, hotGroup] };
     let responseQueue = queue;
     dashboardMocks.get.mockImplementation(async (url: string) => ({ data: { success: true, data: url.endsWith('/production-queue') ? responseQueue : [] } }));
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Batch Queue'))!.props.onClick(); await Promise.resolve(); await Promise.resolve(); });
     expect(textOf(tree)).toContain('Cafe Latte');
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Cold').some(node => String(node.props.className).includes('bg-blue-600'))).toBe(true);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Hot').some(node => String(node.props.className).includes('bg-red-600'))).toBe(true);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'No Sugar').some(node => String(node.props.className).includes('bg-neutral-900'))).toBe(true);
+    expect(textOf(tree)).not.toContain('Temperature:');
+    expect(textOf(tree)).not.toContain('Sugar:');
+    expect(tree.root.findAll(node => node.children.join('') === '11 cups').length).toBeGreaterThan(0);
+    expect(tree.root.findAll(node => node.children.join('') === '1 cup').length).toBeGreaterThan(0);
+    const hotCard = tree.root.findAllByType('article').find(article => article.findAll(node => node.children.join('') === 'Americano').length > 0)!;
+    await act(async () => { hotCard.findByType('button').props.onClick(); });
+    expect(tree.root.findAll(node => node.children.join('') === '1 cup').length).toBeGreaterThan(0);
+    expect(tree.root.findAll(node => node.children.join('') === '0 cups').length).toBe(1);
+    expect(tree.root.findAllByType('button').some(button => button.children.join('').includes('Start 1 Cup'))).toBe(true);
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.join('') === 'Cancel')!.props.onClick(); });
     await act(async () => { await tree.root.findAllByType('button').find(button => button.children.includes('Start Batch'))!.props.onClick(); });
-    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Temperature: Cold').some(node => String(node.props.className).includes('bg-blue-600'))).toBe(true);
-    expect(tree.root.findAll(node => node.children.join('').includes('Allocated: '))).toHaveLength(1);
+    expect(tree.root.findAll(node => node.children.join('').includes('To Prepare'))).toHaveLength(1);
     expect(tree.root.findAll(node => node.children.join('') === '8 cups')).toHaveLength(1);
-    expect(tree.root.findAll(node => node.children.join('').includes('Remaining after start: '))).toHaveLength(1);
+    expect(tree.root.findAll(node => node.children.join('').includes('Remaining'))).toHaveLength(1);
     expect(tree.root.findAll(node => node.children.join('') === '3 cups')).toHaveLength(1);
     const includedOrdersToggle = () => tree.root.findAllByType('button').find(button => button.props['aria-expanded'] !== undefined)!;
     expect(includedOrdersToggle().props['aria-expanded']).toBe(false);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Orders (1)')).toHaveLength(1);
     expect(includedOrdersToggle().props.className).toContain('border');
     expect(includedOrdersToggle().props.className).not.toContain('underline');
     await act(async () => { includedOrdersToggle().props.onClick(); });
@@ -160,9 +177,11 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     const batch = { id: 'batch-a', batchNumber: 1, status: 'PREPARING', capacity: 10, recipeSignature: 'latte-cold', drinkName: 'Cafe Latte', selectedOptions: waitingGroup.selectedOptions, remark: '', createdAt: '2026-10-16T01:00:00Z', totalCups: 8, orders: [{ orderNumber: 101, quantity: 8 }] };
     responseQueue = { ...queue, waitingGroups: [], batches: [batch] };
     dashboardMocks.post.mockResolvedValue({ data: { success: true, data: { batch, queue: { ...queue, waitingGroups: [], batches: [batch] } } } });
-    await act(async () => { await tree.root.findAllByType('button').find(button => button.children.join('').includes('Start Batch — 8 Cups'))!.props.onClick(); });
+    await act(async () => { await tree.root.findAllByType('button').find(button => button.children.join('').includes('Start 8 Cups'))!.props.onClick(); });
     expect(tree.root.findAll(node => node.children.join('').startsWith('Batch #1'))).toHaveLength(1);
     expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === '#101')).toHaveLength(1);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Cold')).toHaveLength(1);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'No Sugar')).toHaveLength(1);
     expect(dashboardMocks.post).toHaveBeenCalledWith('/orders/vendor/production-batches', { signature: 'latte-cold', capacity: 10, orderItemIds: ['item-8'] });
   });
 
@@ -249,10 +268,14 @@ describe('dashboard reconciliation and socket lifecycle', () => {
   });
 
   it('requires every order-number page reviewed before confirming larger batches', async () => {
-    const batch = { id: 'batch-large', batchNumber: 4, status: 'PREPARING', capacity: 20, recipeSignature: 'x', drinkName: 'Tea', selectedOptions: [], remark: '', createdAt: '2026-10-16T01:00:00Z', totalCups: 11, orders: Array.from({ length: 11 }, (_, index) => ({ orderNumber: 200 + index, quantity: 1 })) };
+    const batch = { id: 'batch-large', batchNumber: 4, status: 'PREPARING', capacity: 20, recipeSignature: 'x', drinkName: 'Tea', selectedOptions: [{ groupId: 'temperature', title: 'Temperature', choices: [{ id: 'hot', label: 'Hot' }] }, { groupId: 'sugar', title: 'Sugar', choices: [{ id: 'none', label: 'No Sugar' }] }], remark: '', createdAt: '2026-10-16T01:00:00Z', totalCups: 11, orders: Array.from({ length: 11 }, (_, index) => ({ orderNumber: 200 + index, quantity: 1 })) };
     const queue = { eventId: 'active', defaultBatchSize: 10, batches: [batch], waitingGroups: [] };
     dashboardMocks.get.mockImplementation(async (url: string) => ({ data: { success: true, data: url.endsWith('/production-queue') ? queue : [] } }));
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Batch Queue'))!.props.onClick(); await Promise.resolve(); await Promise.resolve(); });
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Hot').some(node => String(node.props.className).includes('bg-red-600'))).toBe(true);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'No Sugar').some(node => String(node.props.className).includes('bg-neutral-900'))).toBe(true);
+    expect(textOf(tree)).not.toContain('Temperature:');
+    expect(textOf(tree)).not.toContain('Sugar:');
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.includes('Open Batch'))!.props.onClick(); });
     expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === '1 of 2')).toHaveLength(1);
     const ready = () => tree.root.findAllByType('button').find(button => button.children.join('') === 'Review every page');
@@ -260,6 +283,11 @@ describe('dashboard reconciliation and socket lifecycle', () => {
     await act(async () => { tree.root.findAllByType('button').find(button => button.children.join('') === 'Next')!.props.onClick(); });
     expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === '#210')).toHaveLength(1);
     expect(tree.root.findAllByType('button').find(button => button.children.join('') === 'Ready')!.props.disabled).toBe(false);
+    await act(async () => { tree.root.findAllByType('button').find(button => button.children.join('') === '← Queue')!.props.onClick(); });
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'Hot').some(node => String(node.props.className).includes('bg-red-600'))).toBe(true);
+    expect(tree.root.findAll(node => node.type === 'span' && node.children.join('') === 'No Sugar').some(node => String(node.props.className).includes('bg-neutral-900'))).toBe(true);
+    expect(textOf(tree)).not.toContain('Temperature:');
+    expect(textOf(tree)).not.toContain('Sugar:');
   });
 
   it('backs off all triggers for thirty seconds after rate limiting, then retries', async () => {
