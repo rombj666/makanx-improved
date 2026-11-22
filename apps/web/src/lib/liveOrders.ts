@@ -13,6 +13,8 @@ export function belongsInKitchen(order: LiveOrder) {
 // READY is terminal; delayed socket/API responses must not undo committed progress.
 export function mergeLiveOrder<T extends LiveOrder>(previous: T | undefined, incoming: T): T {
   if (!previous) return incoming;
+  if (previous.status === 'CANCELLED' && incoming.status !== 'CANCELLED') return previous;
+  if (incoming.status === 'CANCELLED') return incoming;
   if (previous.status === 'READY' && incoming.status === 'PREPARING') return previous;
   return {
     ...incoming,

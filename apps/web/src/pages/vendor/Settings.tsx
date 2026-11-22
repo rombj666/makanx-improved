@@ -26,7 +26,11 @@ interface EventSummary {
   completedAt?: string | null;
   createdAt: string;
   totalOrders: number;
+  validOrders: number;
+  readyOrders: number;
+  cancelledOrders: number;
   totalCups: number;
+  cancelledCups: number;
 }
 
 interface EventOrder {
@@ -292,10 +296,14 @@ export function VendorSettings() {
                 <Button className="bg-black hover:bg-neutral-800" onClick={() => setCompleteModal(true)}><CheckCircle2 size={16} className="mr-2" />Complete Event</Button>
               </div>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-5">
               {[
-                ['Total orders', currentEvent.totalOrders],
-                ['Total cups', currentEvent.totalCups],
+                ['Orders received', currentEvent.totalOrders],
+                ['Valid orders', currentEvent.validOrders],
+                ['Ready orders', currentEvent.readyOrders],
+                ['Cancelled orders', currentEvent.cancelledOrders],
+                ['Cancelled cups', currentEvent.cancelledCups],
+                ['Valid cups', currentEvent.totalCups],
                 ['Ordering status', currentEvent.orderingStatus.replace(/_/g, ' ')],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
@@ -327,7 +335,7 @@ export function VendorSettings() {
         <div className="mt-6 overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead><tr className="border-b text-xs uppercase tracking-wide text-neutral-500">
-              {['Event Name', 'Event Date', 'Location', 'Total Orders', 'Total Cups', 'Status', 'Actions'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}
+              {['Event Name', 'Event Date', 'Location', 'Orders Received', 'Valid Orders', 'Ready', 'Cancelled', 'Valid Cups', 'Cancelled Cups', 'Status', 'Actions'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}
             </tr></thead>
             <tbody>
               {history.map((item) => (
@@ -336,7 +344,11 @@ export function VendorSettings() {
                   <td className="px-3 py-4">{eventDate(item.eventDate)}</td>
                   <td className="px-3 py-4 text-neutral-600">{item.location || '—'}</td>
                   <td className="px-3 py-4">{item.totalOrders}</td>
+                  <td className="px-3 py-4">{item.validOrders}</td>
+                  <td className="px-3 py-4">{item.readyOrders}</td>
+                  <td className="px-3 py-4">{item.cancelledOrders}</td>
                   <td className="px-3 py-4">{item.totalCups}</td>
+                  <td className="px-3 py-4">{item.cancelledCups}</td>
                   <td className="px-3 py-4"><StatusBadge status={item.status} /></td>
                   <td className="px-3 py-4"><div className="flex flex-wrap gap-2">
                     <button onClick={() => { setOrders([]); setSearch(''); setStatusFilter(''); setSelectedEvent(item); }} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-2 font-semibold"><Eye size={14} />View Event</button>
@@ -345,7 +357,7 @@ export function VendorSettings() {
                   </div></td>
                 </tr>
               ))}
-              {!loading && history.length === 0 && <tr><td colSpan={7} className="px-3 py-10 text-center text-neutral-500">No completed events yet.</td></tr>}
+              {!loading && history.length === 0 && <tr><td colSpan={11} className="px-3 py-10 text-center text-neutral-500">No completed events yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -368,12 +380,16 @@ export function VendorSettings() {
 
       <Modal wide isOpen={selectedEvent !== null} onClose={() => setSelectedEvent(null)} title={selectedEvent ? `${selectedEvent.eventName} — Orders` : 'Event Orders'}>
         {selectedEvent && <div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[['Total orders', selectedEvent.totalOrders], ['Total cups', selectedEvent.totalCups]].map(([label, value]) => <div key={label} className="rounded-xl bg-neutral-100 p-3"><div className="text-xs uppercase text-neutral-500">{label}</div><div className="mt-1 text-lg font-bold">{value}</div></div>)}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ['Orders received', selectedEvent.totalOrders], ['Valid orders', selectedEvent.validOrders],
+              ['Ready orders', selectedEvent.readyOrders], ['Cancelled orders', selectedEvent.cancelledOrders],
+              ['Valid cups', selectedEvent.totalCups], ['Cancelled cups', selectedEvent.cancelledCups],
+            ].map(([label, value]) => <div key={label} className="rounded-xl bg-neutral-100 p-3"><div className="text-xs uppercase text-neutral-500">{label}</div><div className="mt-1 text-lg font-bold">{value}</div></div>)}
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_190px]">
             <label className="relative"><Search className="absolute left-3 top-3 text-neutral-400" size={16} /><Input className="pl-9" placeholder="Search order no. or customer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">All order statuses</option><option value="PREPARING">Preparing</option><option value="READY">Ready</option></select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border bg-white px-3 text-sm"><option value="">All order statuses</option><option value="PREPARING">Preparing</option><option value="READY">Ready</option><option value="CANCELLED">Cancelled</option></select>
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-neutral-500">{['Order No.', 'Customer', 'Items', 'Cups', 'Status', 'Created'].map((heading) => <th key={heading} className="px-3 py-3">{heading}</th>)}</tr></thead>

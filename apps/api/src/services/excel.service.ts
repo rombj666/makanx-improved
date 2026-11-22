@@ -136,6 +136,7 @@ export async function generateEventOrdersExcel(event: any, orders: any[]): Promi
   let coldDrinks = 0;
 
   for (const order of orders) {
+    if (order.status === 'CANCELLED') continue;
     for (const item of order.items || []) {
       const product = String(item.menuItem?.name || 'Unknown product').trim();
       const quantity = Number(item.quantity || 0);
@@ -167,10 +168,14 @@ export async function generateEventOrdersExcel(event: any, orders: any[]): Promi
   }
 
   addSection(worksheet, 'EVENT SUMMARY');
-  let row = worksheet.addRow(['Total Orders', 'Total Cups', 'Hot Drinks', 'Cold Drinks']);
+  const cancelledOrders = orders.filter((order) => order.status === 'CANCELLED');
+  const cancelledCups = cancelledOrders.reduce((sum, order) => sum + (order.items || []).reduce((n: number, item: any) => n + Number(item.quantity || 0), 0), 0);
+  let row = worksheet.addRow(['Valid Orders', 'Total Cups', 'Hot Drinks', 'Cold Drinks']);
   styleHeader(row);
-  row = worksheet.addRow([orders.length, totalCups, hotDrinks, coldDrinks]);
+  row = worksheet.addRow([orders.length - cancelledOrders.length, totalCups, hotDrinks, coldDrinks]);
   styleDataRow(row, [1, 2, 3, 4]);
+  row = worksheet.addRow([`Cancelled orders: ${cancelledOrders.length}`, `Cancelled cups: ${cancelledCups}`]);
+  styleDataRow(row);
 
   addSection(worksheet, 'HOT AND COLD DRINK SUMMARY');
   row = worksheet.addRow(['Drink Type', 'Total Cups']);

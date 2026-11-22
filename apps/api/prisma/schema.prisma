@@ -129,6 +129,8 @@ model Order {
   acceptedAt       DateTime?
   readyAt          DateTime?
   completedAt      DateTime?
+  cancelledAt      DateTime?
+  cancelledByUserId String?
   vendor           VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   event            Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
   items            OrderItem[]
@@ -185,6 +187,7 @@ enum Role {
 enum OrderStatus {
   PREPARING
   READY
+  CANCELLED
 }
 
 enum OrderItemStatus {

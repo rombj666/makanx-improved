@@ -143,9 +143,9 @@ describe('Malaysia daily usage window', () => {
     expect(belongsToToday('2026-07-30T16:00:00.000Z')).toBe(false);
   });
 
-  it('does not filter by order status, so ready and completed orders remain counted', () => {
+  it('counts preparing and ready orders but excludes cancelled orders', () => {
     const where = dailyCupUsageWhere('active-event', '2026-07-29T16:30:00.000Z');
-    expect(where.order).not.toHaveProperty('status');
+    expect(where.order.status).toEqual({ not: 'CANCELLED' });
     expect(where.order).not.toHaveProperty('completedAt');
   });
 });

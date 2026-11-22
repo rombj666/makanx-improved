@@ -33,13 +33,20 @@ function dateOnly(value: string) {
 }
 
 async function summaryForEvent(event: any, settings?: any) {
-  const [orders, cups, todayCups] = await Promise.all([
+  const [orders, validOrders, readyOrders, cancelledOrders, cups, cancelledCups, todayCups] = await Promise.all([
     prisma.order.aggregate({
       where: { eventId: event.id },
       _count: { _all: true },
     }),
+    prisma.order.count({ where: { eventId: event.id, status: { in: [OrderStatus.PREPARING, OrderStatus.READY] } } }),
+    prisma.order.count({ where: { eventId: event.id, status: OrderStatus.READY } }),
+    prisma.order.count({ where: { eventId: event.id, status: OrderStatus.CANCELLED } }),
     prisma.orderItem.aggregate({
-      where: { order: { eventId: event.id } },
+      where: { order: { eventId: event.id, status: { not: OrderStatus.CANCELLED } } },
+      _sum: { quantity: true },
+    }),
+    prisma.orderItem.aggregate({
+      where: { order: { eventId: event.id, status: OrderStatus.CANCELLED } },
       _sum: { quantity: true },
     }),
     prisma.orderItem.aggregate({
@@ -48,7 +55,7 @@ async function summaryForEvent(event: any, settings?: any) {
     }),
   ]);
   const totalCups = Number(cups._sum.quantity || 0);
-  const todayCupQuantity = Number(todayCups._sum.quantity || 0);
+  const todayCupQuantity = Number(todayCups._sum?.quantity || 0);
   const orderingStatus = settings === undefined
     ? event.orderingStatus
     : effectiveOrderingStatus({
@@ -67,7 +74,11 @@ async function summaryForEvent(event: any, settings?: any) {
     ...event,
     orderingStatus,
     totalOrders: orders._count._all,
+    validOrders,
+    readyOrders,
+    cancelledOrders,
     totalCups,
+    cancelledCups: Number(cancelledCups._sum.quantity || 0),
     todayCupQuantity,
     cupLimitEnabled: settings?.dailyLimitEnabled === true,
     expectedCupQuantity: Number(settings?.dailyLimitQuantity || 0),

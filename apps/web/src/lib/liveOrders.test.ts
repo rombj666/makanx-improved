@@ -24,6 +24,13 @@ describe('Live Orders committed response handling', () => {
   it('excludes inconsistent all-ready orders from Kitchen', () => {
     expect(belongsInKitchen({ id: 'stale', status: 'PREPARING', items: [{ status: 'READY' }] })).toBe(false);
   });
+
+  it('keeps cancellation terminal when a stale preparing response arrives', () => {
+    const cancelled = { id: 'three', status: 'CANCELLED', items: [{ status: 'PREPARING' }] };
+    const stale = { id: 'three', status: 'PREPARING', items: [{ status: 'PREPARING' }] };
+    expect(applyLiveOrder([cancelled], stale, 'kitchen')).toEqual([]);
+    expect(applyLiveOrder([cancelled], stale, 'ready')).toEqual([]);
+  });
 });
 
 
@@ -33,6 +40,7 @@ const dashboardMocks = vi.hoisted(() => ({
 }));
 vi.mock('./api', () => ({ api: { get: dashboardMocks.get, post: dashboardMocks.post } }));
 vi.mock('../context/SocketContext', () => ({ useSocket: () => ({ socket: dashboardSocket, isConnected: dashboardMocks.connected }) }));
+vi.mock('../components/ui/Modal', () => ({ Modal: () => null }));
 vi.mock('react-hot-toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { VendorDashboard } from '../pages/vendor/Dashboard';
 const dashboardSocket = {

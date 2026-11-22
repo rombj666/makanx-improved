@@ -249,7 +249,7 @@ async function buildPublicMenu(where: Prisma.VendorProfileWhereUniqueInput) {
     ? Number((await prisma.orderItem.aggregate({
         where: dailyCupUsageWhere(activeEvent.id),
         _sum: { quantity: true },
-      }))._sum.quantity || 0)
+      }))._sum?.quantity || 0)
     : 0;
   const orderingStatus = !activeEvent
     ? 'MANUALLY_CLOSED'

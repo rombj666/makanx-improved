@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { applyLiveOrder, belongsInKitchen, mergeLiveOrder } from '../../lib/liveOrders';
 import { useSocket } from '../../context/SocketContext';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 import { toast } from 'react-hot-toast';
 import { computeDisplayNumber } from '../../lib/utils';
 
@@ -25,6 +26,7 @@ interface Order {
   eventOrderNumber?: string | number | null;
   displayNumber?: string | number | null;
   status: string;
+  paymentStatus?: string;
   customerName?: string | null;
   items: OrderItem[];
   createdAt: string;
@@ -59,6 +61,32 @@ export function VendorDashboard() {
   const [activeTab, setActiveTab] = useState<'kitchen' | 'history'>('kitchen');
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [expandedHistoryEvents, setExpandedHistoryEvents] = useState<Set<string>>(new Set());
+  const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const confirmCancellation = async () => {
+    if (!cancelTarget || cancelling) return;
+    setCancelling(true);
+    try {
+      const { data } = await api.post(`/orders/${cancelTarget.id}/cancel`);
+      if (!data.success) throw new Error(data.error || 'Cancellation failed');
+      applyOrder(data.data);
+      setCancelTarget(null);
+      toast.success(data.data.paymentStatus === 'PAID'
+        ? `Order #${computeDisplayNumber(data.data)} cancelled. Payment requires reconciliation; no refund was issued.`
+        : `Order #${computeDisplayNumber(data.data)} cancelled`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || error?.message || 'Failed to cancel order');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const CancelButton = ({ order }: { order: Order }) => order.status === 'PREPARING' ? (
+    <button onClick={() => setCancelTarget(order)} className="mt-2 min-h-11 w-full rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2">
+      Cancel Order
+    </button>
+  ) : null;
 
   // Record committed changes so an older HTTP snapshot cannot overwrite them.
   const applyOrder = useCallback((order: Order) => {
@@ -96,7 +124,11 @@ export function VendorDashboard() {
           kitchen = applyLiveOrder(kitchen, order, 'kitchen');
           ready = applyLiveOrder(ready, order, 'ready');
         }
-        latestOrders.current = new Map([...kitchen, ...ready].map((order) => [order.id, order]));
+        const reconciled = new Map([...kitchen, ...ready].map((order) => [order.id, order]));
+        for (const [id, order] of latestOrders.current) {
+          if (order.status === 'CANCELLED') reconciled.set(id, order);
+        }
+        latestOrders.current = reconciled;
         setProductionOrders(kitchen.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         setHistoryOrders(ready);
       }
@@ -336,6 +368,7 @@ export function VendorDashboard() {
                       </div>
                       <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone(order.status)}`}>{order.status}</span>
                     </div>
+                    <CancelButton order={order} />
                   </div>
                 ))}
               </div>
@@ -464,6 +497,7 @@ export function VendorDashboard() {
                 Ready
               </button>
             )}
+            <CancelButton order={order} />
           </div>
         );
       })}
@@ -553,6 +587,14 @@ export function VendorDashboard() {
 
   return (
     <>
+      <Modal isOpen={!!cancelTarget} onClose={() => { if (!cancelling) setCancelTarget(null); }} title={`Cancel Order #${cancelTarget ? computeDisplayNumber(cancelTarget) : ''}?`}>
+        <p className="text-sm text-neutral-600">Are you sure you want to cancel this order? The order will be removed from Kitchen View, and its cancellation record will be retained.</p>
+        {cancelTarget?.paymentStatus === 'PAID' && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This order is marked paid. Cancellation will not issue a refund; reconcile the payment separately.</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" disabled={cancelling} onClick={() => setCancelTarget(null)}>Keep Order</Button>
+          <Button disabled={cancelling} isLoading={cancelling} className="bg-red-700 hover:bg-red-800" onClick={confirmCancellation}>Confirm Cancellation</Button>
+        </div>
+      </Modal>
       <div className="block [@media(pointer:coarse)]:hidden container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Live Orders</h1>
@@ -763,6 +805,7 @@ export function VendorDashboard() {
                         Ready
                       </button>
                     )}
+                    <CancelButton order={order} />
                   </div>
                 ))}
               </div>

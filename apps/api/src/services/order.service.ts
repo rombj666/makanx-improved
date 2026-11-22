@@ -189,7 +189,7 @@ export async function createOrder(_customerId: string | undefined, input: unknow
         where: dailyCupUsageWhere(lockedEvent.id, orderCreatedAt),
         _sum: { quantity: true },
       });
-      const usedQuantity = Number(cups._sum.quantity || 0);
+      const usedQuantity = Number(cups._sum?.quantity || 0);
       const cupSettings = lockedSettings[0];
       const cupLimit = evaluateCupLimit({
         enabled: cupSettings?.dailyLimitEnabled === true,
@@ -282,7 +282,7 @@ export async function getVendorOrders(userId: string) {
 // and prices that neither Kitchen nor Ready History renders.
 const liveOrderSelect = {
   id: true, vendorId: true, eventOrderNumber: true, displayNumber: true,
-  status: true, createdAt: true, readyAt: true, customerName: true,
+  status: true, paymentStatus: true, cancelledAt: true, createdAt: true, readyAt: true, customerName: true,
   items: { select: {
     id: true, quantity: true, status: true, remark: true, selectedOptions: true,
     menuItem: { select: { id: true, name: true } },
@@ -335,8 +335,8 @@ export async function getCustomerOrders(customerId: string) {
 async function assertOrderOwner(orderId: string, userId: string) {
   const vendor = await getVendorForUser(userId);
   const order = await prisma.order.findFirst({
-    where: { id: orderId, vendorId: vendor.id },
-    include: { items: true, event: { select: { status: true } } },
+    where: { id: orderId, vendorId: vendor.id, event: { vendorId: vendor.id } },
+    include: { items: true, event: { select: { status: true, vendorId: true } } },
   });
   if (!order) throw new Error('Order not found');
   return { vendor, order };
@@ -379,6 +379,37 @@ export async function updateOrderStatus(orderId: string, userId: string, status:
   return notifyOrder(orderId);
 }
 
+export async function cancelOrder(orderId: string, userId: string) {
+  const { vendor, order } = await assertOrderOwner(orderId, userId);
+  if (order.event?.status !== EventStatus.ACTIVE) throw new Error('Historical orders cannot be cancelled');
+  const result = await prisma.$transaction(async (tx) => {
+    // Serialize against order creation's event lock (cup/device accounting), then
+    // lock the parent row shared with READY transitions. Exactly one wins.
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${order.eventId} FOR UPDATE`);
+    await lockOrders(tx, vendor.id, [orderId]);
+    const current = await loadPreparationOrder(tx, orderId);
+    if (!current) throw new Error('Order not found');
+    if (current.event.vendorId !== vendor.id) throw new Error('Order not found');
+    if (current.event.status !== EventStatus.ACTIVE) throw new Error('Historical orders cannot be cancelled');
+    if (current.status !== OrderStatus.PREPARING) {
+      throw new Error(current.status === OrderStatus.READY ? 'READY orders cannot be cancelled' : 'Order is already cancelled');
+    }
+    const changed = await tx.order.updateMany({
+      where: { id: orderId, vendorId: vendor.id, eventId: order.eventId, status: OrderStatus.PREPARING },
+      data: {
+        status: OrderStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledByUserId: userId,
+        // Release the existing unique eligibility slot; keep deviceId and record.
+        deviceOrderDate: null,
+      },
+    });
+    if (!changed.count) throw new Error('Order is no longer cancellable');
+    return true;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  return result ? notifyOrder(orderId) : null;
+}
+
 // Lock parents before touching items so simultaneous final-item actions serialize.
 async function lockOrders(tx: Prisma.TransactionClient, vendorId: string, orderIds: string[]) {
   if (!orderIds.length) return;
@@ -392,7 +423,7 @@ async function lockOrders(tx: Prisma.TransactionClient, vendorId: string, orderI
 async function loadPreparationOrder(tx: Prisma.TransactionClient, orderId: string) {
   return tx.order.findUnique({
     where: { id: orderId },
-    include: { items: true, event: { select: { status: true } } },
+    include: { items: true, event: { select: { status: true, vendorId: true } } },
   });
 }
 

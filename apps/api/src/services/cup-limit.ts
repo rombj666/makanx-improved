@@ -1,4 +1,5 @@
 import { getMalaysiaDayRange, getMalaysiaTodayString } from '../utils/date';
+import { OrderStatus } from '@prisma/client';
 
 export interface CupLimitDecision {
   enabled: boolean;
@@ -25,6 +26,7 @@ export function dailyCupUsageWhere(eventId: string, now: Date | string | number 
   return {
     order: {
       eventId,
+      status: { not: OrderStatus.CANCELLED },
       createdAt: { gte: start, lt: end },
     },
   };

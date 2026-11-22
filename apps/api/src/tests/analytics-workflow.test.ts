@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ orders: vi.fn(), excel: vi.fn() }));
 vi.mock('../utils/prisma', () => ({ default: {
   vendorProfile: { findUnique: vi.fn(async () => ({ id: 'vendor' })) },
   event: { findFirst: vi.fn(async () => ({ id: 'event' })) },
-  order: { findMany: mocks.orders, aggregate: vi.fn(async () => ({ _count: { _all: 2 } })) },
+  order: { findMany: mocks.orders, count: vi.fn(async () => 0), aggregate: vi.fn(async () => ({ _count: { _all: 2 } })) },
   orderItem: { aggregate: vi.fn(async () => ({ _sum: { quantity: 5 } })) },
 } }));
 vi.mock('../services/excel.service', () => ({ generateEventOrdersExcel: mocks.excel }));
@@ -48,6 +48,11 @@ describe('accepted order sales', () => {
     expect((await invoke(vendorSalesSummary)).orders).toBe(2);
     rows[0].paymentStatus = 'PAID';
     expect((await invoke(vendorSalesSummary)).orders).toBe(2);
+  });
+  it('excludes cancelled orders from sales queries', async () => {
+    rows.push(order('3', 'CANCELLED', 'PAID', '2026-10-04T12:00:00Z', 4));
+    expect((await invoke(vendorSalesSummary)).orders).toBe(2);
+    expect(mocks.orders.mock.calls.at(-1)![0].where.status.in).toEqual(['PREPARING', 'READY']);
   });
   it('scopes accepted orders to the vendor and Malaysia calendar date', async () => {
     rows.push(order('3', 'PREPARING', 'PENDING', '2026-10-03T15:59:59Z'),

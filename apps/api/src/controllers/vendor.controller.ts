@@ -37,7 +37,7 @@ async function activeEventUsage(vendorId: string) {
     where: dailyCupUsageWhere(event.id),
     _sum: { quantity: true },
   });
-  return { event, usedQuantity: Number(aggregate._sum.quantity || 0) };
+  return { event, usedQuantity: Number(aggregate._sum?.quantity || 0) };
 }
 
 async function saveDailyUsage(
