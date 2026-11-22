@@ -75,6 +75,9 @@ function StatusBadge({ status }: { status: EventStatus }) {
 
 export function VendorSettings() {
   const { user } = useAuth();
+  const [settingsSection, setSettingsSection] = useState<'event' | 'batch'>('event');
+  const [defaultBatchSize, setDefaultBatchSize] = useState(10);
+  const [savingBatchSize, setSavingBatchSize] = useState(false);
   const canvasWrap = useRef<HTMLDivElement>(null);
   const [currentEvent, setCurrentEvent] = useState<EventSummary | null>(null);
   const [history, setHistory] = useState<EventSummary[]>([]);
@@ -111,6 +114,24 @@ export function VendorSettings() {
   }, [includeArchived]);
 
   useEffect(() => { void loadEvents(); }, [loadEvents]);
+
+  useEffect(() => {
+    api.get('/vendor/batch-settings').then(({ data }) => setDefaultBatchSize(data.data.defaultBatchSize || 10))
+      .catch((error: any) => toast.error(apiError(error)));
+  }, []);
+
+  const saveBatchSettings = async () => {
+    setSavingBatchSize(true);
+    try {
+      const { data } = await api.patch('/vendor/batch-settings', { defaultBatchSize });
+      setDefaultBatchSize(data.data.defaultBatchSize);
+      toast.success('Batch settings saved');
+    } catch (error: any) {
+      toast.error(apiError(error));
+    } finally {
+      setSavingBatchSize(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedEvent) return;
@@ -239,6 +260,12 @@ export function VendorSettings() {
     <main className="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-8">
       <h1 className="text-2xl font-bold text-neutral-950">Settings</h1>
 
+      <nav className="mt-5 inline-flex w-full rounded-xl border border-neutral-200 bg-white p-1 sm:w-auto" aria-label="Settings sections">
+        <button onClick={() => setSettingsSection('event')} className={`h-11 flex-1 rounded-lg px-5 text-sm font-bold sm:flex-none ${settingsSection === 'event' ? 'bg-black text-white' : 'text-neutral-600'}`}>Event Settings</button>
+        <button onClick={() => setSettingsSection('batch')} className={`h-11 flex-1 rounded-lg px-5 text-sm font-bold sm:flex-none ${settingsSection === 'batch' ? 'bg-black text-white' : 'text-neutral-600'}`}>Batch Settings</button>
+      </nav>
+
+      {settingsSection === 'event' ? <>
       <section className="mt-6 min-w-0 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-8">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl bg-neutral-100 p-3"><QrCode size={24} /></div>
@@ -362,6 +389,20 @@ export function VendorSettings() {
           </table>
         </div>
       </section>
+
+      </> : <section className="mt-6 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-8">
+        <h2 className="text-lg font-bold text-neutral-950">Batch Configuration</h2>
+        <div className="mt-5 max-w-xl rounded-2xl border border-neutral-100 bg-neutral-50 p-4 sm:p-6">
+          <label htmlFor="default-batch-size" className="text-sm font-semibold text-neutral-900">Default Batch Size</label>
+          <p className="mt-1 text-sm text-neutral-600">Maximum suggested cups per batch. Orders are never split to fill a batch.</p>
+          <div className="mt-4 flex items-center gap-3">
+            <button onClick={() => setDefaultBatchSize((value) => Math.max(1, value - 1))} className="h-11 w-11 rounded-xl border bg-white text-lg font-bold" aria-label="Decrease default batch size">−</button>
+            <div className="relative"><input id="default-batch-size" type="number" min={1} max={10000} value={defaultBatchSize} onChange={(event) => setDefaultBatchSize(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-11 w-28 rounded-xl border bg-white px-3 pr-12 text-center text-lg font-bold" /><span className="pointer-events-none absolute right-3 top-3 text-xs text-neutral-500">cups</span></div>
+            <button onClick={() => setDefaultBatchSize((value) => Math.min(10000, value + 1))} className="h-11 w-11 rounded-xl border bg-white text-lg font-bold" aria-label="Increase default batch size">+</button>
+          </div>
+          <Button onClick={() => void saveBatchSettings()} isLoading={savingBatchSize} className="mt-5 h-11 bg-black hover:bg-neutral-800">Save Batch Settings</Button>
+        </div>
+      </section>}
 
       <Modal isOpen={eventModal !== null} onClose={() => setEventModal(null)} title={eventModal === 'edit' ? 'Edit Event' : 'Create and Activate Event'}>
         <form onSubmit={saveEvent} className="space-y-4">

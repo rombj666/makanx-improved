@@ -1,4 +1,4 @@
-import { EventStatus, OrderStatus, PaymentMode, Prisma } from '@prisma/client';
+import { EventStatus, OrderStatus, PaymentMode, Prisma, ProductionBatchItemStatus, ProductionBatchStatus } from '@prisma/client';
 import { z } from 'zod';
 import prisma from '../utils/prisma';
 import { getIO } from '../socket';
@@ -278,6 +278,193 @@ export async function getVendorOrders(userId: string) {
   });
 }
 
+export function productionRecipeSignature(menuItemId: string, selectedOptions: unknown, remark: unknown) {
+  const groups = Array.isArray(selectedOptions) ? selectedOptions.map((group: any) => ({
+    groupId: String(group?.groupId || ''),
+    title: String(group?.title || ''),
+    choices: (Array.isArray(group?.choices) ? group.choices : []).map((choice: any) => ({
+      id: String(choice?.id || ''), label: String(choice?.label || ''),
+    })).sort((a: any, b: any) => (a.id || a.label).localeCompare(b.id || b.label)),
+  })).filter((group: any) => group.groupId || group.title || group.choices.length)
+    .sort((a: any, b: any) => (a.groupId || a.title).localeCompare(b.groupId || b.title)) : [];
+  return JSON.stringify({ menuItemId, groups, remark: String(remark || '').trim() });
+}
+
+export function allocateProductionBatchItems<T extends { id: string; quantity: number }>(items: T[], capacity: number) {
+  const allocated: T[] = [];
+  let total = 0;
+  for (const item of items) {
+    const quantity = Number(item.quantity);
+    if (allocated.length === 0 && quantity > capacity) return allocated;
+    if (total + quantity > capacity) break;
+    allocated.push(item);
+    total += quantity;
+  }
+  return allocated;
+}
+
+function itemChronology(a: any, b: any) {
+  return new Date(a.order.createdAt).getTime() - new Date(b.order.createdAt).getTime()
+    || Number(a.order.eventOrderNumber) - Number(b.order.eventOrderNumber)
+    || a.id.localeCompare(b.id);
+}
+
+function waitingItemView(item: any) {
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    orderNumber: item.order.eventOrderNumber,
+    quantity: item.quantity,
+    createdAt: item.order.createdAt,
+  };
+}
+
+export async function getProductionQueue(userId: string) {
+  const vendor = await getVendorForUser(userId);
+  const [event, settings] = await Promise.all([
+    prisma.event.findFirst({ where: { vendorId: vendor.id, status: EventStatus.ACTIVE }, orderBy: { createdAt: 'desc' }, select: { id: true } }),
+    prisma.vendorSettings.findUnique({ where: { vendorId: vendor.id }, select: { defaultBatchSize: true } }),
+  ]);
+  const defaultBatchSize = Math.max(1, Math.min(10000, Number(settings?.defaultBatchSize || 10)));
+  if (!event) return { eventId: null, defaultBatchSize, batches: [], waitingGroups: [] };
+  const [items, batches] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: {
+        status: 'PREPARING', productionBatchItem: null,
+        order: { vendorId: vendor.id, eventId: event.id, status: OrderStatus.PREPARING },
+      },
+      include: { order: { select: { id: true, eventOrderNumber: true, createdAt: true } }, menuItem: { select: { id: true, name: true } } },
+      orderBy: [{ order: { createdAt: 'asc' } }, { id: 'asc' }],
+    }),
+    prisma.productionBatch.findMany({
+      where: { vendorId: vendor.id, eventId: event.id, status: ProductionBatchStatus.PREPARING },
+      include: {
+        items: {
+          where: { status: ProductionBatchItemStatus.PREPARING },
+          include: { orderItem: { include: { order: { select: { id: true, eventOrderNumber: true, createdAt: true } } } } },
+        },
+      },
+      orderBy: { batchNumber: 'asc' },
+    }),
+  ]);
+  const grouped = new Map<string, any>();
+  for (const item of items) {
+    const signature = productionRecipeSignature(item.menuItemId, item.selectedOptions, item.remark);
+    const group = grouped.get(signature) || {
+      signature, menuItemId: item.menuItemId, drinkName: item.menuItem.name,
+      selectedOptions: item.selectedOptions, remark: item.remark || '', totalQuantity: 0, items: [], oldestAt: item.order.createdAt,
+    };
+    group.totalQuantity += item.quantity;
+    group.items.push(waitingItemView(item));
+    grouped.set(signature, group);
+  }
+  const activeBatches = batches.filter((batch) => batch.items.length > 0).map((batch) => {
+    const included = new Map<number, { orderNumber: number; quantity: number }>();
+    for (const member of batch.items) {
+      const orderNumber = member.orderItem.order.eventOrderNumber;
+      const current = included.get(orderNumber) || { orderNumber, quantity: 0 };
+      current.quantity += member.quantity;
+      included.set(orderNumber, current);
+    }
+    return {
+      id: batch.id, batchNumber: batch.batchNumber, status: batch.status, capacity: batch.capacity,
+      recipeSignature: batch.recipeSignature, menuItemId: batch.menuItemId, drinkName: batch.drinkName,
+      selectedOptions: batch.selectedOptions, remark: batch.remark || '', createdAt: batch.createdAt,
+      totalCups: batch.items.reduce((sum, item) => sum + item.quantity, 0),
+      orders: Array.from(included.values()).sort((a, b) => a.orderNumber - b.orderNumber),
+    };
+  });
+  return { eventId: event.id, defaultBatchSize, batches: activeBatches, waitingGroups: Array.from(grouped.values()) };
+}
+
+const startBatchSchema = z.object({
+  signature: z.string().min(1),
+  capacity: z.number().int().min(1).max(10000),
+  orderItemIds: z.array(z.string().min(1)).min(1).max(500),
+});
+
+export async function startProductionBatch(userId: string, raw: unknown) {
+  const input = startBatchSchema.parse(raw);
+  if (new Set(input.orderItemIds).size !== input.orderItemIds.length) throw new Error('Duplicate order items are not allowed');
+  const vendor = await getVendorForUser(userId);
+  const batch = await prisma.$transaction(async (tx) => {
+    const lockedEvents = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "Event" WHERE "vendorId" = ${vendor.id} AND "status" = 'ACTIVE'
+      ORDER BY "createdAt" DESC LIMIT 1 FOR UPDATE
+    `);
+    const event = lockedEvents[0];
+    if (!event) throw new Error('There is no active event.');
+    const baseWhere: Prisma.OrderItemWhereInput = {
+      status: 'PREPARING', productionBatchItem: null,
+      order: { vendorId: vendor.id, eventId: event.id, status: OrderStatus.PREPARING },
+    };
+    const candidates = await tx.orderItem.findMany({
+      where: baseWhere,
+      include: { order: { select: { id: true, eventOrderNumber: true, createdAt: true } }, menuItem: { select: { id: true, name: true } } },
+    });
+    const matchingIds = candidates.filter((item) => productionRecipeSignature(item.menuItemId, item.selectedOptions, item.remark) === input.signature).map((item) => item.order.id);
+    await lockOrders(tx, vendor.id, [...new Set(matchingIds)].sort());
+    const current = (await tx.orderItem.findMany({
+      where: baseWhere,
+      include: { order: { select: { id: true, eventOrderNumber: true, createdAt: true } }, menuItem: { select: { id: true, name: true } } },
+    })).filter((item) => productionRecipeSignature(item.menuItemId, item.selectedOptions, item.remark) === input.signature)
+      .sort(itemChronology);
+    const allocation = allocateProductionBatchItems(current, input.capacity);
+    if (allocation.length === 0) {
+      const first = current[0];
+      if (first && first.quantity > input.capacity) throw new Error(`The oldest order item has ${first.quantity} cups. Increase capacity to at least ${first.quantity}.`);
+      throw Object.assign(new Error('The waiting queue changed. Review the updated allocation and try again.'), { code: 'BATCH_QUEUE_CHANGED' });
+    }
+    const allocatedIds = new Set(allocation.map((item) => item.id));
+    if (allocation.length !== input.orderItemIds.length || input.orderItemIds.some((id) => !allocatedIds.has(id))) {
+      throw Object.assign(new Error('The waiting queue changed. Review the updated allocation and try again.'), { code: 'BATCH_QUEUE_CHANGED' });
+    }
+    const first = allocation[0];
+    const batchNumber = (await tx.productionBatch.count({ where: { eventId: event.id } })) + 1;
+    return tx.productionBatch.create({
+      data: {
+        vendorId: vendor.id, eventId: event.id, batchNumber, capacity: input.capacity,
+        recipeSignature: input.signature, menuItemId: first.menuItemId, drinkName: first.menuItem.name,
+        selectedOptions: (first.selectedOptions || Prisma.JsonNull) as Prisma.InputJsonValue,
+        remark: first.remark,
+        items: { create: allocation.map((item) => ({ orderItemId: item.id, quantity: item.quantity })) },
+      },
+    });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  getIO().to(`vendor:${vendor.id}`).emit('production_batch_changed', { vendorId: vendor.id, eventId: batch.eventId, batchId: batch.id, status: batch.status });
+  return { batch, queue: await getProductionQueue(userId) };
+}
+
+export async function markProductionBatchReady(userId: string, batchId: string) {
+  const vendor = await getVendorForUser(userId);
+  const result = await prisma.$transaction(async (tx) => {
+    const owned = await tx.productionBatch.findFirst({ where: { id: batchId, vendorId: vendor.id }, select: { eventId: true } });
+    if (!owned) throw new Error('Batch not found');
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Event" WHERE "id" = ${owned.eventId} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ProductionBatch" WHERE "id" = ${batchId} AND "vendorId" = ${vendor.id} FOR UPDATE`);
+    const batch = await tx.productionBatch.findFirst({ where: { id: batchId, vendorId: vendor.id }, include: { event: { select: { status: true } } } });
+    if (!batch) throw new Error('Batch not found');
+    if (batch.status === ProductionBatchStatus.READY) return { batch, orderIds: [] as string[] };
+    if (batch.status === ProductionBatchStatus.CANCELLED || batch.event.status !== EventStatus.ACTIVE) throw new Error('This batch is no longer active');
+    const members = await tx.productionBatchItem.findMany({ where: { batchId, status: ProductionBatchItemStatus.PREPARING }, include: { orderItem: { select: { id: true, orderId: true, status: true, order: { select: { status: true } } } } } });
+    if (!members.length) throw new Error('There are no active order items in this batch');
+    const orderIds = [...new Set(members.map((member) => member.orderItem.orderId))].sort();
+    await lockOrders(tx, vendor.id, orderIds);
+    const currentMembers = await tx.productionBatchItem.findMany({ where: { batchId, status: ProductionBatchItemStatus.PREPARING }, include: { orderItem: { select: { id: true, orderId: true, status: true, order: { select: { status: true } } } } } });
+    const active = currentMembers.filter((member) => member.orderItem.status === 'PREPARING' && member.orderItem.order.status === 'PREPARING');
+    if (!active.length) throw new Error('The batch items changed. Refresh the queue.');
+    const ids = active.map((member) => member.orderItem.id);
+    await tx.orderItem.updateMany({ where: { id: { in: ids }, status: 'PREPARING' }, data: { status: 'READY' } });
+    await tx.productionBatchItem.updateMany({ where: { id: { in: active.map((member) => member.id) }, status: ProductionBatchItemStatus.PREPARING }, data: { status: ProductionBatchItemStatus.READY, readyAt: new Date() } });
+    const updatedBatch = await tx.productionBatch.update({ where: { id: batchId }, data: { status: ProductionBatchStatus.READY, completedAt: new Date() } });
+    for (const orderId of orderIds) await reconcileReadyOrder(tx, orderId);
+    return { batch: updatedBatch, orderIds };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  const orders = await Promise.all(result.orderIds.map(notifyOrder));
+  getIO().to(`vendor:${vendor.id}`).emit('production_batch_changed', { vendorId: vendor.id, eventId: result.batch.eventId, batchId, status: result.batch.status });
+  return { batch: result.batch, orders: orders.filter(Boolean), queue: await getProductionQueue(userId) };
+}
+
 // Dashboard projection: include the call-out name, avoid menu configuration, images, other customer/device data,
 // and prices that neither Kitchen nor Ready History renders.
 const liveOrderSelect = {
@@ -301,15 +488,6 @@ export async function getVendorLiveOrders(userId: string) {
     },
     select: liveOrderSelect,
     orderBy: { createdAt: 'desc' },
-  });
-}
-
-export async function getVendorProductionBatch(vendorId: string, _groupByWindow: boolean) {
-  await normalizeLiveOrders(vendorId);
-  return prisma.order.findMany({
-    where: { vendorId, status: OrderStatus.PREPARING, event: { status: EventStatus.ACTIVE } },
-    select: liveOrderSelect,
-    orderBy: { createdAt: 'asc' },
   });
 }
 
@@ -405,9 +583,27 @@ export async function cancelOrder(orderId: string, userId: string) {
       },
     });
     if (!changed.count) throw new Error('Order is no longer cancellable');
-    return true;
+    const allocated = await tx.productionBatchItem.findMany({
+      where: { status: ProductionBatchItemStatus.PREPARING, orderItem: { orderId } },
+      select: { id: true, batchId: true },
+    });
+    await tx.productionBatchItem.updateMany({
+      where: { id: { in: allocated.map((item) => item.id) } },
+      data: { status: ProductionBatchItemStatus.CANCELLED, cancelledAt: new Date() },
+    });
+    for (const batchId of [...new Set(allocated.map((item) => item.batchId))]) {
+      const stillPreparing = await tx.productionBatchItem.count({ where: { batchId, status: ProductionBatchItemStatus.PREPARING } });
+      if (stillPreparing === 0) await tx.productionBatch.updateMany({
+        where: { id: batchId, status: ProductionBatchStatus.PREPARING },
+        data: { status: ProductionBatchStatus.CANCELLED, completedAt: new Date() },
+      });
+    }
+    return { batchIds: [...new Set(allocated.map((item) => item.batchId))] };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
-  return result ? notifyOrder(orderId) : null;
+  for (const batchId of result.batchIds) getIO().to(`vendor:${vendor.id}`).emit('production_batch_changed', {
+    vendorId: vendor.id, eventId: order.eventId, batchId, status: 'UPDATED',
+  });
+  return notifyOrder(orderId);
 }
 
 // Lock parents before touching items so simultaneous final-item actions serialize.
@@ -432,6 +628,11 @@ async function reconcileReadyOrder(tx: Prisma.TransactionClient, orderId: string
   if (!order || order.status !== OrderStatus.PREPARING || !order.items.length
     || order.event.status !== EventStatus.ACTIVE
     || order.items.some((item) => item.status !== 'READY')) return false;
+  const activeBatchItem = await tx.productionBatchItem.findFirst({
+    where: { status: ProductionBatchItemStatus.PREPARING, batch: { status: ProductionBatchStatus.PREPARING }, orderItem: { orderId } },
+    select: { id: true },
+  });
+  if (activeBatchItem) return false;
   await tx.order.update({
     where: { id: orderId },
     data: {
@@ -440,6 +641,15 @@ async function reconcileReadyOrder(tx: Prisma.TransactionClient, orderId: string
     },
   });
   return true;
+}
+
+async function assertNoActiveBatchItems(tx: Prisma.TransactionClient, orderItemIds: string[]) {
+  if (!orderItemIds.length) return;
+  const allocated = await tx.productionBatchItem.findFirst({
+    where: { orderItemId: { in: orderItemIds }, status: ProductionBatchItemStatus.PREPARING, batch: { status: ProductionBatchStatus.PREPARING } },
+    include: { batch: { select: { batchNumber: true } } },
+  });
+  if (allocated) throw new Error(`This order item belongs to active Batch #${allocated.batch.batchNumber}. Mark it ready from Batch Queue.`);
 }
 
 async function normalizeLiveOrders(vendorId: string) {
@@ -468,6 +678,7 @@ export async function markOrderItemReady(userId: string, orderId: string, itemId
     assertActivePreparationOrder(locked);
     const item = locked.items.find((candidate) => candidate.id === itemId);
     if (!item) throw new Error('Item not found');
+    await assertNoActiveBatchItems(tx, [itemId]);
     if (item.status !== 'PREPARING' && item.status !== 'READY') {
       throw new Error('Order item is outside the preparation workflow');
     }
@@ -503,46 +714,11 @@ export async function markOrderItemsReady(userId: string, orderId: string) {
     if (!locked.items.length || locked.items.some((item) => item.status !== 'PREPARING' && item.status !== 'READY')) {
       throw new Error('Order items are outside the preparation workflow');
     }
+    await assertNoActiveBatchItems(tx, locked.items.filter((item) => item.status === 'PREPARING').map((item) => item.id));
     await tx.orderItem.updateMany({ where: { orderId, status: 'PREPARING' }, data: { status: 'READY' } });
     await reconcileReadyOrder(tx, orderId);
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   return notifyOrder(orderId);
-}
-
-export async function markBatchItemsReady(
-  userId: string,
-  menuItemId: string,
-  windowStartISO: string,
-  windowEndISO: string,
-  selectedOptions?: any[],
-  remark?: string,
-) {
-  const vendor = await getVendorForUser(userId);
-  const result = await prisma.$transaction(async (tx) => {
-    const where: Prisma.OrderItemWhereInput = {
-      menuItemId,
-      status: 'PREPARING',
-      ...(selectedOptions ? { selectedOptions: { equals: selectedOptions as Prisma.InputJsonValue } } : {}),
-      ...(remark !== undefined ? { remark: remark.trim() || null } : {}),
-      order: {
-        vendorId: vendor.id,
-        status: OrderStatus.PREPARING,
-        event: { status: EventStatus.ACTIVE },
-        createdAt: { gte: new Date(windowStartISO), lt: new Date(windowEndISO) },
-      },
-    };
-    const items = await tx.orderItem.findMany({ where, select: { id: true, orderId: true } });
-    const orderIds = [...new Set(items.map((item) => item.orderId))];
-    await lockOrders(tx, vendor.id, orderIds);
-    const updated = await tx.orderItem.updateMany({
-      where: { ...where, id: { in: items.map((item) => item.id) } },
-      data: { status: 'READY' },
-    });
-    for (const orderId of orderIds) await reconcileReadyOrder(tx, orderId);
-    return { updatedCount: updated.count, orderIds };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
-  const orders = await Promise.all(result.orderIds.map(notifyOrder));
-  return { updatedCount: result.updatedCount, orders: orders.filter(Boolean) };
 }
 
 export async function bulkStatusUpdate(userId: string, orderIds: string[], status: OrderStatus) {
@@ -565,6 +741,7 @@ export async function bulkStatusUpdate(userId: string, orderIds: string[], statu
         if (order.items.every((item) => item.status === 'READY')) continue;
         throw new Error('READY order cannot be changed');
       }
+      await assertNoActiveBatchItems(tx, order.items.filter((item) => item.status === 'PREPARING').map((item) => item.id));
       await tx.orderItem.updateMany({
         where: { orderId: order.id, status: 'PREPARING' },
         data: { status: 'READY' },

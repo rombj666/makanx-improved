@@ -63,36 +63,32 @@ export const getVendorLiveOrders = async (req: Request, res: Response) => {
   }
 };
 
-export const getVendorProductionBatch = async (req: Request, res: Response) => {
+export const getProductionQueue = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
-    const groupByWindow = req.query.groupByWindow === "true";
-    
-    console.log("[order] getVendorProductionBatch request", { userId: req.user.userId, groupByWindow });
-
-    // Get vendor profile first to get vendorId
-    const vendorProfile = await prisma.vendorProfile.findUnique({ 
-      where: { userId: req.user.userId } 
-    });
-    
-    if (!vendorProfile) {
-      console.warn("[order] getVendorProductionBatch: vendor profile not found", { userId: req.user.userId });
-      return res.status(404).json({ success: false, error: 'Vendor profile not found' });
-    }
-
-    console.log("[order] getVendorProductionBatch profile found", { vendorProfileId: vendorProfile.id });
-
-    const result = await orderService.getVendorProductionBatch(
-      vendorProfile.id,
-      groupByWindow
-    );
-    console.log("[order] getVendorProductionBatch: success", { vendorProfileId: vendorProfile.id, count: result.length });
-
-    return res.status(200).json({ success: true, data: result });
+    return res.status(200).json({ success: true, data: await orderService.getProductionQueue(req.user.userId) });
   } catch (error: any) {
-    console.error("[order] getVendorProductionBatch error", { userId: req.user?.userId, error: error.message });
-    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
+    return res.status(400).json({ success: false, error: error.message ?? 'Unable to load production queue' });
+  }
+};
+
+export const startProductionBatch = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const result = await orderService.startProductionBatch(req.user.userId, req.body);
+    return res.status(201).json({ success: true, data: result });
+  } catch (error: any) {
+    const status = error.code === 'BATCH_QUEUE_CHANGED' ? 409 : 400;
+    return res.status(status).json({ success: false, error: error.message ?? 'Unable to start batch' });
+  }
+};
+
+export const markProductionBatchReady = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    return res.status(200).json({ success: true, data: await orderService.markProductionBatchReady(req.user.userId, req.params.id) });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message ?? 'Unable to complete batch' });
   }
 };
 
@@ -182,26 +178,6 @@ export const bulkStatusUpdate = async (req: Request, res: Response) => {
   }
 };
 
-export const markBatchItemsReady = async (req: Request, res: Response) => {
-  try {
-    if (!req.user) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const { menuItemId, windowStart, windowEnd, selectedOptions, remark } = req.body;
-    if (!menuItemId || !windowStart || !windowEnd) {
-      return res.status(400).json({ success: false, error: 'Missing fields' });
-    }
-    const result = await orderService.markBatchItemsReady(
-      req.user.userId,
-      String(menuItemId),
-      String(windowStart),
-      String(windowEnd),
-      Array.isArray(selectedOptions) ? selectedOptions : undefined,
-      typeof remark === 'string' ? remark : undefined
-    );
-    return res.status(200).json({ success: true, ...result });
-  } catch (error: any) {
-    return res.status(400).json({ success: false, error: error.message ?? 'Unknown error' });
-  }
-};
 
 export const getVendorServingOrder = async (req: Request, res: Response) => {
   try {

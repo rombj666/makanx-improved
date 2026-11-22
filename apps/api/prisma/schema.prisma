@@ -35,6 +35,7 @@ model VendorProfile {
   orders       Order[]
   events       Event[]
   dailyUsages  VendorDailyUsage[]
+  productionBatches ProductionBatch[]
 }
 
 model Event {
@@ -52,6 +53,7 @@ model Event {
   updatedAt       DateTime      @updatedAt
   vendor          VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   orders          Order[]
+  productionBatches ProductionBatch[]
 
   @@index([vendorId, status])
   @@index([vendorId, eventDate])
@@ -67,6 +69,7 @@ model VendorSettings {
   dailyLimitAutoStop      Boolean       @default(true)
   deviceOrderLimitEnabled Boolean       @default(false)
   maxDrinksPerOrder       Int           @default(99)
+  defaultBatchSize        Int           @default(10)
   reportRecipientEmails   Json?
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
@@ -157,6 +160,44 @@ model OrderItem {
   status          OrderItemStatus @default(PREPARING)
   menuItem        MenuItem        @relation(fields: [menuItemId], references: [id])
   order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productionBatchItem ProductionBatchItem?
+}
+
+model ProductionBatch {
+  id              String   @id @default(uuid())
+  vendorId        String
+  eventId         String
+  batchNumber     Int
+  status          ProductionBatchStatus @default(PREPARING)
+  capacity        Int
+  recipeSignature String
+  menuItemId      String
+  drinkName       String
+  selectedOptions Json?
+  remark          String?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+  vendor          VendorProfile @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  event           Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  items           ProductionBatchItem[]
+
+  @@unique([eventId, batchNumber])
+  @@index([vendorId, eventId, status])
+}
+
+model ProductionBatchItem {
+  id          String @id @default(uuid())
+  batchId     String
+  orderItemId String @unique
+  quantity    Int
+  status      ProductionBatchItemStatus @default(PREPARING)
+  createdAt   DateTime @default(now())
+  readyAt     DateTime?
+  cancelledAt DateTime?
+  batch       ProductionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, status])
 }
 
 model PushSubscription {
@@ -193,6 +234,18 @@ enum OrderStatus {
 enum OrderItemStatus {
   PREPARING
   READY
+}
+
+enum ProductionBatchStatus {
+  PREPARING
+  READY
+  CANCELLED
+}
+
+enum ProductionBatchItemStatus {
+  PREPARING
+  READY
+  CANCELLED
 }
 
 enum PaymentMode {

@@ -17,6 +17,7 @@ const orderLimitSchema = z.object({
   deviceOrderLimitEnabled: z.boolean(),
   maxDrinksPerOrder: z.number().int().min(1),
 });
+const batchSettingsSchema = z.object({ defaultBatchSize: z.number().int().min(1).max(10000) });
 
 async function vendorFor(userId: string) {
   const vendor = await prisma.vendorProfile.findUnique({ where: { userId }, include: { settings: true } });
@@ -146,6 +147,26 @@ export const updateOrderLimitSettings = async (req: Request, res: Response) => {
       deviceOrderLimitEnabled: settings.deviceOrderLimitEnabled,
       maxDrinksPerOrder: settings.maxDrinksPerOrder,
     } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+export const getBatchSettings = async (req: Request, res: Response) => {
+  try {
+    const vendor = await vendorFor(req.user!.userId);
+    res.json({ success: true, data: { defaultBatchSize: vendor.settings!.defaultBatchSize || 10 } });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+export const updateBatchSettings = async (req: Request, res: Response) => {
+  try {
+    const vendor = await vendorFor(req.user!.userId);
+    const input = batchSettingsSchema.parse(req.body);
+    const settings = await prisma.vendorSettings.update({ where: { vendorId: vendor.id }, data: input });
+    res.json({ success: true, data: { defaultBatchSize: settings.defaultBatchSize } });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }

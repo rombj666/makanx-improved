@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { applyLiveOrder, belongsInKitchen, mergeLiveOrder } from '../../lib/liveOrders';
 import { useSocket } from '../../context/SocketContext';
@@ -41,11 +41,81 @@ interface Order {
   } | null;
 }
 
+interface ProductionQueueItem {
+  id: string;
+  orderId: string;
+  orderNumber: number;
+  quantity: number;
+  createdAt: string;
+}
+interface WaitingRecipe {
+  signature: string;
+  menuItemId: string;
+  drinkName: string;
+  selectedOptions: any[] | null;
+  remark: string;
+  totalQuantity: number;
+  items: ProductionQueueItem[];
+}
+interface ProductionBatch {
+  id: string;
+  batchNumber: number;
+  status: string;
+  capacity: number;
+  recipeSignature: string;
+  drinkName: string;
+  selectedOptions: any[] | null;
+  remark: string;
+  createdAt: string;
+  totalCups: number;
+  orders: { orderNumber: number; quantity: number }[];
+}
+interface ProductionQueue {
+  eventId: string | null;
+  defaultBatchSize: number;
+  batches: ProductionBatch[];
+  waitingGroups: WaitingRecipe[];
+}
+
+function allocatePreview(items: ProductionQueueItem[], capacity: number) {
+  const selected: ProductionQueueItem[] = [];
+  let cups = 0;
+  for (const item of items) {
+    if (!selected.length && item.quantity > capacity) break;
+    if (cups + item.quantity > capacity) break;
+    selected.push(item);
+    cups += item.quantity;
+  }
+  return { items: selected, cups };
+}
+
+function optionText(options: any[] | null, remark = '') {
+  const values = (Array.isArray(options) ? options : []).flatMap((group) => {
+    const title = String(group?.title || '').trim();
+    const choices = Array.isArray(group?.choices) ? group.choices.map((choice: any) => String(choice?.label || '').trim()).filter(Boolean) : [];
+    return choices.length ? [`${title ? `${title}: ` : ''}${choices.join(', ')}`] : [];
+  });
+  const cleanRemark = String(remark || '').trim();
+  if (cleanRemark) values.push(`Note: ${cleanRemark}`);
+  return values;
+}
+
 export function VendorDashboard() {
   const { socket, isConnected } = useSocket();
-  const [groupByWindow, setGroupByWindow] = useState(false);
-  const [groupMinutes, setGroupMinutes] = useState(2);
   const [productionOrders, setProductionOrders] = useState<Order[]>([]);
+  const [kitchenMode, setKitchenMode] = useState<'orders' | 'batches'>('orders');
+  const [batchQueue, setBatchQueue] = useState<ProductionQueue>({ eventId: null, defaultBatchSize: 10, batches: [], waitingGroups: [] });
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState('');
+  const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null);
+  const [batchCapacity, setBatchCapacity] = useState(10);
+  const [showIncludedOrders, setShowIncludedOrders] = useState(false);
+  const [startingBatch, setStartingBatch] = useState(false);
+  const [focusedBatchId, setFocusedBatchId] = useState<string | null>(null);
+  const [focusedPage, setFocusedPage] = useState(0);
+  const [seenPages, setSeenPages] = useState<Set<number>>(new Set([0]));
+  const [confirmBatchReady, setConfirmBatchReady] = useState(false);
+  const [completingBatch, setCompletingBatch] = useState(false);
 
   const isFetchingRef = useRef(false);
   const lastFetchRef = useRef(0);
@@ -57,12 +127,29 @@ export function VendorDashboard() {
   const requestGenerationRef = useRef(0);
   const latestOrders = useRef(new Map<string, Order>());
   const updatesDuringFetch = useRef(new Map<string, Order>());
+  const queueRequestGeneration = useRef(0);
 
   const [activeTab, setActiveTab] = useState<'kitchen' | 'history'>('kitchen');
   const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [expandedHistoryEvents, setExpandedHistoryEvents] = useState<Set<string>>(new Set());
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  const refreshProductionQueue = useCallback(async () => {
+    const generation = ++queueRequestGeneration.current;
+    setQueueLoading(true);
+    try {
+      const { data } = await api.get('/orders/vendor/production-queue', { timeout: 20000 });
+      if (generation !== queueRequestGeneration.current || !data.success) return;
+      setBatchQueue(data.data);
+      setQueueError('');
+      if (focusedBatchId && !data.data.batches.some((batch: ProductionBatch) => batch.id === focusedBatchId)) setFocusedBatchId(null);
+    } catch (error: any) {
+      if (generation === queueRequestGeneration.current) setQueueError(error?.response?.data?.error || 'Unable to load production queue.');
+    } finally {
+      if (generation === queueRequestGeneration.current) setQueueLoading(false);
+    }
+  }, [focusedBatchId]);
 
   const confirmCancellation = async () => {
     if (!cancelTarget || cancelling) return;
@@ -152,31 +239,6 @@ export function VendorDashboard() {
     }
   }, []);
 
-  const groupedProduction = useMemo(() => {
-    const windowMs = groupMinutes * 60 * 1000;
-    const grouped = new Map<number, Order[]>();
-
-    for (const order of productionOrders) {
-      const orderTime = new Date(order.createdAt).getTime();
-      const bucket = Math.floor(orderTime / windowMs);
-      const windowStart = bucket * windowMs;
-      const existing = grouped.get(windowStart);
-      if (existing) {
-        existing.push(order);
-      } else {
-        grouped.set(windowStart, [order]);
-      }
-    }
-
-    return Array.from(grouped.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([windowStart, ordersInWindow]) => ({
-        windowStart,
-        windowEnd: windowStart + windowMs,
-        orders: ordersInWindow,
-      }));
-  }, [productionOrders, groupMinutes]);
-
   useEffect(() => {
     mountedRef.current = true;
     void refetchAll(true);
@@ -192,24 +254,37 @@ export function VendorDashboard() {
 
   useEffect(() => {
     if (!socket) return;
-    const onConnect = () => { void refetchAll(true); };
+    const onConnect = () => {
+      void refetchAll(true);
+      if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
+    };
     const onCreated = (order: Order) => {
       applyOrder(order);
       toast.success('New Order Received!');
+      if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
     };
-    const onUpdated = (order: Order) => applyOrder(order);
-    const onChanged = () => { void refetchAll(true); };
+    const onUpdated = (order: Order) => {
+      applyOrder(order);
+      if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
+    };
+    const onBatchChanged = () => { if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue(); };
+    const onChanged = () => {
+      void refetchAll(true);
+      if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
+    };
     socket.on('connect', onConnect);
     socket.on('order_created', onCreated);
     socket.on('order_updated', onUpdated);
+    socket.on('production_batch_changed', onBatchChanged);
     socket.on('vendor_orders_changed', onChanged);
     return () => {
       socket.off('connect', onConnect);
       socket.off('order_created', onCreated);
       socket.off('order_updated', onUpdated);
+      socket.off('production_batch_changed', onBatchChanged);
       socket.off('vendor_orders_changed', onChanged);
     };
-  }, [socket, refetchAll, applyOrder]);
+  }, [socket, refetchAll, applyOrder, refreshProductionQueue, activeTab, kitchenMode]);
 
   useEffect(() => {
     const onFocus = () => { void refetchAll(); };
@@ -225,12 +300,19 @@ export function VendorDashboard() {
   }, [refetchAll]);
 
   useEffect(() => {
+    if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
+  }, [activeTab, kitchenMode, refreshProductionQueue]);
+
+  useEffect(() => {
     // Background tabs retain their data; visibility/focus reconciles on return.
     const poll = setInterval(() => {
-      if (document.visibilityState === 'visible') void refetchAll();
+      if (document.visibilityState === 'visible') {
+        void refetchAll();
+        if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
+      }
     }, isConnected ? 300000 : 30000);
     return () => clearInterval(poll);
-  }, [refetchAll, isConnected]);
+  }, [refetchAll, isConnected, kitchenMode, activeTab, refreshProductionQueue]);
 
   const markOrderReady = async (id: string) => {
     const res = await api.post(`/orders/${id}/items/mark-ready`);
@@ -276,150 +358,7 @@ export function VendorDashboard() {
   const optionChipClass = (detail: string) => `inline-flex w-full max-w-full items-center rounded-xl px-5 py-2.5 text-2xl font-bold leading-snug whitespace-normal break-words [overflow-wrap:anywhere] ${optionTone(detail)}`;
   const drinkTitleClass = 'font-bold text-2xl text-black break-words [overflow-wrap:anywhere]';
 
-  const preparationKey = (it: OrderItem) => {
-    const remark = String(it.remark || '').trim();
-    const opts = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
-    const normalizedOpts = opts
-      .map((s: any) => {
-        const groupId = String(s?.groupId || '');
-        const title = String(s?.title || '');
-        const choices = Array.isArray(s?.choices) ? s.choices : [];
-        const normalizedChoices = choices
-          .map((c: any) => ({
-            id: String(c?.id || ''),
-            label: String(c?.label || ''),
-          }))
-          .filter((c: any) => c.id || c.label)
-          .sort((a: any, b: any) => (a.id || a.label).localeCompare(b.id || b.label));
-        return { groupId, title, choices: normalizedChoices };
-      })
-      .filter((s: any) => s.groupId || s.title || (Array.isArray(s.choices) && s.choices.length > 0))
-      .sort((a: any, b: any) => (a.groupId || a.title).localeCompare(b.groupId || b.title));
-    return `${it.menuItem.id}::${remark}::${JSON.stringify(normalizedOpts)}`;
-  };
-
-  const GroupedProduction = ({
-    data,
-    showWindowHeader = true,
-  }: {
-    data: { windowStart: number; windowEnd: number; orders: Order[] }[];
-    showWindowHeader?: boolean;
-  }) => {
-    return (
-      <>
-        {data.map((block) => {
-          const bySignature = new Map<
-            string,
-            {
-              menuItemId: string;
-              name: string;
-              qty: number;
-              selectedOptions: any[];
-              remark: string;
-              details: string[];
-            }
-          >();
-          for (const o of block.orders) {
-            for (const it of o.items) {
-              const key = preparationKey(it);
-              const node = bySignature.get(key);
-              if (node) {
-                node.qty += Number(it.quantity || 0);
-              } else {
-                const remark = String(it.remark || '').trim();
-                const selectedOptions = Array.isArray(it.selectedOptions) ? it.selectedOptions : [];
-                bySignature.set(key, {
-                  menuItemId: it.menuItem.id,
-                  name: it.menuItem.name,
-                  qty: Number(it.quantity || 0),
-                  selectedOptions,
-                  remark,
-                  details: formatItemDetails(it),
-                });
-              }
-            }
-          }
-          const aggregated = Array.from(bySignature.entries()).map(([key, v]) => ({
-            key,
-            menuItemId: v.menuItemId,
-            name: v.name,
-            quantity: v.qty,
-            selectedOptions: v.selectedOptions,
-            remark: v.remark,
-            details: v.details,
-          }));
-          const windowStartISO = new Date(block.windowStart).toISOString();
-          const windowEndISO = new Date(block.windowEnd).toISOString();
-          return (
-            <div key={block.windowStart} className="mb-6">
-              {showWindowHeader ? (
-                <h4 className="font-bold text-lg mb-2">
-                  {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} -{' '}
-                  {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                </h4>
-              ) : null}
-              <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {block.orders.map((order) => (
-                  <div key={order.id} className="min-w-0 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
-                        <div className="text-xs text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</div>
-                      </div>
-                      <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone(order.status)}`}>{order.status}</span>
-                    </div>
-                    <CancelButton order={order} />
-                  </div>
-                ))}
-              </div>
-              <ul className="space-y-2">
-                {aggregated.map((it) => (
-                  <li key={it.key} className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4">
-                    <div className="min-w-0">
-                      <div>
-                        <span className={drinkTitleClass}>x{it.quantity} {it.name}</span>
-                      </div>
-                      {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).length > 0 ? (
-                        <div className={optionStackClass}>
-                          {formatItemDetails({ selectedOptions: it.selectedOptions, remark: it.remark, menuItem: { id: it.menuItemId, name: it.name }, quantity: it.quantity }, true).map((d, idx) => (
-                            <div key={idx} className={optionChipClass(d)}>
-                              {d}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    <Button
-                      className="h-11 shrink-0 rounded-xl bg-neutral-900 px-5 font-semibold text-white hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2"
-                      onClick={async () => {
-                        try {
-                          const res = await api.post('/orders/vendor/production/mark-ready', {
-                            menuItemId: it.menuItemId,
-                            windowStart: windowStartISO,
-                            windowEnd: windowEndISO,
-                            selectedOptions: it.selectedOptions,
-                            remark: it.remark,
-                          });
-                          if (res.data.success) res.data.orders.forEach(applyOrder);
-                          toast.success(`${it.name} marked ready`);
-                        } catch (e: any) {
-                          toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                        }
-                      }}
-                    >
-                      Ready
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </>
-    );
-  };
-
-  const SingleOrderList = ({ data }: { data: Order[] }) => (
+  const SingleOrderList = ({ data, mobile = false }: { data: Order[]; mobile?: boolean }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {data.map((order) => {
         const itemCount = order.items?.length ?? 0;
@@ -429,7 +368,7 @@ export function VendorDashboard() {
           <div key={order.id} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5">
             <div className="flex justify-between items-start gap-3 mb-4">
               <div className="min-w-0 flex-1">
-                <h3 className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</h3>
+                {mobile ? <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div> : <h3 className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</h3>}
                 <p className="text-sm text-neutral-500">{new Date(order.createdAt).toLocaleTimeString()}</p>
               </div>
               <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${orderStatusTone(order.status)}`}>
@@ -585,15 +524,169 @@ export function VendorDashboard() {
     </div>;
   };
 
+  const selectedWaitingGroup = batchQueue.waitingGroups.find((group) => group.signature === selectedRecipe) || null;
+  const preview = selectedWaitingGroup ? allocatePreview(selectedWaitingGroup.items, batchCapacity) : { items: [], cups: 0 };
+  const previewRemaining = selectedWaitingGroup ? selectedWaitingGroup.totalQuantity - preview.cups : 0;
+  const includedOrders = Array.from(preview.items.reduce((map, item) => {
+    map.set(item.orderNumber, (map.get(item.orderNumber) || 0) + item.quantity);
+    return map;
+  }, new Map<number, number>()).entries()).map(([orderNumber, quantity]) => ({ orderNumber, quantity }));
+  const focusedBatch = batchQueue.batches.find((batch) => batch.id === focusedBatchId) || null;
+  const focusPages = focusedBatch ? Math.ceil(focusedBatch.orders.length / 10) : 0;
+  const focusPageOrders = focusedBatch ? focusedBatch.orders.slice(focusedPage * 10, focusedPage * 10 + 10) : [];
+  const allFocusPagesSeen = focusPages <= 1 || Array.from({ length: focusPages }, (_, index) => index).every((index) => seenPages.has(index));
+
+  const openBatch = (batchId: string) => {
+    setFocusedBatchId(batchId);
+    setFocusedPage(0);
+    setSeenPages(new Set([0]));
+    setConfirmBatchReady(false);
+  };
+
+  const startSelectedBatch = async () => {
+    if (!selectedWaitingGroup || preview.items.length === 0 || startingBatch) return;
+    setStartingBatch(true);
+    try {
+      const { data } = await api.post('/orders/vendor/production-batches', {
+        signature: selectedWaitingGroup.signature,
+        capacity: batchCapacity,
+        orderItemIds: preview.items.map((item) => item.id),
+      });
+      if (!data.success) throw new Error(data.error || 'Unable to start batch');
+      setBatchQueue(data.data.queue);
+      setSelectedRecipe(null);
+      setShowIncludedOrders(false);
+      openBatch(data.data.batch.id);
+      toast.success(`Batch #${data.data.batch.batchNumber} started`);
+    } catch (error: any) {
+      if (error?.response?.status === 409) {
+        void refreshProductionQueue();
+        toast.error('The waiting queue changed. Review the updated allocation before starting.');
+      } else {
+        toast.error(error?.response?.data?.error || error?.message || 'Unable to start batch');
+      }
+    } finally {
+      setStartingBatch(false);
+    }
+  };
+
+  const completeFocusedBatch = async () => {
+    if (!focusedBatch || completingBatch) return;
+    if (focusPages > 1 && !allFocusPagesSeen) return;
+    if (focusPages > 1 && !confirmBatchReady) {
+      setConfirmBatchReady(true);
+      return;
+    }
+    setCompletingBatch(true);
+    try {
+      const { data } = await api.post(`/orders/vendor/production-batches/${focusedBatch.id}/ready`);
+      if (!data.success) throw new Error(data.error || 'Unable to complete batch');
+      data.data.orders.forEach(applyOrder);
+      setBatchQueue(data.data.queue);
+      setFocusedBatchId(null);
+      setConfirmBatchReady(false);
+      toast.success(`Batch #${focusedBatch.batchNumber} marked ready`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || error?.message || 'Unable to complete batch');
+      void refreshProductionQueue();
+    } finally {
+      setCompletingBatch(false);
+    }
+  };
+
+  const BatchOptions = ({ options, remark }: { options: any[] | null; remark?: string }) => {
+    const details = optionText(options, remark);
+    return details.length ? <div className="mt-1 flex flex-wrap gap-1">{details.map((detail, index) => <span key={index} className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">{detail}</span>)}</div> : null;
+  };
+
+  const BatchQueueView = () => (
+    <div className="space-y-5">
+      {queueError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{queueError}</div>}
+      {!batchQueue.eventId && <div className="rounded-xl border border-neutral-200 bg-white p-5 text-sm text-neutral-600">No active event.</div>}
+      <section>
+        <h2 className="mb-2 text-lg font-bold text-neutral-900">Preparing Batches</h2>
+        {batchQueue.batches.length === 0 ? <p className="rounded-xl bg-white p-4 text-sm text-neutral-500">No batches are being prepared.</p> :
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {batchQueue.batches.map((batch) => <article key={batch.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-start justify-between gap-2"><div><div className="text-sm font-bold">Batch #{batch.batchNumber} · {batch.drinkName}</div><BatchOptions options={batch.selectedOptions} remark={batch.remark} /></div><span className="shrink-0 rounded-full bg-amber-200 px-2 py-1 text-[10px] font-bold text-amber-900">PREPARING</span></div>
+              <div className="mt-2 text-xs font-semibold text-neutral-700">{batch.totalCups} cups · {batch.orders.length} orders</div>
+              <button onClick={() => openBatch(batch.id)} className="mt-2 h-10 w-full rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white">Open Batch</button>
+            </article>)}
+          </div>}
+      </section>
+      <section>
+        <div className="mb-2 flex items-center justify-between"><h2 className="text-lg font-bold text-neutral-900">Waiting Queue</h2>{queueLoading && <span className="text-xs text-neutral-500">Updating…</span>}</div>
+        {batchQueue.waitingGroups.length === 0 ? <p className="rounded-xl bg-white p-4 text-sm text-neutral-500">No drinks waiting for preparation.</p> :
+          <div className="space-y-2">
+            {batchQueue.waitingGroups.map((group) => <article key={group.signature} className="rounded-xl border border-neutral-200 bg-white p-3">
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="font-bold text-neutral-950">{group.drinkName}</div><BatchOptions options={group.selectedOptions} remark={group.remark} /></div><div className="shrink-0 text-right"><div className="text-lg font-bold">{group.totalQuantity}</div><div className="text-[10px] uppercase text-neutral-500">cups waiting</div></div></div>
+              <button onClick={() => { setSelectedRecipe(group.signature); setBatchCapacity(batchQueue.defaultBatchSize); setShowIncludedOrders(false); }} className="mt-2 h-10 w-full rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-900">Start Batch</button>
+            </article>)}
+          </div>}
+      </section>
+    </div>
+  );
+
+  const cancellationModal = <Modal isOpen={!!cancelTarget} onClose={() => { if (!cancelling) setCancelTarget(null); }} title={`Cancel Order #${cancelTarget ? computeDisplayNumber(cancelTarget) : ''}?`}>
+    <p className="text-sm text-neutral-600">Are you sure you want to cancel this order? The order will be removed from Kitchen View, and its cancellation record will be retained.</p>
+    {cancelTarget?.paymentStatus === 'PAID' && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This order is marked paid. Cancellation will not issue a refund; reconcile the payment separately.</p>}
+    <div className="mt-6 flex justify-end gap-2">
+      <Button variant="outline" disabled={cancelling} onClick={() => setCancelTarget(null)}>Keep Order</Button>
+      <Button disabled={cancelling} isLoading={cancelling} className="bg-red-700 hover:bg-red-800" onClick={confirmCancellation}>Confirm Cancellation</Button>
+    </div>
+  </Modal>;
+
+  if (focusedBatch) return <>
+    {cancellationModal}
+    <main className="fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-hidden bg-white px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-200 pb-2">
+        <button onClick={() => { setFocusedBatchId(null); setConfirmBatchReady(false); }} className="min-h-10 rounded-lg border px-3 text-sm font-semibold">← Queue</button>
+        <div className="text-center"><div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Batch #{focusedBatch.batchNumber}</div><div className="text-sm font-bold">{focusedBatch.totalCups} cups · PREPARING</div></div>
+        <div className="w-[74px]" />
+      </header>
+      <section className="shrink-0 py-2">
+        <h1 className="text-xl font-bold leading-tight text-neutral-950">{focusedBatch.drinkName}</h1>
+        <BatchOptions options={focusedBatch.selectedOptions} remark={focusedBatch.remark} />
+      </section>
+      <section className="grid min-h-0 flex-1 grid-cols-2 grid-rows-5 gap-2" aria-label="Batch order numbers">
+        {focusPageOrders.map((order) => <div key={order.orderNumber} className="flex min-h-0 items-center justify-between gap-1 rounded-lg border border-neutral-300 bg-neutral-50 px-2">
+          <span className="min-w-0 break-words text-[20px] font-extrabold leading-tight text-black sm:text-2xl">#{order.orderNumber}</span>
+          <span className="shrink-0 text-xs font-semibold text-neutral-700 sm:text-sm">{order.quantity} cup{order.quantity === 1 ? '' : 's'}</span>
+        </div>)}
+      </section>
+      <footer className="mt-2 flex shrink-0 items-center gap-2 border-t border-neutral-200 pt-2">
+        {focusPages > 1 && <>
+          <button disabled={focusedPage === 0} onClick={() => { const page = focusedPage - 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className="h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-40">Prev</button>
+          <span className="min-w-12 text-center text-xs font-semibold">{focusedPage + 1} of {focusPages}</span>
+          <button disabled={focusedPage + 1 >= focusPages} onClick={() => { const page = focusedPage + 1; setFocusedPage(page); setSeenPages((seen) => new Set(seen).add(page)); setConfirmBatchReady(false); }} className="h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-40">Next</button>
+        </>}
+        <button onClick={() => void completeFocusedBatch()} disabled={completingBatch || (focusPages > 1 && !allFocusPagesSeen)} className="ml-auto min-h-12 flex-1 rounded-xl bg-neutral-900 px-3 text-sm font-bold text-white disabled:opacity-40">
+          {completingBatch ? 'Completing…' : focusPages > 1 && !allFocusPagesSeen ? 'Review every page' : confirmBatchReady ? 'Confirm Mark Batch Ready' : 'Mark Batch Ready'}
+        </button>
+        {confirmBatchReady && <button onClick={() => setConfirmBatchReady(false)} className="h-12 rounded-xl border px-3 text-sm font-semibold">Back</button>}
+      </footer>
+    </main>
+  </>;
+
   return (
     <>
-      <Modal isOpen={!!cancelTarget} onClose={() => { if (!cancelling) setCancelTarget(null); }} title={`Cancel Order #${cancelTarget ? computeDisplayNumber(cancelTarget) : ''}?`}>
-        <p className="text-sm text-neutral-600">Are you sure you want to cancel this order? The order will be removed from Kitchen View, and its cancellation record will be retained.</p>
-        {cancelTarget?.paymentStatus === 'PAID' && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This order is marked paid. Cancellation will not issue a refund; reconcile the payment separately.</p>}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" disabled={cancelling} onClick={() => setCancelTarget(null)}>Keep Order</Button>
-          <Button disabled={cancelling} isLoading={cancelling} className="bg-red-700 hover:bg-red-800" onClick={confirmCancellation}>Confirm Cancellation</Button>
-        </div>
+      {cancellationModal}
+      <Modal isOpen={!!selectedRecipe} onClose={() => { if (!startingBatch) setSelectedRecipe(null); }} title={`Start ${selectedWaitingGroup?.drinkName || 'Batch'}`} mobileFullScreen>
+        {selectedWaitingGroup && <div className="space-y-4">
+          <BatchOptions options={selectedWaitingGroup.selectedOptions} remark={selectedWaitingGroup.remark} />
+          <div className="rounded-xl bg-neutral-50 p-3 text-sm"><div>Total waiting: <strong>{selectedWaitingGroup.totalQuantity} cups</strong></div><div className="mt-1">Batch capacity: <strong>{batchCapacity} cups</strong></div><div className="mt-1">Allocated: <strong>{preview.cups} cups</strong></div><div className="mt-1">Remaining after start: <strong>{previewRemaining} cups</strong></div></div>
+          {preview.cups === 0 && selectedWaitingGroup.items[0] && <p className="text-sm text-amber-800">The oldest order item contains {selectedWaitingGroup.items[0].quantity} cups. Increase capacity to at least that amount to prepare it.</p>}
+          <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Batch Capacity</span><div className="flex items-center gap-2">
+            <button onClick={() => setBatchCapacity((capacity) => Math.max(1, capacity - 1))} className="h-10 w-10 rounded-lg border text-lg font-bold" aria-label="Decrease capacity">−</button>
+            <input type="number" min={1} max={10000} value={batchCapacity} onChange={(event) => setBatchCapacity(Math.max(1, Math.min(10000, Number(event.target.value) || 1)))} className="h-10 w-24 rounded-lg border text-center font-semibold" aria-label="Batch capacity in cups" />
+            <button onClick={() => setBatchCapacity((capacity) => Math.min(10000, capacity + 1))} className="h-10 w-10 rounded-lg border text-lg font-bold" aria-label="Increase capacity">+</button>
+          </div></div>
+          <div><button onClick={() => setShowIncludedOrders((visible) => !visible)} className="text-sm font-semibold underline">{showIncludedOrders ? 'Hide' : 'Show'} Orders Included ({includedOrders.length})</button>
+            {showIncludedOrders && <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border p-3 text-sm">{includedOrders.map((order) => <li key={order.orderNumber}>Order #{order.orderNumber} — {order.quantity} cup{order.quantity === 1 ? '' : 's'}</li>)}</ul>}
+          </div>
+          <p className="text-xs text-neutral-500">Allocation uses oldest orders first. Each order item stays whole.</p>
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={startingBatch} onClick={() => setSelectedRecipe(null)}>Cancel</Button><Button disabled={startingBatch || preview.cups === 0} isLoading={startingBatch} onClick={startSelectedBatch} className="bg-black">Start Batch — {preview.cups} Cups</Button></div>
+        </div>}
       </Modal>
       <div className="block [@media(pointer:coarse)]:hidden container mx-auto p-6 h-[calc(100vh-64px)] flex flex-col">
         <div className="flex justify-between items-center mb-6">
@@ -617,42 +710,24 @@ export function VendorDashboard() {
                 Ready Orders
               </button>
             </div>
-            <select
-              value={groupMinutes}
-              onChange={(e) => setGroupMinutes(Number(e.target.value))}
-              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
-            >
-              <option value={1}>1 min</option>
-              <option value={2}>2 min</option>
-              <option value={5}>5 min</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="rounded border-gray-300"
-                checked={groupByWindow}
-                onChange={(e) => setGroupByWindow(e.target.checked)}
-              />
-              Group production by {groupMinutes}-minute windows
-            </label>
             <Button
               variant="outline"
               onClick={() => {
                 refetchAll();
+                if (activeTab === 'kitchen' && kitchenMode === 'batches') void refreshProductionQueue();
               }}
             >
               Refresh
             </Button>
           </div>
         </div>
+        {activeTab === 'kitchen' && <div className="mb-3 inline-flex w-fit rounded-lg border bg-white p-1">
+          <button onClick={() => setKitchenMode('orders')} className={`rounded-md px-4 py-2 text-sm font-semibold ${kitchenMode === 'orders' ? 'bg-black text-white' : 'text-neutral-600'}`}>Order View</button>
+          <button onClick={() => setKitchenMode('batches')} className={`rounded-md px-4 py-2 text-sm font-semibold ${kitchenMode === 'batches' ? 'bg-black text-white' : 'text-neutral-600'}`}>Batch Queue</button>
+        </div>}
         <div className="mt-4 flex-1 overflow-y-auto">
           {activeTab === 'kitchen' ? (
-            <>
-              {groupByWindow && groupedProduction.length === 0 && <p>No grouped production data.</p>}
-              {!groupByWindow && productionOrders.length === 0 && <p>No live orders.</p>}
-              {groupByWindow && <GroupedProduction data={groupedProduction} />}
-              {!groupByWindow && <SingleOrderList data={productionOrders} />}
-            </>
+            kitchenMode === 'batches' ? <BatchQueueView /> : productionOrders.length === 0 ? <p>No live orders.</p> : <SingleOrderList data={productionOrders} />
           ) : (
             <HistoryOrderList data={historyOrders} />
           )}
@@ -694,122 +769,14 @@ export function VendorDashboard() {
           </button>
         </div>
 
-        <div className="mt-4 bg-white rounded-2xl border border-neutral-200 p-4">
-          <div className="flex flex-col gap-3 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-center">
-            <label className="flex items-center justify-between gap-3 text-sm font-semibold text-black">
-              <span>Group by time window</span>
-              <input
-                type="checkbox"
-                className="rounded border-neutral-300"
-                checked={groupByWindow}
-                onChange={(e) => setGroupByWindow(e.target.checked)}
-              />
-            </label>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-black">Window</div>
-              <select
-                value={groupMinutes}
-                onChange={(e) => setGroupMinutes(Number(e.target.value))}
-                className="h-11 rounded-2xl border border-neutral-200 bg-white px-3 text-sm font-semibold text-black"
-              >
-                <option value={1}>1 min</option>
-                <option value={2}>2 min</option>
-                <option value={5}>5 min</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        {activeTab === 'kitchen' && <div className="mt-3 inline-flex w-full rounded-xl border border-neutral-200 bg-white p-1">
+          <button onClick={() => setKitchenMode('orders')} className={`h-10 flex-1 rounded-lg text-sm font-bold ${kitchenMode === 'orders' ? 'bg-black text-white' : 'text-neutral-600'}`}>Order View</button>
+          <button onClick={() => setKitchenMode('batches')} className={`h-10 flex-1 rounded-lg text-sm font-bold ${kitchenMode === 'batches' ? 'bg-black text-white' : 'text-neutral-600'}`}>Batch Queue</button>
+        </div>}
 
         <div className="mt-4 flex-1 overflow-y-auto">
           {activeTab === 'kitchen' ? (
-            groupByWindow ? (
-              groupedProduction.length === 0 ? (
-                <div className="text-sm text-neutral-600">No grouped production data.</div>
-              ) : (
-                <div className="space-y-5">
-                  {groupedProduction.map((block) => (
-                    <div key={block.windowStart} className="space-y-3">
-                      <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">
-                        {new Date(block.windowStart).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} –{' '}
-                        {new Date(block.windowEnd).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      </div>
-                      <GroupedProduction data={[block]} showWindowHeader={false} />
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : productionOrders.length === 0 ? (
-              <div className="text-sm text-neutral-600">No live orders.</div>
-            ) : (
-              <div className="space-y-4">
-                {productionOrders.map((order) => (
-                  <div key={order.id} className="bg-white rounded-2xl border border-neutral-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-3xl font-bold leading-tight text-black break-words [overflow-wrap:anywhere]">Order #{computeDisplayNumber(order)}</div>
-                        <div className="text-xs text-neutral-500">
-                          {new Date(order.createdAt).toLocaleTimeString()}
-                        </div>
-                      </div>
-                      <div className={`text-[10px] font-semibold tracking-wide px-2.5 py-1 rounded-full border ${orderStatusTone(order.status)}`}>
-                        {order.status}
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {order.items.map((item: any, idx: number) => (
-                        <div key={idx} className="rounded-xl border border-neutral-100 p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className={`${drinkTitleClass} min-w-0 flex-1`}>
-                              {item.quantity}x {item.menuItem.name}
-                            </div>
-                            {item.status === 'READY' && <div className="shrink-0 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold tracking-wide text-green-700">READY</div>}
-                          </div>
-                          {formatItemDetails(item, true).length > 0 ? (
-                            <div className={optionStackClass}>
-                              {formatItemDetails(item, true).map((d, j) => (
-                                <div key={j} className={optionChipClass(d)}>{d}</div>
-                              ))}
-                            </div>
-                          ) : null}
-                          {item.status !== 'READY' && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await api.post(`/orders/${order.id}/items/${item.id}/mark-ready`);
-                                  if (res.data.success) applyOrder(res.data.data);
-                                  toast.success(`${item.menuItem.name} marked ready`);
-                                } catch (e: any) {
-                                  toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                                }
-                              }}
-                              className="mt-3 min-h-11 w-full rounded-xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.98]"
-                            >
-                              Ready
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {(order.items?.length ?? 0) > 1 && order.status !== 'READY' && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            await markOrderReady(order.id);
-                            toast.success('Order items marked ready');
-                          } catch (e: any) {
-                            toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                          }
-                        }}
-                        className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 py-3 font-semibold text-white transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500 focus-visible:ring-offset-2 active:scale-[0.99]"
-                      >
-                        Ready
-                      </button>
-                    )}
-                    <CancelButton order={order} />
-                  </div>
-                ))}
-              </div>
-            )
+            kitchenMode === 'batches' ? <BatchQueueView /> : productionOrders.length === 0 ? <div className="text-sm text-neutral-600">No live orders.</div> : <SingleOrderList data={productionOrders} mobile />
           ) : (
             <HistoryOrderList data={historyOrders} />
           )}

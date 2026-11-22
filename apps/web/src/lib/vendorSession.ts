@@ -25,5 +25,5 @@ export function isVendorApi(url: string): boolean {
     /^\/(vendor|analytics|uploads)(\/|$)/.test(path) ||
     (path.startsWith('/menu-items') && !path.startsWith('/menu-items/public/')) ||
     (path.startsWith('/orders/') && path !== '/orders/my-orders' && !path.startsWith('/orders/vendor/')) ||
-    /^\/orders\/vendor\/(production-batch|production\/mark-ready)$/.test(path);
+    /^\/orders\/vendor\/(production-queue|production-batches(?:\/|$))/.test(path);
 }

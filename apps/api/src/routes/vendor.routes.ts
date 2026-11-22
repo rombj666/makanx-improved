@@ -21,6 +21,8 @@ router.get('/settings', vendorController.getSettings);
 router.patch('/settings', vendorController.updateSettings);
 router.get('/order-limit-settings', vendorController.getOrderLimitSettings);
 router.patch('/order-limit-settings', vendorController.updateOrderLimitSettings);
+router.get('/batch-settings', vendorController.getBatchSettings);
+router.patch('/batch-settings', vendorController.updateBatchSettings);
 router.get('/daily-usage', vendorController.getDailyUsage);
 router.post('/recalculate-usage', vendorController.recalculateUsage);
 export default router;

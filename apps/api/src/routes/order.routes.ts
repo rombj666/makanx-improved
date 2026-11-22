@@ -10,18 +10,9 @@ console.log('[order] Registering vendor specific routes');
 router.get('/vendor/:vendorId/serving', optionalAuth, orderController.getVendorServingOrder);
 router.get('/vendor-live', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorLiveOrders);
 router.get('/vendor-orders', requireAuth, requireRole([Role.VENDOR]), orderController.getVendorOrders);
-router.get(
-  '/vendor/production-batch',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  orderController.getVendorProductionBatch
-);
-router.post(
-  '/vendor/production/mark-ready',
-  requireAuth,
-  requireRole([Role.VENDOR]),
-  orderController.markBatchItemsReady
-);
+router.get('/vendor/production-queue', requireAuth, requireRole([Role.VENDOR]), orderController.getProductionQueue);
+router.post('/vendor/production-batches', requireAuth, requireRole([Role.VENDOR]), orderController.startProductionBatch);
+router.post('/vendor/production-batches/:id/ready', requireAuth, requireRole([Role.VENDOR]), orderController.markProductionBatchReady);
 router.put('/bulk-status', requireAuth, requireRole([Role.VENDOR]), orderController.bulkStatusUpdate);
 
 console.log('[order] Registering customer specific routes');
