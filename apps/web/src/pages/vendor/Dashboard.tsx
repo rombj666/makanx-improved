@@ -174,7 +174,7 @@ export function VendorDashboard() {
   };
 
   const CancelButton = ({ order }: { order: Order }) => order.status === 'PREPARING' ? (
-    <button onClick={() => setCancelTarget(order)} className={`${dangerActionButtonClass} mt-2 w-full`}>
+    <button onClick={() => setCancelTarget(order)} className={`${dangerActionButtonClass} w-full min-w-0`}>
       Cancel
     </button>
   ) : null;
@@ -430,7 +430,8 @@ export function VendorDashboard() {
               ))}
             </div>
             {!isMultiType && order.status === 'PREPARING' && (
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <CancelButton order={order} />
                 <button
                   onClick={async () => {
                     try {
@@ -440,29 +441,30 @@ export function VendorDashboard() {
                       toast.error(e?.response?.data?.error || 'Failed to mark ready');
                     }
                   }}
-                  className={`${primaryActionButtonClass} w-full min-h-12 px-4 py-3`}
+                  className={`${primaryActionButtonClass} w-full min-w-0 min-h-12 px-3 py-3`}
                 >
                   Ready
                 </button>
-                <CancelButton order={order} />
               </div>
             )}
             {isMultiType && order.status !== 'READY' && (
-              <button
-                onClick={async () => {
-                  try {
-                    await markOrderReady(order.id);
-                    toast.success('Order items marked ready');
-                  } catch (e: any) {
-                    toast.error(e?.response?.data?.error || 'Failed to mark ready');
-                  }
-                }}
-                className={`${primaryActionButtonClass} mt-4 min-h-12 w-full px-4 py-3`}
-              >
-                Ready
-              </button>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <CancelButton order={order} />
+                <button
+                  onClick={async () => {
+                    try {
+                      await markOrderReady(order.id);
+                      toast.success('Order items marked ready');
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.error || 'Failed to mark ready');
+                    }
+                  }}
+                  className={`${primaryActionButtonClass} min-h-12 w-full min-w-0 px-3 py-3`}
+                >
+                  Ready
+                </button>
+              </div>
             )}
-            {isMultiType && <CancelButton order={order} />}
           </div>
         );
       })}
