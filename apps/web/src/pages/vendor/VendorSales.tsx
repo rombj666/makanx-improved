@@ -393,10 +393,16 @@ export function VendorSales() {
           </>}
           {!isAdmin && <Card className="bg-white rounded-xl shadow-sm border border-gray-100">
             <CardHeader><CardTitle>Operational Limits</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between"><span>Daily Cup Limit</span><strong>{settings?.dailyDrinkLimitEnabled ? `${settings.dailyDrinkLimitQuantity} cups/day` : 'Disabled'}</strong></div>
-              <div className="flex justify-between"><span>Device Limit</span><strong>{orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}</strong></div>
-              <div className="flex justify-between"><span>Max Drinks Per Order</span><strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'}</strong></div>
+            <CardContent className="text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span>Device Limit</span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${orderLimitSettings?.deviceOrderLimitEnabled ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-600'}`}>
+                    {orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'} cups/device</strong>
+                </div>
+              </div>
             </CardContent>
           </Card>}
 
@@ -711,10 +717,14 @@ export function VendorSales() {
           </>}
           {!isAdmin && <Card className="w-full min-w-0 max-w-full bg-white rounded-3xl border border-neutral-100 shadow-sm p-4">
             <div className="text-xs font-semibold text-neutral-500 tracking-wide uppercase">Operational Limits</div>
-            <div className="mt-3 space-y-3 text-sm">
-              <div className="flex justify-between gap-3"><span>Daily Cup Limit</span><strong>{settings?.dailyDrinkLimitEnabled ? `${settings.dailyDrinkLimitQuantity} cups/day` : 'Disabled'}</strong></div>
-              <div className="flex justify-between gap-3"><span>Device Limit</span><strong>{orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}</strong></div>
-              <div className="flex justify-between gap-3"><span>Max Drinks Per Order</span><strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'}</strong></div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+              <span>Device Limit</span>
+              <div className="flex items-center gap-2 text-right">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${orderLimitSettings?.deviceOrderLimitEnabled ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-600'}`}>
+                  {orderLimitSettings?.deviceOrderLimitEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+                <strong>{orderLimitSettings?.maxDrinksPerOrder ?? '—'} cups/device</strong>
+              </div>
             </div>
           </Card>}
 
